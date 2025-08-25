@@ -3,7 +3,10 @@ import { callAPI, handleError } from "deploy_callAPI";
 
 export const init = (fontfaces) => {
 
-   for (const fontface of fontfaces) {
+    /*
+    **  LOAD FONTS FOR CATEGORY SELECT LIST
+    */
+    for (const fontface of fontfaces) {
         const fontFile = new FontFace(fontface.family,fontface.url);
         document.fonts.add(fontFile);
         fontFile.load();
@@ -24,7 +27,7 @@ export const init = (fontfaces) => {
             const context = category.getAttribute("name").split("_")[0];
             const query = "?category=" + selected + "&font=0&context=" + context + "&variable=" + variable;
 
-            callAPI('fonts/:ID','GET', query)
+            callAPI('fonts/:ID/:PAGE','GET', query)
                 .then((data) => {
                     const family = category.parentElement.querySelector("select:last-of-type");
                     let index = family.options.length;
@@ -50,7 +53,7 @@ export const init = (fontfaces) => {
         */
         if (name.includes("font_category")) {
             const query = "?category=" + e.target.value + "&font=0&context=" + context + "&variable=" + variable;
-            callAPI('fonts/:ID','GET', query)
+            callAPI('fonts/:ID/:PAGE','GET', query)
                 .then((data) => {
                     const family = e.target.parentElement.querySelector("select:last-of-type");
                     let index = family.options.length;
@@ -71,8 +74,8 @@ export const init = (fontfaces) => {
             }
              const loader = e.target.closest("fieldset").querySelector(".loader");
             loader.style.opacity=1;
-            const query = "?category=&font=" + e.target.value + "&variable=" + variable;
-            callAPI('fonts/:ID','GET', query)
+            const query = "?category=null&font=" + e.target.value + "&context=" + context + "&variable=" + variable;
+            callAPI('fonts/:ID/:PAGE','GET', query)
                 .then((data) => {
                     /*
                     data.axes.forEach((axis) => {
@@ -90,15 +93,24 @@ export const init = (fontfaces) => {
                         }
                     })
                     */
-                    const font_family = e.target.options[e.target.selectedIndex].text;
-                    const fontFile = new FontFace(font_family,data.url);
-                    document.fonts.add(fontFile);
-                    fontFile.load();
-                    document.fonts.ready.then(()=>{
-                        console.log(`Loaded ${font_family}`);
-                        document.documentElement.style.setProperty('--font-family-' + name.split("_")[0], font_family); 
-                        loader.style.opacity=0;
-                    });
+                    if (data.info) {
+                        const info_id = context + "-info";
+                        const info = document.getElementById(info_id);
+                        info.textContent = data.info;
+	                    info.showPopover();
+                    } else {
+                        const font_family = e.target.options[e.target.selectedIndex].text;
+                        for (const url of data.urls) {
+                            const fontFile = new FontFace(font_family,url);
+                            document.fonts.add(fontFile);
+                            fontFile.load();
+                        };
+                        document.fonts.ready.then(()=>{
+                            console.log(`Loaded ${font_family}`);
+                            document.documentElement.style.setProperty('--font-family-' + name.split("_")[0], font_family); 
+                        });
+                    }
+                    loader.style.opacity=0;
                 })
                 .catch((error) => {
                     loader.style.opacity=0;
