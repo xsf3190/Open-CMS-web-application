@@ -2,9 +2,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     PROCEDURE buildESModules(pEsmLibrary IN VARCHAR2 DEFAULT 'test');
     --
+    FUNCTION chars_used (pCharacters IN VARCHAR2) RETURN VARCHAR2;
+    --
     PROCEDURE deleteDirectory(pWebsiteId IN website.id%type, pUserId IN users.id%type);
     --
     PROCEDURE deployInfrastructure(pSenderEmail IN VARCHAR2 DEFAULT 'contact.form');
+    --
+    PROCEDURE extract_styles(pText IN VARCHAR2, pBoldItalic IN OUT VARCHAR2, pBoldNormal IN OUT VARCHAR2, pItalic IN OUT VARCHAR2, pNormal IN OUT VARCHAR2,
+        pBoldItalicPage IN OUT PLS_INTEGER, pBoldNormalPage IN OUT PLS_INTEGER, pItalicPage IN OUT PLS_INTEGER, pNormalPage IN OUT PLS_INTEGER);
     --
     PROCEDURE logDeployment(pWebsiteId IN website.id%type, pSiteId IN website_deploy.site_id%type, pMessage IN VARCHAR2, pStatus IN VARCHAR2 DEFAULT 'OK', pLogTime IN TIMESTAMP DEFAULT current_timestamp);
     --
