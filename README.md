@@ -1,18 +1,18 @@
 # OPEN CMS WEB APPLICATION
-With most web pages downloading over 2MB of data (2024 Web Almanac), the internet has become the preserve of the rich. Access to web pages is denied to most in the developing world because developers and website builders have assumed that increasingly powerful devices and expansion of 5g networks more than compensates for their profligacy.
+With most web pages downloading over 2MB of data (2024 Web Almanac), the internet has become the preserve of the rich. Access to web pages is denied to most in the developing world because developers and website builders have assumed that increasingly powerful devices and expansion of 5g networks more than compensates their profligacy.
 
-Javascript frameworks have had a devastating effect on the accessibility of web sites buit with those technologies. Downloading 2MB on a 5G network in San Francisco might work .. eventually .. but in Cape Town even on a 4G network most visitors will give up. Indeed, many people and businesses in these aeas don't even consider the internet as a viable vehicle for advertising products and services. 
+Javascript frameworks have had a devastating effect on the accessibility of web sites built with those technologies. Downloading 2MB on a 5G network in San Francisco might work .. eventually .. but in Cape Town even on a 4G network most visitors will give up. Indeed, many people and businesses in these aeas don't even consider the internet as a vehicle for reliably advertising products and services. 
 
 Although mostly ignored, the problem is well understood - web pages simply send too much data for the receiving infrastructure to handle.
 
-This CMS project aims to provide a simple interface whereby individuals can create and publish web sites at minimal cost to their visitors. No single page created with this CMS exceeds 50KB in weight, giving first time visitors every chance that they will be able to interact with the content within 2 seconds. 
+This CMS project aims to provide a simple interface for individuals to create and publish web sites at minimal cost to their visitors. No single page created with this CMS exceeds 50KB in weight on initial download, giving first time visitors every chance that they will be able to interact with the content within 2 seconds. 
 
 ## Self-editing web sites
-CMS users edit the content of their web pages in situ on their editor web site - a companion site for their domain web site. They edit and publish their editor site until ready to push the content to their domain. 
+CMS users edit the content of their web pages in situ on an editor web site - a companion site to their domain web site. They edit and publish their editor site until ready to push the content to their domain. 
 
-In this way, the live and editor sites are maintained separately with their content shared and controlled in a central database. 
+In this way, live and editor sites are maintained separately with their content shared and controlled in a central database. 
 
-Some users may not want to purchase a domain. Community web sites, for example, might be perfectly happy to publish content on a subdomain of the CMS. 
+Purchasing a domain is not a pre-requisite. Community web sites, for example, might be happy publishing content on a subdomain of the CMS. 
 
 The enabling tehnologies for this to happen include:
 
@@ -21,8 +21,19 @@ The enabling tehnologies for this to happen include:
 3. an editor for site owners to easily create content
 4. use of refresh and access Json Web Tokens to guarantee security
 
+## Performance Metrics
+50MB within 2 seconds for first time visitors is an extravagant claim, but supported by the collection of over 10'000 initial web page visits in the last year.
 
-## Performance amd Security
+A great advantage of using a central CMS database is that each web page is deployed with a script which automatically and transparently collects performance metrics about the visit. These are pinged back to the database and made available to the website owner and to us so that we can monitor performance trends and identify opportunities for improvement.
+
+These metrics obviously include page weight but we also send Google Core Web Vitals back to the database. For non-supporting browsers (e.g. Safari) we collect what we can - TTFB and FCP. As soon as Safari does support CWVs these will automatically be collected and sent.
+
+For most site owners, the most important metrics are not CWVs - although LCP crucially measures how long visitors wait until being able to interact with the site. Rather, they are interested in how long visitors spent on each page, in what order did they visit other pages on the site, what was their rough location, what browser did they use and most importantly of all, how many visitors were there and how do all of these metrics vary over time. Collecting these details, especially accumulated time spent on each page, is rather expensive - but never to the visitor - the database has to be able to process multiple concurrent transmissions.
+
+Our script is about 5KB in size which contrasts well with Google tag manager that weights in at over 100KB although we don't clam to rival its functionality. It's simply a matter of providing significant information value at the lowest cost possible.
+
+## Performance
+Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created with only the characters actually appearing in the content. If a website only uses 10 distinct italic characters for example, then only these are packaged in the delivered font file. 
 
 
 
