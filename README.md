@@ -1,3 +1,6 @@
+# OPEN CMS WEB APPLICATION
+This project is motivated by the 2024 Web Almanac. With median web pages at over 2MB the internet has become the preserve of the rich. Access to web pages is denied most people in the developing world  because developers and website builders have insisted on creating sites on the assumption that increasingly powerful devices and expansion of 5g networks somehow compensates for their profligacy.
+
 # oracle-to-github-backup
 This repository contains data and object definitions backed up daily from an ORACLE "Always Free" OCI database.
 
