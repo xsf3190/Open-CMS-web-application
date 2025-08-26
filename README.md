@@ -33,18 +33,25 @@ For most site owners, the most important metrics are not CWVs - although LCP cru
 Our script is about 5KB in size which contrasts well with Google tag manager that weights in at over 100KB although we don't clam to rival its functionality. It's simply a matter of providing significant information value at the lowest cost possible.
 
 ## Performance
-Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created with only the characters actually appearing in the content. If a website only uses 10 distinct italic characters for example, then only these are packaged in the delivered font file. We heveloped a plugin to replace CKEditor's font family feature, providing access to over 1800 of Google's freely available fonts. Using different fonts for headings and text can give a web site a great deal of personality. Variable fonts can be used as well as static fonts, affording website owners a lot of design opportunities to subtly change boldness or character spacing for example. One of our sites uses 78 distinct characters across 70 pages - its visitors therefore download only 25KB of font data, compared to the complete Latin font files which weigh in at over 150KB.
+Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created containing only the characters actually appearing in the content. A plugin replacing CKEditor's font family feature provides access to over 1800 of Google's freely available fonts. With different fonts for headings, a web site an have a great deal of personality. Google's variable fonts afford website owners a lot of design opportunities like subtly changing boldness or character spacing. One of our sites uses 78 distinct characters across 70 pages - its visitors download only 25KB of font data, compared to the complete Latin font files which weigh in at over 150KB.
 
-All font files are self-hosted. This is particlulary important for mobile visitors for whom we must keep DNS lookups to a minimum. It's also important in some countries (e.g. Germany) where there are GDPR restrictions on accessing resources that reveal the visitor's IP address.
+All font files are self-hosted. This is particlulary important for mobile visitors where DNS lookups must be kept to a minimum. It's also important in countries like Germany where GDPR imposes legal restrictions on accessing resources that reveal the visitor's IP address.
 
 ## Accesibility
-Use of CKEditor is a great benefit for making our sites accessible. 
+CKEditor helps making sites accessible. 
 
 We prevent sites from being published that fail minimum accessibility requirements - e.g. including an alternative desription of an image.
 
 Colour contrast is ensured by the CMS - users can choose any colours they like for text, backgrounds, buttons etc as long as they satisfy accessibility requirements.
 
 ## Security
+The CMS enables website owners to edit the site in situ - therefore secured access is essential.
+
+The published website itself is covered by a strict Content Security Policy preventing any unapproved Javascript from running on the site.
+
+The functionality required to edit a website is heavily reliant on Javascript. Each discrete unit of functionality is performed by a single ESM module hosted on a dedicated CDN. Only when the owner has authenticated will these modules execute, and then only if the import map containing SHA-256 mappings is respected.
+
+No passwords or cookies are involved in accessing the CMS, since access involves the issue and renewal of refresh tokens every 5 minutes. In this way owners can effectively stay logged in for ever with no need to remember any password. The exposure in the event of physical theft of an owner's device is limited to 5 minutes. Fingerprints are used to further restrict unauthorised access by  ensuring users re-authenticate in the event that any😭 attempt is made to access from a previoulsy unknown device/IP combination.
 
 
 # Oracle to Github backup
