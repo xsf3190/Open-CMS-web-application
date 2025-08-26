@@ -1,16 +1,41 @@
 # OPEN CMS WEB APPLICATION
-This project is motivated by the 2024 Web Almanac. With median web pages at over 2MB the internet has become the preserve of the rich. Access to web pages is denied most people in the developing world  because developers and website builders have insisted on creating sites on the assumption that increasingly powerful devices and expansion of 5g networks somehow compensates for their profligacy.
+With most web pages downloading over 2MB of data (2024 Web Almanac), the internet has become the preserve of the rich. Access to web pages is denied to most in the developing world because developers and website builders have assumed that increasingly powerful devices and expansion of 5g networks more than compensates for their profligacy.
 
-# oracle-to-github-backup
+Javascript frameworks have had a devastating effect on the accessibility of web sites buit with those technologies. Downloading 2MB on a 5G network in San Francisco might work .. eventually .. but in Cape Town even on a 4G network most visitors will give up. Indeed, many people and businesses in these aeas don't even consider the internet as a viable vehicle for advertising products and services. 
+
+Although mostly ignored, the problem is well understood - web pages simply send too much data for the receiving infrastructure to handle.
+
+This CMS project aims to provide a simple interface whereby individuals can create and publish web sites at minimal cost to their visitors. No single page created with this CMS exceeds 50KB in weight, giving first time visitors every chance that they will be able to interact with the content within 2 seconds. 
+
+## Self-editing web sites
+CMS users edit the content of their web pages in situ on their editor web site - a companion site for their domain web site. They edit and publish their editor site until ready to push the content to their domain. 
+
+In this way, the live and editor sites are maintained separately with their content shared and controlled in a central database. 
+
+Some users may not want to purchase a domain. Community web sites, for example, might be perfectly happy to publish content on a subdomain of the CMS. 
+
+The enabling tehnologies for this to happen include:
+
+1. a database that controls access to web page content
+2. a hosting service to receive published assets
+3. an editor for site owners to easily create content
+4. use of refresh and access Json Web Tokens to guarantee security
+
+
+## Performance amd Security
+
+
+
+# Oracle to Github backup
 This repository contains data and object definitions backed up daily from an ORACLE "Always Free" OCI database.
 
 The backup is a compressed, encrypted schema export dump file.
 
 Includes DDL metadata extracts of tables, packages and grants.
 
-Includes any APEX applications and static Javascript / CSS files.
+Includes static Javascript and CSS files.
 
-Includes any ORDS REST schema.
+Includes Oracle ORDS REST schema defining API routes for the CMS application.
 
 ## Pre-requisites
 1. Obtain GITHUB Personal access token (classic) - https://github.com/settings/tokens
