@@ -33,8 +33,18 @@ For most site owners, the most important metrics are not CWVs - although LCP cru
 Our script is about 5KB in size which contrasts well with Google tag manager that weights in at over 100KB although we don't clam to rival its functionality. It's simply a matter of providing significant information value at the lowest cost possible.
 
 ## Performance
-Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created with only the characters actually appearing in the content. If a website only uses 10 distinct italic characters for example, then only these are packaged in the delivered font file. 
+Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created with only the characters actually appearing in the content. If a website only uses 10 distinct italic characters for example, then only these are packaged in the delivered font file. We heveloped a plugin to replace CKEditor's font family feature, providing access to over 1800 of Google's freely available fonts. Using different fonts for headings and text can give a web site a great deal of personality. Variable fonts can be used as well as static fonts, affording website owners a lot of design opportunities to subtly change boldness or character spacing for example. One of our sites uses 78 distinct characters across 70 pages - its visitors therefore download only 25KB of font data, compared to the complete Latin font files which weigh in at over 150KB.
 
+All font files are self-hosted. This is particlulary important for mobile visitors for whom we must keep DNS lookups to a minimum. It's also important in some countries (e.g. Germany) where there are GDPR restrictions on accessing resources that reveal the visitor's IP address.
+
+## Accesibility
+Use of CKEditor is a great benefit for making our sites accessible. 
+
+We prevent sites from being published that fail minimum accessibility requirements - e.g. including an alternative desription of an image.
+
+Colour contrast is ensured by the CMS - users can choose any colours they like for text, backgrounds, buttons etc as long as they satisfy accessibility requirements.
+
+## Security
 
 
 # Oracle to Github backup
