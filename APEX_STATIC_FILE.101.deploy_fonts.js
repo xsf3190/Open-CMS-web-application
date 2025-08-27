@@ -43,10 +43,34 @@ export const init = (fontfaces) => {
     });
 
     dialog_article.addEventListener("change", (e) => {
-        const name = e.target.getAttribute("name");
-        const context = name.split("_")[0];
-        const icon = dialog_header.querySelector(".variable>.icon");
-        const variable = icon.classList.contains("visually-hidden") ? 0 : 1;
+        const name = e.target.getAttribute("id");
+        const context = name.split("-")[0];
+        // const icon = dialog_header.querySelector(".variable>.icon");
+        // const variable = icon.classList.contains("visually-hidden") ? 0 : 1;
+
+        const variable = document.getElementById(context + "-variable").checked ? 0 : 1;
+	    const italic = document.getElementById(context + "-italic").checked ? 0 : 1;
+        
+        /* 
+        ** SWITCHES FOR VARIABLE/STATIC AND ITALICS/NO ITALICS
+        */
+        if (name.includes("variable")) {
+            const label = e.target.parentElement.querySelector("[for="+name+"]");
+            if (e.target.checked) {
+                label.textContent = "Static";
+            } else {
+                label.textContent = "Variable";
+            }
+        }
+
+        if (name.includes("italic")) {
+            const label = e.target.parentElement.querySelector("[for="+name+"]");
+            if (e.target.checked) {
+                label.style.textDecoration = "line-through";
+            } else {
+                label.style.textDecoration = "initial";
+            }
+        }
 
         /* 
         ** USER SELECTS FONT CATEGORY - UPDATE ADJACENT SELECT WITH NEW FAMILY OPTIONS 
