@@ -55,7 +55,7 @@ export const init = (fontfaces) => {
             const query = "?category=" + e.target.value + "&font=0&context=" + context + "&variable=" + variable;
             callAPI('fonts/:ID/:PAGE','GET', query)
                 .then((data) => {
-                    const family = e.target.parentElement.querySelector("select:last-of-type");
+                    const family = document.getElementById(context + "-font-family");
                     let index = family.options.length;
                     while (index--) {
                         family.remove(index);
