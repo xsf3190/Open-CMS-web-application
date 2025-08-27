@@ -793,11 +793,6 @@ dialog > form > article {
     padding: 2rem;
 }
 
-dialog label {
-    font-weight: 650;
-    font-stretch: 125%;
-}
-
 dialog hr {
   margin: initial;
   height: 0.2rem;
