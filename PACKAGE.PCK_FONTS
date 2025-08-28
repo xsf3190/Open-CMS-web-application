@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
-    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pCategory IN font.category%type, pFontId IN font.id%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pStatus OUT NUMBER);
+    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pCategory IN font.category%type, pFontId IN font.id%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pItalic IN font.ital_start%type, pStatus OUT NUMBER);
     --
     PROCEDURE loadGoogleFonts;
     --
@@ -23,7 +23,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_fonts JSON_ARRAY_T;
         l_fonts_obj JSON_OBJECT_T;
     BEGIN
-        l_header:=
+        --l_header:=null;
+        /*
         '<button type="button" class="button variable" style="anchor-name:--info-btn">Variable Fonts' ||
 			'<svg height="1em" width="1em" viewBox="0 0 16 16" class="visually-hidden icon" fill="none" stroke="white" stroke-width="4">' ||
 				'<path d="M2 10 L 8 14 L 14 2 "></path>' ||
@@ -33,8 +34,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 			'<small>Some info about changing font technology</small>' ||
 			'<button type="button" class="button">Confirm</button>' ||
 		'</div>';
+        */
 
-        l_article:='<div class="flex-items" style="--flex-gap:.5em">';
+        l_article:='<div class="flex-items" style="--flex-gap:.5em;--flex-direction:column;--flex-vertical-alignment:flex-start">';
         FOR C IN (
             SELECT font_id, context 
               FROM website_font
@@ -43,32 +45,45 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         ) LOOP
             SELECT category INTO l_selected_category FROM font WHERE id=C.font_id;
             l_article:=l_article ||
-            '<fieldset class="flex-items" style="--flex-gap:1em">' ||
+            '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:95%">' ||
                 '<legend>' || INITCAP(C.context) || '</legend>' ||
-                '<label for="' || C.context || '-font-category">Category</label>' ||
-                '<select id="' || C.context || '-font-category" name="' || C.context || '_font_category">' ||
-                    '<button>' ||
-                      '<selectedcontent></selectedcontent>' ||
-                      '<span class="arrow"></span>' ||
-                    '</button>';
+                '<div style="flex-basis:5em">' ||
+					'<div>' ||
+						'<label for="headings-variable">Variable</label>' ||
+						'<input type="checkbox" id="headings-variable" role="switch" />' ||
+					'</div>' ||
+					'<div>' ||
+						'<label for="headings-italic" style="font-style:italic">Italics</label>' ||
+						'<input type="checkbox" id="headings-italic" role="switch" />' ||
+					'</div>' ||
+				'</div>' ||
+                '<div>' ||
+                    '<label for="' || C.context || '-font-category">Category</label>' ||
+                    '<select id="' || C.context || '-font-category" name="' || C.context || '_font_category" style="inline-size:13ch">' ||
+                        '<button>' ||
+                          '<selectedcontent></selectedcontent>' ||
+                          '<span class="arrow"></span>' ||
+                        '</button>';
             FOR C1 IN (SELECT category FROM font_category ORDER BY 1)
             LOOP
                 l_article:=l_article || 
-                    '<option style="font-family:' || C1.category || '" value="' || C1.category || '"' || CASE WHEN C1.category=l_selected_category THEN ' selected' END || '>' ||
-                        C1.category ||
-                    '</option>';
+                        '<option style="font-family:' || C1.category || '" value="' || C1.category || '"' || CASE WHEN C1.category=l_selected_category THEN ' selected' END || '>' ||
+                            C1.category ||
+                        '</option>';
             END LOOP;
             l_article:=l_article || 
-                '</select>';
+                    '</select>' ||
+                '</div>';
 
             /* Fonts in category */
             l_article:=l_article || 
-                '<label for="' || C.context || '-font-family">Family</label>' ||
-                '<select id="' || C.context || '-font-family" name="' || C.context || '_font_family">' ||
-                    '<button>' ||
-                      '<selectedcontent></selectedcontent>' ||
-                      '<span class="arrow"></span>' ||
-                    '</button>';
+                '<div>' ||
+                    '<label for="' || C.context || '-font-family">Family</label>' ||
+                    '<select id="' || C.context || '-font-family" name="' || C.context || '_font_family">' ||
+                        '<button>' ||
+                          '<selectedcontent></selectedcontent>' ||
+                          '<span class="arrow"></span>' ||
+                        '</button>';
             CASE C.context
                 WHEN 'headings' THEN
                     FOR C1 IN (SELECT id, family FROM font WHERE category=l_selected_category ORDER BY 2)
@@ -92,7 +107,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     END LOOP;
             END CASE;
             l_article:=l_article || 
-                '</select>' ||
+                    '</select>' ||
+                '</div>' ||
                 '<small id="' || C.context || '-info" popover style="position-anchor:--' || C.context || '-font-family;position-area:bottom span-all;color:red;padding:.5em;max-width:30ch"></small>' ||
                 '<span class="loader icon" popovertarget="' || C.context || '-info" style="anchor-name:--' || C.context || '-font-family"></span>' ||
             '</fieldset>';
@@ -104,9 +120,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_footer:=
             '<a class="icon-with-text" href="https://fonts.google.com" target="a_blank">' ||
 				'<svg width="1em" height="1em" viewBox="0 0 512 512"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376C296.3 401.1 253.9 416 208 416 93.1 416 0 322.9 0 208S93.1 0 208 0 416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>' ||
-				'<small>' || C.nb_fonts || ' Google fonts</small>' ||
-			'</a>' ||
-            '<small>Updated ' || TO_CHAR(C.last_modified, 'dd Mon yyyy') || '</small>';
+				'<small>' || C.nb_fonts || ' Google fonts @'|| TO_CHAR(C.last_modified, 'dd Mon yyyy') || '</small>' ||
+			'</a>';
         END LOOP;
 
         /*
@@ -131,36 +146,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
 
-    PROCEDURE getFontsInCategory(pCategory IN font.category%type, pContext IN website_font.context%type, pVariable IN font.variable%type) IS
+    PROCEDURE getFontsInCategory(pCategory IN font.category%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pItalic IN font.ital_start%type) IS
         l_html CLOB;
         l_json JSON_OBJECT_T;
     BEGIN
         l_html:='<option value="">--Choose a Font--</option>';
-        CASE pContext
-            WHEN 'headings' THEN
-                FOR C IN (
-                    SELECT id, family 
-                    FROM font 
-                    WHERE category=pCategory 
-                    AND variable=pVariable
-                    ORDER BY 2
-                )
-                LOOP
-                    l_html:=l_html || '<option value="' || C.id || '">' || C.family || '</option>';
-                END LOOP;
-            WHEN 'text' THEN
-                FOR C IN (
-                    SELECT id, family 
-                    FROM font 
-                    WHERE category=pCategory
-                      AND variable=pVariable
-                    ORDER BY 2
-                )
-                LOOP
-                    l_html:=l_html || '<option value="' || C.id || '">' || C.family || '</option>';
-                END LOOP;
-        END CASE;
-
+        FOR C IN (
+            SELECT id, family 
+            FROM font 
+            WHERE category=pCategory 
+            AND variable=pVariable
+            AND (ital_end=pItalic OR ital_static=pItalic)
+            ORDER BY 2
+        )
+        LOOP
+            l_html:=l_html || '<option value="' || C.id || '">' || C.family || '</option>';
+        END LOOP;
+           
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('content', l_html);
@@ -171,7 +173,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_family font.family%type;
         l_api_url VARCHAR2(250);
         l_url VARCHAR2(500);
-        l_url_regex VARCHAR2(9):='\((.+?)\)';
+        l_url_regex VARCHAR2(12):='url\((.+?)\)';
         l_tmp LONG;
         l_fontfaces LONG;
         l_chars_normal website_font.chars_normal%type;
@@ -224,7 +226,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END IF;
 
         FOR C IN (
-                SELECT f.family, f.variable,
+                SELECT f.family, 
                     LTRIM(NVL2(f.ital_start,'ital',NULL) || NVL2(f.opsz_start,',opsz',NULL) || NVL2(f.slnt_start,',slnt',NULL) || 
                         NVL2(f.wdth_start,',wdth',NULL) || NVL2(f.wght_start,',wght',NULL),',') axes,
                     LTRIM(NVL2(f.opsz_start,f.opsz_start||'..'||f.opsz_end,NULL) || NVL2(f.slnt_start,','||f.slnt_start||'..'||f.slnt_end,NULL) || 
@@ -284,19 +286,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END IF;
         END LOOP;
 
+        /*
+        ** UPDATE WEBSITE_FONT TABLE With NEW FONT AND RETURN TO CLIENT
+        */
+        UPDATE website_font SET font_id=pFontid WHERE website_id=pWebsiteId AND context=pContext;
+
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        
-
-
-        /*
-        ** RETURN EXTRACTED URLS FROM FONTFACES
-        */
-        pck_core.log(l_fontfaces);
         l_urls:= new JSON_ARRAY_T;
         n:=REGEXP_COUNT(l_fontfaces,l_url_regex);
         FOR i IN 1..n LOOP
-            l_url:=REGEXP_SUBSTR(l_fontfaces,l_url_regex,1,1,null,i);
+            l_url:=REGEXP_SUBSTR(l_fontfaces,l_url_regex,1,i);
             l_urls.append(l_url);
         END LOOP;
         l_json.put('urls',l_urls);
@@ -306,7 +306,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  BUILD SELECT LIST OF FONT FAMILIES FOR GIVEN CATEGORY (if font_id=0) ELSE GET FONT SETTINGS FOR A SPECIFIC FONT
     */
-    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pCategory IN font.category%type, pFontId IN font.id%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pStatus OUT NUMBER) IS
+    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pCategory IN font.category%type, 
+                pFontId IN font.id%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pItalic IN font.ital_start%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_html CLOB;
     BEGIN
@@ -319,7 +320,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END IF;
 
         IF (pFontId=0) THEN
-            getFontsInCategory(pCategory, pContext, pVariable);
+            getFontsInCategory(pCategory, pContext, pVariable, pItalic);
         ELSE
             getSelectedFont(pWebsiteId, pArticleId, pFontid, pContext);
         END IF;
@@ -429,7 +430,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             slnt_start, slnt_end,
             CASE WHEN axes IS NULL THEN wght_start_static END, 
             CASE WHEN axes IS NULL THEN wght_end_static END, 
-            CASE WHEN axes IS NULL THEN ital END,
+            CASE WHEN axes IS NULL THEN DECODE(ital,0,1) END,
             subset,
             CASE WHEN axes IS NULL THEN 0 ELSE 1 END,
             lastModified
