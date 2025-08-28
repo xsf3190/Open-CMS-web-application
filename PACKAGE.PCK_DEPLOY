@@ -661,8 +661,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     SELECT 
                         f.id font_id,
                         f.family,
-                        NVL(wf.wght,LEAST(f.wght_end,700)) wght_bold,
-                        NVL(wf.wght,LEAST(f.wght_end,400)) wght_normal,
+                        NVL(wf.wght,LEAST(f.wght_end_static,700)) wght_bold,
+                        NVL(wf.wght,LEAST(f.wght_end_static,400)) wght_normal,
                         wf.context,
                         wf.chars_normal,
                         wf.chars_italic,
@@ -755,7 +755,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
                 l_context:=l_fonts.NEXT(l_context);
             END LOOP;
-            l_labels(i).font_preload:=l_font_preload;
+            --l_labels(i).font_preload:=l_font_preload;
 
             /*
             ** SET IMAGE SRCSET FOR ANY IMAGES INCLUDED IN BODY_HTML
@@ -1015,7 +1015,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             q'[ img-src 'self' res.cloudinary.com data:;]'
             END ||
             q'[ media-src res.cloudinary.com;]' ||
-            q'[ font-src 'self' es-modules.netlify.app;]' ||
+            q'[ font-src 'self' es-modules.netlify.app fonts.gstatic.com;]' ||
             q'[ style-src 'self' 'unsafe-inline' cdn.ckeditor.com;]' ||
             q'[ script-src 'strict-dynamic' ]' || l_script_sha256 || q'[;]' ||
             q'[ frame-src upload-widget.cloudinary.com  www.youtube.com;]' ||
