@@ -1,6 +1,17 @@
 import { dialog_header, dialog_article } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
+const result = (ele) => {
+	const span = ele.parentElement.querySelector("span");
+	if (ele.checked) {
+		span.replaceChildren();
+		span.insertAdjacentHTML('afterbegin','&#10060;');
+	} else {
+		span.replaceChildren();
+		span.insertAdjacentHTML('afterbegin','&#9989;');
+	}
+}
+
 export const init = (fontfaces) => {
 
     /*
@@ -11,65 +22,26 @@ export const init = (fontfaces) => {
         document.fonts.add(fontFile);
         fontFile.load();
     };
-    
-
-    dialog_header.addEventListener("click", async (e) => {
-        if (!e.target.matches(".variable")) return;
-
-        const svg = e.target.querySelector("svg");
-        svg.classList.toggle("visually-hidden");
-
-        const variable = svg.classList.contains("visually-hidden") ? 0 : 1;
-        
-        const categories = dialog_article.querySelectorAll("[id$='category']");
-        categories.forEach((category) => {
-            const selected = category.options[category.selectedIndex].value;
-            const context = category.getAttribute("name").split("_")[0];
-            const query = "?category=" + selected + "&font=0&context=" + context + "&variable=" + variable;
-
-            callAPI('fonts/:ID/:PAGE','GET', query)
-                .then((data) => {
-                    const family = category.parentElement.querySelector("select:last-of-type");
-                    let index = family.options.length;
-                    while (index--) {
-                        family.remove(index);
-                    }
-                    family.insertAdjacentHTML('beforeend',data.content);
-                })
-                .catch((error) => {
-                    handleError(error);
-                });
-        });
-    });
 
     dialog_article.addEventListener("change", (e) => {
+        /*
+        ** ANY CHANGE REQUIRES REBUILDING LIST Of FONT NAMES
+        */
         const name = e.target.getAttribute("id");
         const context = name.split("-")[0];
-        // const icon = dialog_header.querySelector(".variable>.icon");
-        // const variable = icon.classList.contains("visually-hidden") ? 0 : 1;
 
         const variable = document.getElementById(context + "-variable").checked ? 0 : 1;
 	    const italic = document.getElementById(context + "-italic").checked ? 0 : 1;
         
         /* 
-        ** SWITCHES FOR VARIABLE/STATIC AND ITALICS/NO ITALICS
+        ** SWITCHES FOR VARIABLE FONT AND FONTS WITH ITALIC
         */
         if (name.includes("variable")) {
-            const label = e.target.parentElement.querySelector("[for="+name+"]");
-            if (e.target.checked) {
-                label.textContent = "Static";
-            } else {
-                label.textContent = "Variable";
-            }
+            result(e.target);
         }
 
         if (name.includes("italic")) {
-            const label = e.target.parentElement.querySelector("[for="+name+"]");
-            if (e.target.checked) {
-                label.style.textDecoration = "line-through";
-            } else {
-                label.style.textDecoration = "initial";
-            }
+            result(e.target);
         }
 
         /* 
