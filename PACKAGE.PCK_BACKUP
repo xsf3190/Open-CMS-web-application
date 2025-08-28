@@ -336,7 +336,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         l_repo := dbms_cloud_repo.init_github_repo(
             credential_name => 'GITHUB_CRED', 
             owner => 'xsf3190', 
-            repo_name => 'oracle-to-github-backup');
+            repo_name => 'Open-CMS-web-application');
 
         IF (n=0) THEN
             datapump_backup(l_repo);
