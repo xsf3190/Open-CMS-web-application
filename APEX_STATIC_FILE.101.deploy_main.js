@@ -249,7 +249,7 @@ const metrics_popover_anchor = document.querySelector("[id='metrics-btn']");
 const metrics_details = document.querySelector("[id='metrics'] tbody");
 const observer = new PerformanceObserver((list) => {
     list.getEntries().forEach((entry) => {
-        // if (metrics.some( ({name}) => name===entry.name)) return;
+        if (metrics.some( ({name}) => name===entry.name)) return;
 
         metrics.push({entryType: entry.entryType, name:entry.name, transferSize:entry.transferSize, contentType: entry.contentType});
         let type = entry.name.split(".").pop().toUpperCase();
@@ -279,7 +279,7 @@ const observer = new PerformanceObserver((list) => {
         if (entry.startTime > 2000) {
             start = secondsToHms(entry.startTime / 1000);
             end = "";
-            response = "";
+            // response = "";
         }
 
         if (type==="BEACON") {
@@ -287,9 +287,7 @@ const observer = new PerformanceObserver((list) => {
         }
 
         metric_count++;
-        let button = '<button type="button" popovertarget="metric-popover-' + metric_count + '" style="anchor-name: --metric-' + metric_count + '">' + type + '</button>';
-        const popover = '<div id="metric-popover-' + metric_count + '" popover class="popover-right" style="font-size:80%;white-space:nowrap;position-anchor: --metric-' + metric_count + '">' + entry.name + '</div>';
-        const tr = "<tr><td>" + button + popover + "</td><td>" 
+        let tr = "<tr><td>" + type + "</td><td>" 
             + start + "</td><td>" 
             + end + "</td><td>" 
             + redirect + "</td><td>" 
@@ -300,6 +298,7 @@ const observer = new PerformanceObserver((list) => {
             + response + "</td><td>" 
             + duration + "</td><td>" 
             + entry.transferSize + "</td></tr>";
+        tr  +=  "<tr style='border-block-end:3px solid black'><td></td><td colspan='10'><small>" + entry.name + "</small></td></tr>";
         metrics_details.insertAdjacentHTML("beforeend",tr);
         
     })
