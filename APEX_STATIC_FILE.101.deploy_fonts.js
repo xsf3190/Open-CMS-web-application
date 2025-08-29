@@ -1,7 +1,7 @@
 import { dialog_header, dialog_article } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-const result = (ele) => {
+const show_result = (ele) => {
 	const span = ele.parentElement.querySelector("span");
 	if (ele.checked) {
 		span.replaceChildren();
@@ -10,6 +10,27 @@ const result = (ele) => {
 		span.replaceChildren();
 		span.insertAdjacentHTML('afterbegin','&#9989;');
 	}
+}
+
+const buildFontList = (context) => {
+    const variable = document.getElementById(context + "-variable").checked ? 0 : 1;
+	const italic = document.getElementById(context + "-italic").checked ? 0 : 1;
+    const category = document.getElementById(context + "-font-category").value;
+
+    const query = "?category=" + category + "&context=" + context + "&variable=" + variable + "&italic=" + italic;
+
+    callAPI('fonts/:ID/:PAGE','GET', query)
+        .then((data) => {
+            const family = document.getElementById(context + "-font-family");
+            let index = family.options.length;
+            while (index--) {
+                family.remove(index);
+            }
+            family.insertAdjacentHTML('beforeend',data.content);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
 }
 
 export const init = (fontfaces) => {
@@ -25,53 +46,47 @@ export const init = (fontfaces) => {
 
     dialog_article.addEventListener("change", (e) => {
         /*
-        ** ANY CHANGE REQUIRES REBUILDING LIST Of FONT NAMES
+        ** ANY CHANGE REBUILDS LIST Of FONT NAMES
         */
         const name = e.target.getAttribute("id");
         const context = name.split("-")[0];
 
-        const variable = document.getElementById(context + "-variable").checked ? 0 : 1;
-	    const italic = document.getElementById(context + "-italic").checked ? 0 : 1;
-        
         /* 
-        ** SWITCHES FOR VARIABLE FONT AND FONTS WITH ITALIC
+        ** SWITCH FOR VARIABLE FONTS
         */
         if (name.includes("variable")) {
-            result(e.target);
-        }
-
-        if (name.includes("italic")) {
-            result(e.target);
+            show_result(e.target);
+            buildFontList(context);
         }
 
         /* 
-        ** USER SELECTS FONT CATEGORY - UPDATE ADJACENT SELECT WITH NEW FAMILY OPTIONS 
+        ** SWITCH FOR FONTS WITH ITALIC
         */
-        if (name.includes("font_category")) {
-            const query = "?category=" + e.target.value + "&font=0&context=" + context + "&variable=" + variable;
-            callAPI('fonts/:ID/:PAGE','GET', query)
-                .then((data) => {
-                    const family = document.getElementById(context + "-font-family");
-                    let index = family.options.length;
-                    while (index--) {
-                        family.remove(index);
-                    }
-                    family.insertAdjacentHTML('beforeend',data.content);
-                })
-                .catch((error) => {
-                    handleError(error);
-                });
+        if (name.includes("italic")) {
+            show_result(e.target);
+            buildFontList(context);
+        }
+
+        /* 
+        ** USER SELECTS FONT CATEGORY
+        */
+        if (name.includes("font-category")) {
+            buildFontList(context);
+        }
+        
         /* 
         ** USER SELECTS FONT FAMILY - LOAD SELECTED FONT AND SET CSS ROOT PROPERTY
         */
-        } else if (name.includes("font_family")) {
+        if (name.includes("font-family")) {
             if (!e.target.value) {
                 return;
             }
-             const loader = e.target.closest("fieldset").querySelector(".loader");
+            const loader = e.target.closest("fieldset").querySelector(".loader");
             loader.style.opacity=1;
-            const query = "?category=null&font=" + e.target.value + "&context=" + context + "&variable=" + variable;
-            callAPI('fonts/:ID/:PAGE','GET', query)
+            const obj = {};
+            obj.font_id = e.target.value;
+            obj.context = context;
+            callAPI('fonts/:ID/:PAGE','PUT', obj)
                 .then((data) => {
                     /*
                     data.axes.forEach((axis) => {
@@ -103,7 +118,7 @@ export const init = (fontfaces) => {
                         };
                         document.fonts.ready.then(()=>{
                             console.log(`Loaded ${font_family}`);
-                            document.documentElement.style.setProperty('--font-family-' + name.split("_")[0], font_family); 
+                            document.documentElement.style.setProperty('--font-family-' + context, font_family); 
                         });
                     }
                     loader.style.opacity=0;
