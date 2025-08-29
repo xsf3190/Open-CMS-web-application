@@ -24,7 +24,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
         l_json.put('contactEmail',pEmail);
         l_json.put('subject',pSubject);
         l_json.put('body', pBody);
-        l_json.put('sourceEmail','login@adfreesites.com');
+        --l_json.put('sourceEmail','login@adfreesites.com');
+        l_json.put('sourceEmail','henk@mark.automated-mail.florentmeijer.com');   /* temporary fix until sort out adfreesites.com dns*/
         l_email_payload:=l_json.stringify;
         pck_api.callAWSemailAPI(pMethod=>'POST', pBody=>l_email_payload, pData=>l_clob);
     END;
