@@ -146,7 +146,7 @@ export const init = async (element) => {
                     withText: false
                 } );
                 button.on('execute', (_) => {
-                    callAPI("fonts/:ID/:PAGE","GET", "?category=ALL&font=0&context=HTML")
+                    callAPI("fonts/:ID/:PAGE","GET", "?context=HTML")
                     .then( (data) => {
                         loadForm(data);
                         import("deploy_fonts")
