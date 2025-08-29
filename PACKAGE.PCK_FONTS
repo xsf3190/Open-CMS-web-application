@@ -14,7 +14,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     **  BUILD HTML FORM TO SELECT WEBSITE FONTS
     */
     PROCEDURE getHTML(pWebsiteId IN website.id%type) IS
-        l_selected_category font.category%type;
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
@@ -23,7 +22,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_fonts JSON_ARRAY_T;
         l_fonts_obj JSON_OBJECT_T;
     BEGIN
-        --l_header:=null;
+        l_header:='<small>Select complementary fonts for headings and text</small>';
         /*
         '<button type="button" class="button variable" style="anchor-name:--info-btn">Variable Fonts' ||
 			'<svg height="1em" width="1em" viewBox="0 0 16 16" class="visually-hidden icon" fill="none" stroke="white" stroke-width="4">' ||
@@ -38,25 +37,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_article:='<div class="flex-items" style="--flex-gap:.5em;--flex-direction:column;--flex-vertical-alignment:flex-start">';
         FOR C IN (
-            SELECT font_id, context 
-              FROM website_font
-             WHERE website_id=pWebsiteId 
+            SELECT wf.font_id, wf.context, f.category, f.variable, f.italic
+              FROM website_font wf, font f
+             WHERE wf.website_id=pWebsiteId
+               AND wf.font_id=f.id 
              ORDER BY context
         ) LOOP
-            SELECT category INTO l_selected_category FROM font WHERE id=C.font_id;
             l_article:=l_article ||
             '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:95%">' ||
                 '<legend>' || INITCAP(C.context) || '</legend>' ||
-                '<div style="flex-basis:5em">' ||
-					'<div>' ||
-						'<label for="headings-variable">Variable</label>' ||
-						'<input type="checkbox" id="headings-variable" role="switch" />' ||
-					'</div>' ||
-					'<div>' ||
-						'<label for="headings-italic" style="font-style:italic">Italics</label>' ||
-						'<input type="checkbox" id="headings-italic" role="switch" />' ||
-					'</div>' ||
-				'</div>' ||
+                '<div>' ||
+					'<label for="headings-variable">Variable Fonts</label>' ||
+					'<input type="checkbox" id="headings-variable" role="switch"' || CASE WHEN C.variable=0 THEN ' checked aria-checked="false"' ELSE ' aria-checked="true"' END || '/>' ||
+                    '<span style="margin-inline-start:1em">' || CASE WHEN C.variable=0 THEN '&#9989;' ELSE '&#10060;' END || '</span>' ||
+                '</div>' ||
+                '<div>' ||
+					'<label for="headings-italic">Fonts with Italics</label>' ||
+					'<input type="checkbox" id="headings-italic" role="switch"' || CASE WHEN C.italic=0 THEN ' checked aria-checked="false"' ELSE ' aria-checked="true"' END || '/>' ||
+                    '<span style="margin-inline-start:1em">' || CASE WHEN C.italic=0 THEN '&#9989;' ELSE '&#10060;' END || '</span>' ||
+                '</div>' ||
+                
                 '<div>' ||
                     '<label for="' || C.context || '-font-category">Category</label>' ||
                     '<select id="' || C.context || '-font-category" name="' || C.context || '_font_category" style="inline-size:13ch">' ||
@@ -67,7 +67,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             FOR C1 IN (SELECT category FROM font_category ORDER BY 1)
             LOOP
                 l_article:=l_article || 
-                        '<option style="font-family:' || C1.category || '" value="' || C1.category || '"' || CASE WHEN C1.category=l_selected_category THEN ' selected' END || '>' ||
+                        '<option style="font-family:' || C1.category || '" value="' || C1.category || '"' || CASE WHEN C1.category=C.category THEN ' selected' END || '>' ||
                             C1.category ||
                         '</option>';
             END LOOP;
@@ -84,28 +84,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                           '<selectedcontent></selectedcontent>' ||
                           '<span class="arrow"></span>' ||
                         '</button>';
-            CASE C.context
-                WHEN 'headings' THEN
-                    FOR C1 IN (SELECT id, family FROM font WHERE category=l_selected_category ORDER BY 2)
-                    LOOP
-                        l_article:=l_article || 
-                        '<option value="' || TO_CHAR(C1.id) || '"'|| CASE WHEN C1.id=C.font_id THEN ' selected' END || '>' ||
-                            C1.family ||
-                        '</option>';
-                    END LOOP;
-                WHEN 'text' THEN
-                    FOR C1 IN (
-                        SELECT id, family 
-                          FROM font 
-                         WHERE category=l_selected_category 
-                         ORDER BY 2)
-                    LOOP
-                        l_article:=l_article || 
-                        '<option value="' || TO_CHAR(C1.id) || '"'|| CASE WHEN C1.id=C.font_id THEN ' selected' END || '>' ||
-                            C1.family ||
-                        '</option>';
-                    END LOOP;
-            END CASE;
+            FOR C1 IN (SELECT id, family FROM font WHERE category=C.category AND variable=C.variable AND italic=C.italic ORDER BY 2)
+            LOOP
+                l_article:=l_article || 
+                '<option value="' || TO_CHAR(C1.id) || '"'|| CASE WHEN C1.id=C.font_id THEN ' selected' END || '>' ||
+                    C1.family ||
+                '</option>';
+            END LOOP;
             l_article:=l_article || 
                     '</select>' ||
                 '</div>' ||
@@ -156,7 +141,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             FROM font 
             WHERE category=pCategory 
             AND variable=pVariable
-            AND (ital_end=pItalic OR ital_static=pItalic)
+            AND italic=pItalic
             ORDER BY 2
         )
         LOOP
@@ -231,7 +216,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         NVL2(f.wdth_start,',wdth',NULL) || NVL2(f.wght_start,',wght',NULL),',') axes,
                     LTRIM(NVL2(f.opsz_start,f.opsz_start||'..'||f.opsz_end,NULL) || NVL2(f.slnt_start,','||f.slnt_start||'..'||f.slnt_end,NULL) || 
                         NVL2(f.wdth_start,','||f.wdth_start||'..'||f.wdth_end,NULL) || NVL2(f.wght_start,','||f.wght_start||'..'||f.wght_end,NULL),',') ranges,
-                    ital_static, wght_start_static, wght_end_static
+                    italic, wght_start_static, wght_end_static
                 FROM font f
                 WHERE f.id=pFontid) 
         LOOP
@@ -387,8 +372,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             wght_start,wght_end,
             opsz_start,opsz_end,
             slnt_start,slnt_end,
-            wght_start_static,wght_end_static,ital_static,
-            subset, vf, lastModified
+            wght_start_static,
+            wght_end_static,
+            italic,
+            subset, 
+            variable, 
+            axes,
+            lastModified
         )
         WITH 
         data AS
@@ -411,33 +401,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         (
             SELECT family, category, TO_DATE(lastModified,'YYYY-MM-DD') lastModified, 
                 MIN(DECODE(SIGN(variant),1,variant)) wght_start_static, MAX(DECODE(SIGN(variant),1,variant)) wght_end_static,
-                MIN(DECODE(SIGN(variant),-1,0)) ital,
+                MIN(DECODE(SIGN(variant),-1,1)) ital,
                 MAX(DECODE(tag,'wdth',tag_start)) as wdth_start, MAX(DECODE(tag,'wdth',tag_end)) as wdth_end, 
                 MAX(DECODE(tag,'wght',tag_start)) as wght_start, MAX(DECODE(tag,'wght',tag_end)) as wght_end, 
                 MAX(DECODE(tag,'opsz',tag_start)) as opsz_start, MAX(DECODE(tag,'opsz',tag_end)) as opsz_end, 
                 MAX(DECODE(tag,'slnt',tag_start)) as slnt_start, MAX(DECODE(tag,'slnt',tag_end)) as slnt_end,
-                LISTAGG(tag) WITHIN GROUP (ORDER BY null) axes,
+                LISTAGG(tag,',') WITHIN GROUP (ORDER BY null) axes,
                 LISTAGG(subset,'|') WITHIN GROUP (ORDER BY subset) subset
             FROM data
             GROUP BY family, category, lastModified
         )
         SELECT family, category, 
-            CASE WHEN ital=0 AND axes IS NOT NULL THEN 0 END ital_start, 
-            CASE WHEN ital=0 AND axes IS NOT NULL THEN 1 END ital_end,
+            CASE WHEN ital=1 AND axes IS NOT NULL THEN 0 END ital_start, 
+            CASE WHEN ital=1 AND axes IS NOT NULL THEN 1 END ital_end,
             wdth_start, wdth_end,
             wght_start, wght_end,
             opsz_start, opsz_end,
             slnt_start, slnt_end,
             CASE WHEN axes IS NULL THEN wght_start_static END, 
             CASE WHEN axes IS NULL THEN wght_end_static END, 
-            CASE WHEN axes IS NULL THEN DECODE(ital,0,1) END,
+            CASE WHEN ital IS NULL AND axes IS NULL THEN 0 WHEN INSTR(axes,'slnt')>0 THEN 1 ELSE NVL(ital,0) END,
             subset,
             CASE WHEN axes IS NULL THEN 0 ELSE 1 END,
+            axes,
             lastModified
         FROM data2;
 
         /* DELETE FONTS WITH CUSTOM AXES WHICH WE DO NOT SUPPORT YET */
-        DELETE google_font WHERE vf=1 AND COALESCE(wght_start,wght_end,wdth_start,wdth_end,opsz_start,opsz_end,slnt_start,slnt_end,ital_start,ital_end) IS NULL;
+        --DELETE google_font WHERE vf=1 AND COALESCE(wght_start,wght_end,wdth_start,wdth_end,opsz_start,opsz_end,slnt_start,slnt_end,ital_start,ital_end) IS NULL;
 
         /* Update font category table from staging table */
         MERGE INTO font_category t
@@ -458,7 +449,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         MERGE INTO font t
         USING
         (
-            SELECT family, category, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, wght_start_static, wght_end_static, ital_static, vf
+            SELECT family, category, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, wght_start_static, wght_end_static, italic, variable, axes
             FROM google_font
         ) s
         ON (t.family=s.family)
@@ -471,12 +462,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             t.slnt_start=s.slnt_start, t.slnt_end=s.slnt_end,
             t.wght_start_static=s.wght_start_static,
             t.wght_end_static=s.wght_end_static,
-            t.ital_static=s.ital_static,
-            t.variable=s.vf,
+            t.italic=s.italic,
+            t.variable=s.variable,
+            t.axes=s.axes,
             t.updated_date=current_timestamp
         WHEN NOT MATCHED THEN 
-            INSERT (id, family, category, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, wght_start_static, wght_end_static, ital_static, variable, created_date) 
-            VALUES (seq_font.nextval, s.family, s.category, s.ital_start, s.ital_end, s.wdth_start, s.wdth_end, s.wght_start, s.wght_end, s.opsz_start, s.opsz_end, s.slnt_start, s.slnt_end,  s.wght_start_static, s.wght_end_static, s.ital_static, s.vf, current_timestamp);
+            INSERT (id, family, category, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, wght_start_static, wght_end_static, italic, variable, axes, created_date) 
+            VALUES (seq_font.nextval, s.family, s.category, s.ital_start, s.ital_end, s.wdth_start, s.wdth_end, s.wght_start, s.wght_end, s.opsz_start, s.opsz_end, s.slnt_start, s.slnt_end,  s.wght_start_static, s.wght_end_static, s.italic, s.variable, s.axes, current_timestamp);
         
         l_nb_fonts:=sql%rowcount;
         pck_core.log('Uploaded ' ||l_nb_fonts || ' Google Fonts');
