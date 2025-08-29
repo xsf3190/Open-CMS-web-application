@@ -218,7 +218,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'x-api-key';
-        apex_web_service.g_request_headers(1).value := l_terraform_api_key;
+        --apex_web_service.g_request_headers(1).value := l_terraform_api_key;
+        apex_web_service.g_request_headers(1).value := '27svfB8H3c0cKYYWVC4Y3quRSVPo6dH5tNq0wEt4';
 
         pData := apex_web_service.make_rest_request(p_url=>l_terraform_aws_gateway_url, p_http_method=>pMethod, p_body=>pBody);
 
