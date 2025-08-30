@@ -88,22 +88,6 @@ export const init = (fontfaces) => {
             obj.context = context;
             callAPI('fonts/:ID/:PAGE','PUT', obj)
                 .then((data) => {
-                    /*
-                    data.axes.forEach((axis) => {
-                        const label = e.target.closest("fieldset").querySelector("[for$='"+axis.name+"']");
-                        const input = label.querySelector("input");
-                        if (axis.max) {
-                            label.classList.remove("visually-hidden");
-                            input.disabled = false;
-                            input.setAttribute("min",axis.min);
-                            input.setAttribute("max",axis.max);
-                            // input.value = axis.name==="ital" ? 0 : Math.round(axis.min+((axis.max-axis.min)/2));
-                        } else {
-                            label.classList.add("visually-hidden");
-                            input.disabled = true;
-                        }
-                    })
-                    */
                     if (data.info) {
                         const info_id = context + "-info";
                         const info = document.getElementById(info_id);
@@ -111,15 +95,17 @@ export const init = (fontfaces) => {
 	                    info.showPopover();
                     } else {
                         const font_family = e.target.options[e.target.selectedIndex].text;
-                        for (const url of data.urls) {
-                            const fontFile = new FontFace(font_family,url);
-                            document.fonts.add(fontFile);
-                            fontFile.load();
-                        };
-                        document.fonts.ready.then(()=>{
-                            console.log(`Loaded ${font_family}`);
-                            document.documentElement.style.setProperty('--font-family-' + context, font_family); 
-                        });
+                        if (font_family!=="system-ui") {
+                            for (const url of data.urls) {
+                                const fontFile = new FontFace(font_family,url);
+                                document.fonts.add(fontFile);
+                                fontFile.load();
+                            };
+                            document.fonts.ready.then(()=>{
+                                console.log(`Loaded ${font_family}`);
+                            });
+                        }
+                        document.documentElement.style.setProperty('--font-family-' + context, font_family); 
                     }
                     loader.style.opacity=0;
                 })
@@ -128,6 +114,17 @@ export const init = (fontfaces) => {
                     handleError(error);
                 });
         }
+        if (name.includes("wght")) {
+            console.log("change event",e.target.value); /* finger off - update website_font*/
+        }
 
+    });
+    
+    dialog_article.addEventListener("input", (e) => {
+        const name = e.target.getAttribute("id");
+        const context = name.split("-")[0];
+        if (name.includes("wght")) {
+            document.documentElement.style.setProperty("--font-weight-" + context, e.target.value); 
+        }
     });
 }
