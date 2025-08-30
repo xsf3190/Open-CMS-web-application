@@ -37,6 +37,7 @@ form,
 
 main {
   font-family: var(--font-family-text);
+  font-weight: var(--font-weight-text);
   padding-inline: 1rem;
   container-type: inline-size;
 }
@@ -351,6 +352,7 @@ main h3,
 main h4 {
   text-wrap: pretty;
   font-family: var(--font-family-headings);
+  font-weight: var(--font-weight-headings);
 }
 
 
@@ -832,10 +834,11 @@ dialog hr+span {
 /* STYLES FOR CAROUSEL COMPONENT */
 
 .carousel {
+  --grid-auto-columns:25%;
   padding-block-end:1rem;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 25%;
+  grid-auto-columns: var(--grid-auto-columns);
   gap: 1rem;
   overflow-x: auto;
   scrollbar-color: var(--color-primary) var(--color-primary-lightest);
