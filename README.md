@@ -49,9 +49,9 @@ To achieve even greater performance, website owners can choose the system-ui fon
 ## Accesibility
 CKEditor helps making sites accessible. 
 
-We prevent sites from being published that fail minimum accessibility requirements - e.g. including an alternative desription of an image.
+We prevent sites from being published that fail minimum accessibility requirements - e.g. all images must include an alternative description.
 
-Colour contrast is ensured by the CMS - users can choose any colours they like for text, backgrounds, buttons etc as long as they satisfy accessibility requirements.
+Colour contrast is ensured by the CMS - users can choose any colours they like for text, backgrounds, buttons as long as they satisfy accessibility requirements.
 
 ## Security
 The CMS enables website owners to edit the site in situ - therefore secured access is essential.
