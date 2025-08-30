@@ -46,10 +46,8 @@ All font files are self-hosted. This is particlulary important for mobile visito
 
 To achieve even greater performance, website owners can choose the system-ui font to completely avoid any download.  
 
-## Accesibility
-CKEditor helps making sites accessible. 
-
-We prevent sites from being published that fail minimum accessibility requirements - e.g. all images must include an alternative description.
+## Accessibility
+The CMS prevents sites from being published when content fails minimum accessibility requirements - e.g. all images must include an alternative description.
 
 Colour contrast is ensured by the CMS - users can choose any colours they like for text, backgrounds, buttons as long as they satisfy accessibility requirements.
 
