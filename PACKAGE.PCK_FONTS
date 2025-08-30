@@ -1,10 +1,10 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
-    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pCategory IN font.category%type, pFontId IN font.id%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pItalic IN font.ital_start%type, pStatus OUT NUMBER);
+    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type DEFAULT NULL, pVariable IN font.variable%type DEFAULT NULL, pItalic IN font.italic%type DEFAULT NULL, pStatus OUT NUMBER);
     --
     PROCEDURE loadGoogleFonts;
     --
-    PROCEDURE updateFonts(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    PROCEDURE updateFont(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
 end "PCK_FONTS";
 /
@@ -23,17 +23,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_fonts_obj JSON_OBJECT_T;
     BEGIN
         l_header:='<small>Select complementary fonts for headings and text</small>';
-        /*
-        '<button type="button" class="button variable" style="anchor-name:--info-btn">Variable Fonts' ||
-			'<svg height="1em" width="1em" viewBox="0 0 16 16" class="visually-hidden icon" fill="none" stroke="white" stroke-width="4">' ||
-				'<path d="M2 10 L 8 14 L 14 2 "></path>' ||
-			'</svg>' ||
-		'</button>' ||
-        '<div id="info" popover class="popover-right-bottom" style="position-anchor:--info-btn">' ||
-			'<small>Some info about changing font technology</small>' ||
-			'<button type="button" class="button">Confirm</button>' ||
-		'</div>';
-        */
 
         l_article:='<div class="flex-items" style="--flex-gap:.5em;--flex-direction:column;--flex-vertical-alignment:flex-start">';
         FOR C IN (
@@ -47,19 +36,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:95%">' ||
                 '<legend>' || INITCAP(C.context) || '</legend>' ||
                 '<div>' ||
-					'<label for="headings-variable">Variable Fonts</label>' ||
-					'<input type="checkbox" id="headings-variable" role="switch"' || CASE WHEN C.variable=0 THEN ' checked aria-checked="false"' ELSE ' aria-checked="true"' END || '/>' ||
-                    '<span style="margin-inline-start:1em">' || CASE WHEN C.variable=0 THEN '&#9989;' ELSE '&#10060;' END || '</span>' ||
+					'<label for="' || C.context || '-variable">Variable</label>' ||
+					'<input type="checkbox" id="' || C.context || '-variable" role="switch"' || CASE WHEN C.variable=0 THEN ' checked aria-checked="false"' ELSE ' aria-checked="true"' END || '/>' ||
+                    '<span aria-hidden="true" style="margin-inline-start:1em">' || CASE WHEN C.variable=0 THEN '&#10060;' ELSE '&#9989;' END || '</span>' ||
                 '</div>' ||
                 '<div>' ||
-					'<label for="headings-italic">Fonts with Italics</label>' ||
-					'<input type="checkbox" id="headings-italic" role="switch"' || CASE WHEN C.italic=0 THEN ' checked aria-checked="false"' ELSE ' aria-checked="true"' END || '/>' ||
-                    '<span style="margin-inline-start:1em">' || CASE WHEN C.italic=0 THEN '&#9989;' ELSE '&#10060;' END || '</span>' ||
+					'<label for="' || C.context || '-italic">Italics</label>' ||
+					'<input type="checkbox" id="' || C.context || '-italic" role="switch"' || CASE WHEN C.italic=0 THEN ' checked aria-checked="false"' ELSE ' aria-checked="true"' END || '/>' ||
+                    '<span aria-hidden="true" style="margin-inline-start:1em">' || CASE WHEN C.italic=0 THEN '&#10060;' ELSE '&#9989;' END || '</span>' ||
                 '</div>' ||
                 
                 '<div>' ||
                     '<label for="' || C.context || '-font-category">Category</label>' ||
-                    '<select id="' || C.context || '-font-category" name="' || C.context || '_font_category" style="inline-size:13ch">' ||
+                    '<select id="' || C.context || '-font-category" style="inline-size:13ch">' ||
                         '<button>' ||
                           '<selectedcontent></selectedcontent>' ||
                           '<span class="arrow"></span>' ||
@@ -78,8 +67,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             /* Fonts in category */
             l_article:=l_article || 
                 '<div>' ||
-                    '<label for="' || C.context || '-font-family">Family</label>' ||
-                    '<select id="' || C.context || '-font-family" name="' || C.context || '_font_family">' ||
+                    '<label for="' || C.context || '-font-family">Font Name</label>' ||
+                    '<select id="' || C.context || '-font-family">' ||
                         '<button>' ||
                           '<selectedcontent></selectedcontent>' ||
                           '<span class="arrow"></span>' ||
@@ -131,13 +120,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
 
-    PROCEDURE getFontsInCategory(pCategory IN font.category%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pItalic IN font.ital_start%type) IS
+    PROCEDURE getFontsInCategory(pCategory IN font.category%type, pVariable IN font.variable%type, pItalic IN font.italic%type) IS
         l_html CLOB;
         l_json JSON_OBJECT_T;
     BEGIN
-        l_html:='<option value="">--Choose a Font--</option>';
         FOR C IN (
-            SELECT id, family 
+            SELECT id, family, COUNT(*) OVER () nb
             FROM font 
             WHERE category=pCategory 
             AND variable=pVariable
@@ -145,6 +133,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             ORDER BY 2
         )
         LOOP
+            IF (l_html IS NULL) THEN
+                l_html:='<option value="">-Select from ' || C.nb || ' Fonts-</option>';
+            END IF;
             l_html:=l_html || '<option value="' || C.id || '">' || C.family || '</option>';
         END LOOP;
            
@@ -154,13 +145,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         apex_util.prn(l_json.to_clob,false);
     END;
 
-    PROCEDURE getSelectedFont(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pFontid IN font.id%type, pContext IN website_font.context%type) IS
+    /*
+    **  GET SELECTED FONT FROM GOOGLE
+    */
+    PROCEDURE getSelectedFont(pWebsiteId IN website.id%type, pArticleId IN article.id%type, 
+                pFontid IN website_font.font_id%type, pContext IN website_font.context%type, pError IN OUT VARCHAR2, pFontfaces IN OUT VARCHAR2) IS
         l_family font.family%type;
         l_api_url VARCHAR2(250);
-        l_url VARCHAR2(500);
-        l_url_regex VARCHAR2(12):='url\((.+?)\)';
-        l_tmp LONG;
         l_fontfaces LONG;
+        
+        l_tmp LONG;
         l_chars_normal website_font.chars_normal%type;
         l_chars_italic website_font.chars_italic%type;
         l_chars_bold_normal website_font.chars_bold_normal%type;
@@ -174,8 +168,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_code_regex varchar2(30):='<code(.+?)<\/code>';
         l_headings_regex varchar2(30):='<h[1-4]>(.+?)<\/h[1-4]>';
         n PLS_INTEGER;
-        l_json JSON_OBJECT_T;
-        l_urls JSON_ARRAY_T;
+        
     BEGIN
         /*
         **  GET NORMAL/ITALIC/BOLD CHARACTERS USED IN PAGE 
@@ -203,10 +196,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END IF;
 
         IF (COALESCE(l_chars_bold_italic,l_chars_bold_normal,l_chars_italic,l_chars_normal) IS NULL) THEN
-            apex_json.open_object; 
-            apex_json.write('success', TRUE);
-            apex_json.write('info', 'No ' || pContext || ' currently in your page. Enter some ' || pContext || ' and try again.');
-            apex_json.close_object;
+            pError:='No ' || pContext || ' currently in your page. Enter some ' || pContext || ' and try again.';
             RETURN;
         END IF;
 
@@ -231,7 +221,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     l_api_url:=l_api_url || C.ranges;
                 END IF;
                 l_api_url:=l_api_url || '&text=' || pck_deploy.chars_used(l_chars_bold_italic || l_chars_bold_normal || l_chars_italic || l_chars_normal);
-                pck_api.callGoogleAPI(l_api_url,pData=>l_fontfaces);
+                pck_api.callGoogleAPI(l_api_url,pData=>pFontfaces);
             ELSE
             /* STATIC FONT */
                 IF (pContext='headings') THEN
@@ -268,31 +258,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         l_fontfaces:=l_fontfaces || l_tmp;
                     END IF;
                 END IF;
+                pFontfaces:=l_fontfaces;
             END IF;
         END LOOP;
 
-        /*
-        ** UPDATE WEBSITE_FONT TABLE With NEW FONT AND RETURN TO CLIENT
-        */
-        UPDATE website_font SET font_id=pFontid WHERE website_id=pWebsiteId AND context=pContext;
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_urls:= new JSON_ARRAY_T;
-        n:=REGEXP_COUNT(l_fontfaces,l_url_regex);
-        FOR i IN 1..n LOOP
-            l_url:=REGEXP_SUBSTR(l_fontfaces,l_url_regex,1,i);
-            l_urls.append(l_url);
-        END LOOP;
-        l_json.put('urls',l_urls);
-        apex_util.prn(l_json.to_clob,false);
     END;
 
     /* 
     **  BUILD SELECT LIST OF FONT FAMILIES FOR GIVEN CATEGORY (if font_id=0) ELSE GET FONT SETTINGS FOR A SPECIFIC FONT
     */
-    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pCategory IN font.category%type, 
-                pFontId IN font.id%type, pContext IN website_font.context%type, pVariable IN font.variable%type, pItalic IN font.ital_start%type, pStatus OUT NUMBER) IS
+    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, 
+                pVariable IN font.variable%type, pItalic IN font.italic%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_html CLOB;
     BEGIN
@@ -300,14 +276,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         IF (pContext='HTML') THEN
             getHTML(pWebsiteId);
-            pStatus:=200;
-            RETURN;
-        END IF;
-
-        IF (pFontId=0) THEN
-            getFontsInCategory(pCategory, pContext, pVariable, pItalic);
         ELSE
-            getSelectedFont(pWebsiteId, pArticleId, pFontid, pContext);
+            getFontsInCategory(pCategory, pVariable, pItalic);
         END IF;
 
         pStatus:=200;
@@ -319,33 +289,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  UPDATE WEBSITE HEADER FIELDS
     */
-    PROCEDURE updateFonts(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+    PROCEDURE updateFont(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_bodytext CLOB:=pBodyText;
+        l_context website_font.context%type;
+        l_font_id website_font.font_id%type;
+        l_fontfaces LONG;
+        l_error LONG;
+        l_url_regex VARCHAR2(12):='url\((.+?)\)';
+        l_url VARCHAR2(500);
+        l_json JSON_OBJECT_T;
+        l_urls JSON_ARRAY_T;
+        n PLS_INTEGER;
+        
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
-        
-        FOR C IN (
-            SELECT headings_font_family, text_font_family
-              FROM JSON_TABLE(l_bodytext, '$' COLUMNS(headings_font_family,text_font_family))
-        ) LOOP
+
+        SELECT context,font_id
+          INTO l_context, l_font_id
+          FROM JSON_TABLE(pBodyText, '$' COLUMNS(context,font_id));
+
+        pck_core.log('pArticleId:'||pArticleId||' l_font_id:'||l_font_id || ' l_context:'||l_context);
+
+        getSelectedFont(pWebsiteId, pArticleId, l_font_id, l_context, l_error, l_fontfaces);
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+
+        IF (l_error IS NOT NULL) THEN
+            l_json.put('success',true);
+            l_json.put('info',l_error);
+        ELSE
             UPDATE website_font
-               SET font_id=C.headings_font_family,
+               SET font_id=l_font_id,
+                   chars_normal=null,
+                   chars_italic=null,
+                   chars_bold_normal=null,
+                   chars_bold_italic=null,
                    updated_date=current_timestamp
              WHERE website_id=pWebsiteId
-               AND context='headings';
+               AND context=l_context;
+            
+            l_urls:= new JSON_ARRAY_T;
+            n:=REGEXP_COUNT(l_fontfaces,l_url_regex);
+            FOR i IN 1..n LOOP
+                l_url:=REGEXP_SUBSTR(l_fontfaces,l_url_regex,1,i);
+                l_urls.append(l_url);
+            END LOOP;
+            l_json.put('urls',l_urls);
+        END IF;
 
-            UPDATE website_font
-               SET font_id=C.text_font_family,
-                   updated_date=current_timestamp
-             WHERE website_id=pWebsiteId
-               AND context='text';
-        END LOOP;
-
-        apex_json.open_object;
-        apex_json.write('success', TRUE);
-        apex_json.close_object;
-
+        apex_util.prn(l_json.to_clob,false);
         pStatus:=200;
 
     EXCEPTION WHEN OTHERS THEN
