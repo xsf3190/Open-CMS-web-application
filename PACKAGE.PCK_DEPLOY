@@ -661,8 +661,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     SELECT 
                         f.id font_id,
                         f.family,
-                        NVL(wf.wght,LEAST(f.wght_end_static,700)) wght_bold,
-                        NVL(wf.wght,LEAST(f.wght_end_static,400)) wght_normal,
+                        CASE WHEN f.variable=1 THEN NVL(wf.wght,LEAST(f.wght_end,700)) ELSE LEAST(f.wght_end_static,700) END wght_bold,
+                        CASE WHEN f.variable=1 THEN NVL(wf.wght,LEAST(f.wght_end,400)) ELSE LEAST(f.wght_end_static,400) END wght_normal,
                         wf.context,
                         wf.chars_normal,
                         wf.chars_italic,
@@ -1143,6 +1143,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         **  DOGFACE DEPLOYMENT IF USER HAS DOGFACE API KEY AND ESMLIBRARY = 'TEST'
         */
         SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM users WHERE id=pUserid AND dogface_api_key IS NOT NULL);
+        n:=0;
         IF (n=1 AND pEsmLibrary='test') THEN
             SELECT json_arrayagg(
                     json_object(KEY 'path' VALUE '/henk.florentmeijer.com/' || file_name, KEY 'hash' VALUE md5)
