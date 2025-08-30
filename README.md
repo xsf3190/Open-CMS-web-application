@@ -5,7 +5,7 @@ Javascript frameworks have had a devastating effect on the accessibility of web 
 
 Although mostly ignored, the problem is well understood - web pages simply send too much data for the receiving infrastructure to handle.
 
-This CMS project aims to provide a simple interface for individuals to create and publish web sites at minimal cost to their visitors. No single page created with this CMS exceeds 50KB in weight on initial download, giving first time visitors every chance that they will be able to interact with the content within 2 seconds. 
+This CMS project aims to provide a simple interface for individuals to create and publish web sites at minimal cost to their visitors. No single page created with this CMS exceeds 70KB in weight on initial download, giving first time visitors every chance that they will be able to interact with the content within 2 seconds. 
 
 ## Self-editing web sites
 CMS users edit the content of their web pages in situ on an editor web site - a companion site to their domain web site. They edit and publish their editor site until ready to push the content to their domain. 
@@ -21,8 +21,15 @@ The enabling tehnologies for this to happen include:
 3. an editor for site owners to easily create content
 4. use of refresh and access Json Web Tokens to guarantee security
 
+## Personality and Design Choice
+The CMS allows website owners to choose from over 1800 free Google fonts. Choosing different, complementary fonts for headings and text can give web pages a lot of personality. 
+
+Google offer over 500 variable fonts which allow even greater design choice - for example, increasing the width of heading characters or subtly changing the weight of text characters. You can even have italics slanted to the left.
+
+This is made possible through CKEditor's highly flexible plugin system enabling us to replace the standard Font Family feature with a complete interface to Google Fonts.
+
 ## Performance Metrics
-50MB within 2 seconds for first time visitors is an extravagant claim, but supported by the collection of over 10'000 initial web page visits in the last year.
+70KB downloaded within 2 seconds for first time visitors is an extravagant claim, but is supported by the collection of over 10'000 initial web page visits over the last year.
 
 A great advantage of using a central CMS database is that each web page is deployed with a script which automatically and transparently collects performance metrics about the visit. These are pinged back to the database and made available to the website owner and to us so that we can monitor performance trends and identify opportunities for improvement.
 
@@ -35,7 +42,9 @@ Our script is about 5KB in size which contrasts well with Google tag manager tha
 ## Performance
 Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created containing only the characters actually appearing in the content. A plugin replacing CKEditor's font family feature provides access to over 1800 of Google's freely available fonts. With different fonts for headings, a web site an have a great deal of personality. Google's variable fonts afford website owners a lot of design opportunities like subtly changing boldness or character spacing. One of our sites uses 78 distinct characters across 70 pages - its visitors download only 25KB of font data, compared to the complete Latin font files which weigh in at over 150KB.
 
-All font files are self-hosted. This is particlulary important for mobile visitors where DNS lookups must be kept to a minimum. It's also important in countries like Germany where GDPR imposes legal restrictions on accessing resources that reveal the visitor's IP address.
+All font files are self-hosted. This is particlulary important for mobile visitors where DNS lookups are kept to a minimum. It's also important in countries like Germany where GDPR imposes legal restrictions on accessing resources that reveal the visitor's IP address.
+
+To achieve even greater performance, website owners can choose the system-ui font to completely avoid any download.  
 
 ## Accesibility
 CKEditor helps making sites accessible. 
