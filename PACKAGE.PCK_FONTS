@@ -13,7 +13,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  BUILD HTML FORM TO SELECT WEBSITE FONTS
     */
-    PROCEDURE getHTML(pWebsiteId IN website.id%type) IS
+    PROCEDURE getHTML(pWebsiteId IN website.id%type, pArticleId IN article.id%type) IS
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
@@ -21,19 +21,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_json JSON_OBJECT_T;
         l_fonts JSON_ARRAY_T;
         l_fonts_obj JSON_OBJECT_T;
+        l_selected VARCHAR2(9);
     BEGIN
         l_header:='<small>Select complementary fonts for headings and text</small>';
 
         l_article:='<div class="flex-items" style="--flex-gap:.5em;--flex-direction:column;--flex-vertical-alignment:flex-start">';
         FOR C IN (
-            SELECT wf.font_id, wf.context, f.category, f.variable, f.italic
+            SELECT wf.font_id, wf.context, f.category, f.family, f.variable, f.italic, wf.wght, f.wght_start, f.wght_end
               FROM website_font wf, font f
              WHERE wf.website_id=pWebsiteId
                AND wf.font_id=f.id 
              ORDER BY context
         ) LOOP
             l_article:=l_article ||
-            '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:95%">' ||
+            '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:95%;">' ||
                 '<legend>' || INITCAP(C.context) || '</legend>' ||
                 '<div>' ||
 					'<label for="' || C.context || '-variable">Variable</label>' ||
@@ -48,15 +49,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 
                 '<div>' ||
                     '<label for="' || C.context || '-font-category">Category</label>' ||
-                    '<select id="' || C.context || '-font-category" style="inline-size:13ch">' ||
+                    '<select id="' || C.context || '-font-category">' ||
                         '<button>' ||
                           '<selectedcontent></selectedcontent>' ||
                           '<span class="arrow"></span>' ||
                         '</button>';
             FOR C1 IN (SELECT category FROM font_category ORDER BY 1)
             LOOP
+                IF (C1.category='system-ui') THEN
+                    l_article:=l_article || '<hr>';
+                END IF;
+                IF (C1.category=C.category)  THEN 
+                    l_selected:=' selected';
+                ELSE
+                    l_selected:=null;
+                END IF;
                 l_article:=l_article || 
-                        '<option style="font-family:' || C1.category || '" value="' || C1.category || '"' || CASE WHEN C1.category=C.category THEN ' selected' END || '>' ||
+                        '<option style="font-family:' || C1.category || '" value="' || C1.category || '"' || l_selected || '>' ||
                             C1.category ||
                         '</option>';
             END LOOP;
@@ -73,10 +82,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                           '<selectedcontent></selectedcontent>' ||
                           '<span class="arrow"></span>' ||
                         '</button>';
-            FOR C1 IN (SELECT id, family FROM font WHERE category=C.category AND variable=C.variable AND italic=C.italic ORDER BY 2)
+            FOR C1 IN (SELECT id, family, wght_start, wght_end FROM font WHERE category=C.category AND variable=C.variable AND italic=C.italic ORDER BY 2)
             LOOP
+                IF (C1.id=C.font_id) THEN
+                    l_selected:=' selected';
+                ELSE
+                    l_selected:=null;
+                END if;
                 l_article:=l_article || 
-                '<option value="' || TO_CHAR(C1.id) || '"'|| CASE WHEN C1.id=C.font_id THEN ' selected' END || '>' ||
+                '<option value="' || TO_CHAR(C1.id) || '"'|| l_selected || '>' ||
                     C1.family ||
                 '</option>';
             END LOOP;
@@ -85,6 +99,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '</div>' ||
                 '<small id="' || C.context || '-info" popover style="position-anchor:--' || C.context || '-font-family;position-area:bottom span-all;color:red;padding:.5em;max-width:30ch"></small>' ||
                 '<span class="loader icon" popovertarget="' || C.context || '-info" style="anchor-name:--' || C.context || '-font-family"></span>' ||
+                '<div>'; 
+            IF (C.wght_start IS NOT NULL) THEN
+                l_article:=l_article ||
+                '<label for="' || C.context || '-wght' || '">Weight</label>' ||
+                '<input id="' || C.context || '-wght" type="range" min=' || C.wght_start || '" max="' || C.wght_end || '"' || CASE WHEN C.wght IS NOT NULL THEN ' value="' || C.wght || '"' END || '/>';
+            END IF;
+            l_article:=l_article ||     
+                '</div>' ||
             '</fieldset>';
         END LOOP;
         l_article:=l_article || 
@@ -108,13 +130,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_json.put('footer',l_footer);
         l_fonts:= new JSON_ARRAY_T;
         FOR C IN (
-            SELECT category,fontface_url FROM font_category) 
-        LooP
+            SELECT category,fontface_url 
+              FROM font_category
+             WHERE category<>'system-ui') 
+        LOOP
             l_fonts_obj:=new JSON_OBJECT_T;
             l_fonts_obj.put('family',C.category);
             l_fonts_obj.put('url', C.fontface_url);
             l_fonts.append(l_fonts_obj);
         END LOOP;
+
+        /* Get full axis fonts from Google in case user wants to change weight / width etc */
+        FOR C IN (
+            SELECT wf.font_id, f.family, f.wght_start, f.wght_end
+              FROM website_font wf, font f
+             WHERE wf.website_id=pWebsiteId
+               AND wf.font_id=f.id 
+               AND f.variable=1
+        ) LOOP
+        null;
+        END LOOP;
+
         l_json.put('fonts',l_fonts);
         apex_util.prn(l_json.to_clob,false);
     END;
@@ -134,7 +170,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         )
         LOOP
             IF (l_html IS NULL) THEN
-                l_html:='<option value="">-Select from ' || C.nb || ' Fonts-</option>';
+                l_html:='<option value="">--Select from ' || C.nb || ' Font' || CASE WHEN C.nb>1 THEN 's' END || '--</option>';
             END IF;
             l_html:=l_html || '<option value="' || C.id || '">' || C.family || '</option>';
         END LOOP;
@@ -275,7 +311,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         IF (pContext='HTML') THEN
-            getHTML(pWebsiteId);
+            getHTML(pWebsiteId, pArticleId);
         ELSE
             getFontsInCategory(pCategory, pVariable, pItalic);
         END IF;
@@ -299,6 +335,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_url VARCHAR2(500);
         l_json JSON_OBJECT_T;
         l_urls JSON_ARRAY_T;
+        l_axes JSON_ARRAY_T;
+        l_system_ui PLS_INTEGER;
         n PLS_INTEGER;
         
     BEGIN
@@ -308,15 +346,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
           INTO l_context, l_font_id
           FROM JSON_TABLE(pBodyText, '$' COLUMNS(context,font_id));
 
-        pck_core.log('pArticleId:'||pArticleId||' l_font_id:'||l_font_id || ' l_context:'||l_context);
-
-        getSelectedFont(pWebsiteId, pArticleId, l_font_id, l_context, l_error, l_fontfaces);
+        SELECT COUNT(*) INTO l_system_ui FROM dual 
+         WHERE EXISTS (SELECT null FROM font WHERE id=l_font_id AND category='system-ui');
+        
+        IF (l_system_ui=0) THEN
+            getSelectedFont(pWebsiteId, pArticleId, l_font_id, l_context, l_error, l_fontfaces);
+        END IF;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
 
         IF (l_error IS NOT NULL) THEN
-            l_json.put('success',true);
             l_json.put('info',l_error);
         ELSE
             UPDATE website_font
@@ -329,13 +369,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
              WHERE website_id=pWebsiteId
                AND context=l_context;
             
-            l_urls:= new JSON_ARRAY_T;
-            n:=REGEXP_COUNT(l_fontfaces,l_url_regex);
-            FOR i IN 1..n LOOP
-                l_url:=REGEXP_SUBSTR(l_fontfaces,l_url_regex,1,i);
-                l_urls.append(l_url);
+            IF (l_system_ui=0) THEN
+                l_urls:= new JSON_ARRAY_T;
+                n:=REGEXP_COUNT(l_fontfaces,l_url_regex);
+                FOR i IN 1..n LOOP
+                    l_url:=REGEXP_SUBSTR(l_fontfaces,l_url_regex,1,i);
+                    l_urls.append(l_url);
+                END LOOP;
+                l_json.put('urls',l_urls);
+            END IF;
+
+            /* 
+            ** RETURN AXES DETAILS IF VARIABLE FONT
+            */
+            FOR C IN (
+                SELECT wght_start, wght_end, wdth_start, wdth_end, slnt_start, slnt_end, opsz_start, opsz_end
+                  FROM font
+                 WHERE id=l_font_id 
+                   AND variable=1
+            ) LOOP
+                null;
             END LOOP;
-            l_json.put('urls',l_urls);
+
         END IF;
 
         apex_util.prn(l_json.to_clob,false);
