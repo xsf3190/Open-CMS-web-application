@@ -90,6 +90,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             SELECT category, category_font_family, font_file_name, sha1 
               FROM font_category
+             WHERE category<>'system-ui'
         ) LOOP
             IF (C.sha1 IS NULL) THEN
                 l_api_url:='https://fonts.googleapis.com/css2?family=' || REPLACE(C.category_font_family,' ','+') || ':ital,wght@0,400'
@@ -728,29 +729,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_context:=l_fonts.FIRST;
             l_font_preload:=NULL;
             WHILE l_context IS NOT NULL LOOP
-                IF (l_fonts(l_context).chars_normal_page>0) THEN
-                    l_font_preload:=l_font_preload || 
-                        '<link rel="preload" href="/' || 
-                        getFontFilename(l_fonts(l_context).family, '0', l_fonts(l_context).wght_normal) 
-                        || '" as="font" type="font/woff2" />'; 
-                END IF;
-                IF (l_fonts(l_context).chars_italic_page>0) THEN
-                    l_font_preload:=l_font_preload || 
-                        '<link rel="preload" href="/' || 
-                        getFontFilename(l_fonts(l_context).family, '1', l_fonts(l_context).wght_normal) 
-                        || '" as="font" type="font/woff2" />'; 
-                END IF;
-                IF (l_fonts(l_context).chars_bold_normal_page>0) THEN
-                    l_font_preload:=l_font_preload || 
-                        '<link rel="preload" href="/' || 
-                        getFontFilename(l_fonts(l_context).family, '0', l_fonts(l_context).wght_bold) 
-                        || '" as="font" type="font/woff2" />'; 
-                END IF;
-                IF (l_fonts(l_context).chars_bold_italic_page>0) THEN
-                    l_font_preload:=l_font_preload || 
-                        '<link rel="preload" href="/' || 
-                        getFontFilename(l_fonts(l_context).family, '1', l_fonts(l_context).wght_bold) 
-                        || '" as="font" type="font/woff2" />'; 
+                IF (l_fonts(l_context).family<>'system-ui') THEN
+                    IF (l_fonts(l_context).chars_normal_page>0) THEN
+                        l_font_preload:=l_font_preload || 
+                            '<link rel="preload" href="/' || 
+                            getFontFilename(l_fonts(l_context).family, '0', l_fonts(l_context).wght_normal) 
+                            || '" as="font" type="font/woff2" />'; 
+                    END IF;
+                    IF (l_fonts(l_context).chars_italic_page>0) THEN
+                        l_font_preload:=l_font_preload || 
+                            '<link rel="preload" href="/' || 
+                            getFontFilename(l_fonts(l_context).family, '1', l_fonts(l_context).wght_normal) 
+                            || '" as="font" type="font/woff2" />'; 
+                    END IF;
+                    IF (l_fonts(l_context).chars_bold_normal_page>0) THEN
+                        l_font_preload:=l_font_preload || 
+                            '<link rel="preload" href="/' || 
+                            getFontFilename(l_fonts(l_context).family, '0', l_fonts(l_context).wght_bold) 
+                            || '" as="font" type="font/woff2" />'; 
+                    END IF;
+                    IF (l_fonts(l_context).chars_bold_italic_page>0) THEN
+                        l_font_preload:=l_font_preload || 
+                            '<link rel="preload" href="/' || 
+                            getFontFilename(l_fonts(l_context).family, '1', l_fonts(l_context).wght_bold) 
+                            || '" as="font" type="font/woff2" />'; 
+                    END IF;
                 END IF;
 
                 l_context:=l_fonts.NEXT(l_context);
@@ -798,51 +801,58 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         */
         logDeployment(pWebsiteId, pSiteId, 'Optimizing FONTS');
         IF (l_nb_fonts=1) THEN
-            l_fonts('text').chars_bold_italic:=l_fonts('text').chars_bold_italic || l_fonts('headings').chars_italic;
-            l_fonts('text').chars_bold_normal:=l_fonts('text').chars_bold_normal || l_fonts('headings').chars_normal;
+            l_fonts('text').chars_italic:=l_fonts('text').chars_italic || l_fonts('headings').chars_italic;
+            l_fonts('text').chars_normal:=l_fonts('text').chars_normal || l_fonts('headings').chars_normal;
+            l_fonts('text').chars_bold_italic:=l_fonts('text').chars_bold_italic || l_fonts('headings').chars_bold_italic;
+            l_fonts('text').chars_bold_normal:=l_fonts('text').chars_bold_normal || l_fonts('headings').chars_bold_normal;
             l_fonts.DELETE('headings');
         END IF;
         
         l_context:=l_fonts.FIRST;
         WHILE l_context IS NOT NULL LOOP
-            n:=0;
-            IF (l_fonts(l_context).chars_normal IS NOT NULL) THEN
-                l_fonts(l_context).chars_normal:=chars_used(l_fonts(l_context).chars_normal);
-                IF (l_fonts(l_context).chars_normal<>l_fonts(l_context).prev_chars_normal OR l_fonts(l_context).prev_chars_normal IS NULL) THEN
-                    l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_normal, l_fonts(l_context).chars_normal);
-                    n:=n+1;
-                ELSE
-                    l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_normal);
+            pck_core.log('l_fonts(l_context).family:'||l_fonts(l_context).family);
+            IF (l_fonts(l_context).family='system-ui') THEN
+                n:=1;
+            ELSE
+                n:=0;
+                IF (l_fonts(l_context).chars_normal IS NOT NULL) THEN
+                    l_fonts(l_context).chars_normal:=chars_used(l_fonts(l_context).chars_normal);
+                    IF (l_fonts(l_context).chars_normal<>l_fonts(l_context).prev_chars_normal OR l_fonts(l_context).prev_chars_normal IS NULL) THEN
+                        l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_normal, l_fonts(l_context).chars_normal);
+                        n:=n+1;
+                    ELSE
+                        l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_normal);
+                    END IF;
                 END IF;
-            END IF;
 
-            IF (l_fonts(l_context).chars_italic IS NOT NULL) THEN
-                l_fonts(l_context).chars_italic:=chars_used(l_fonts(l_context).chars_italic);
-                IF (l_fonts(l_context).chars_italic<>l_fonts(l_context).prev_chars_italic OR l_fonts(l_context).prev_chars_italic IS NULL) THEN
-                    l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_normal, l_fonts(l_context).chars_italic);
-                    n:=n+1;
-                ELSE
-                    l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_normal);
+                IF (l_fonts(l_context).chars_italic IS NOT NULL) THEN
+                    l_fonts(l_context).chars_italic:=chars_used(l_fonts(l_context).chars_italic);
+                    IF (l_fonts(l_context).chars_italic<>l_fonts(l_context).prev_chars_italic OR l_fonts(l_context).prev_chars_italic IS NULL) THEN
+                        l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_normal, l_fonts(l_context).chars_italic);
+                        n:=n+1;
+                    ELSE
+                        l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_normal);
+                    END IF;
                 END IF;
-            END IF;
 
-            IF (l_fonts(l_context).chars_bold_normal IS NOT NULL) THEN
-                l_fonts(l_context).chars_bold_normal:=chars_used(l_fonts(l_context).chars_bold_normal);
-                IF (l_fonts(l_context).chars_bold_normal<>l_fonts(l_context).prev_chars_bold_normal OR l_fonts(l_context).prev_chars_bold_normal IS NULL) THEN
-                    l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_bold, l_fonts(l_context).chars_bold_normal);
-                    n:=n+1;
-                ELSE
-                    l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_bold);
+                IF (l_fonts(l_context).chars_bold_normal IS NOT NULL) THEN
+                    l_fonts(l_context).chars_bold_normal:=chars_used(l_fonts(l_context).chars_bold_normal);
+                    IF (l_fonts(l_context).chars_bold_normal<>l_fonts(l_context).prev_chars_bold_normal OR l_fonts(l_context).prev_chars_bold_normal IS NULL) THEN
+                        l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_bold, l_fonts(l_context).chars_bold_normal);
+                        n:=n+1;
+                    ELSE
+                        l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '0', l_fonts(l_context).wght_bold);
+                    END IF;
                 END IF;
-            END IF;
 
-            IF (l_fonts(l_context).chars_bold_italic IS NOT NULL) THEN
-                l_fonts(l_context).chars_bold_italic:=chars_used(l_fonts(l_context).chars_bold_italic);
-                IF (l_fonts(l_context).chars_bold_italic<>l_fonts(l_context).prev_chars_bold_italic OR l_fonts(l_context).prev_chars_bold_italic IS NULL) THEN
-                    l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_bold, l_fonts(l_context).chars_bold_italic);
-                    n:=n+1;
-                ELSE
-                    l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_bold);
+                IF (l_fonts(l_context).chars_bold_italic IS NOT NULL) THEN
+                    l_fonts(l_context).chars_bold_italic:=chars_used(l_fonts(l_context).chars_bold_italic);
+                    IF (l_fonts(l_context).chars_bold_italic<>l_fonts(l_context).prev_chars_bold_italic OR l_fonts(l_context).prev_chars_bold_italic IS NULL) THEN
+                        l_fontfaces:=l_fontfaces || getFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_bold, l_fonts(l_context).chars_bold_italic);
+                        n:=n+1;
+                    ELSE
+                        l_fontfaces:=l_fontfaces || buildFontface(l_fonts(l_context).family, '1', l_fonts(l_context).wght_bold);
+                    END IF;
                 END IF;
             END IF;
 
