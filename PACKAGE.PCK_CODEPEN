@@ -160,13 +160,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 l_root_css:=l_root_css || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
             END LOOP;
             FOR C1 IN (
-                SELECT LOWER(wf.context) context, f.family, f.category
-                FROM font f, website_font wf
-               WHERE f.id=wf.font_id
-                 AND wf.website_id=pWebsiteId
+                SELECT wf.context, f.family, f.category, f.variable, wf.wght, f.wght_end, f.wght_end_static
+                  FROM font f, website_font wf
+                 WHERE f.id=wf.font_id
+                   AND wf.website_id=pWebsiteId
+                 ORDER BY wf.context
             ) LOOP
                 l_root_css:=l_root_css || 
-                '--font-family-' || C1.context || ':"' || C1.family || '",' || CASE WHEN C1.category IN ('serif','sans-serif') THEN C1.category ELSE 'sans-serif' END || ';';
+                '--font-family-' || C1.context || ':"' || C1.family || '",' || CASE WHEN C1.category IN ('serif','sans-serif') THEN C1.category ELSE 'sans-serif' END || ';' ||
+                '--font-weight-' || C1.context || ':' || 
+                    CASE 
+                        WHEN C1.context='headings' THEN 
+                            CASE WHEN C1.variable=1 THEN NVL(C1.wght,LEAST(C1.wght_end,700)) ELSE LEAST(C1.wght_end_static,700) END 
+                        WHEN C1.context='text' THEN 
+                            CASE WHEN C1.variable=1 THEN NVL(C1.wght,LEAST(C1.wght_end,400)) ELSE LEAST(C1.wght_end_static,400) END 
+                    END
+                    || ';';
             END LOOP;
             l_root_css:=l_root_css || 
             '--font-family-ui: system-ui, sans-serif;' ||
