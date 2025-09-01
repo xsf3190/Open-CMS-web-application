@@ -151,7 +151,7 @@ export const init = async (element) => {
                         loadForm(data);
                         import("deploy_fonts")
                         .then((module) => {
-                            module.init(data.fonts);
+                            module.init();
                         })
                         .catch((error) => {
                             console.error(error);
