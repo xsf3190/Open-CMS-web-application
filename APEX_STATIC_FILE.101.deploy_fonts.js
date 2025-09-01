@@ -33,16 +33,16 @@ const buildFontList = (context) => {
         });
 }
 
-export const init = (fontfaces) => {
+export const init = () => {
 
     /*
     **  LOAD FONTS FOR CATEGORY SELECT LIST
     */
-    for (const fontface of fontfaces) {
-        const fontFile = new FontFace(fontface.family,fontface.url);
-        document.fonts.add(fontFile);
-        fontFile.load();
-    };
+    // for (const fontface of fontfaces) {
+    //     const fontFile = new FontFace(fontface.family,fontface.url);
+    //     document.fonts.add(fontFile);
+    //     fontFile.load();
+    // };
 
     dialog_article.addEventListener("change", (e) => {
         /*
