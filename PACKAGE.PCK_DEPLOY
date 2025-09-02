@@ -2,14 +2,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     PROCEDURE buildESModules(pEsmLibrary IN VARCHAR2 DEFAULT 'test');
     --
-    FUNCTION chars_used (pCharacters IN VARCHAR2) RETURN VARCHAR2;
-    --
     PROCEDURE deleteDirectory(pWebsiteId IN website.id%type, pUserId IN users.id%type);
     --
     PROCEDURE deployInfrastructure(pSenderEmail IN VARCHAR2 DEFAULT 'contact.form');
-    --
-    PROCEDURE extract_styles(pText IN VARCHAR2, pBoldItalic IN OUT VARCHAR2, pBoldNormal IN OUT VARCHAR2, pItalic IN OUT VARCHAR2, pNormal IN OUT VARCHAR2,
-        pBoldItalicPage IN OUT PLS_INTEGER, pBoldNormalPage IN OUT PLS_INTEGER, pItalicPage IN OUT PLS_INTEGER, pNormalPage IN OUT PLS_INTEGER);
     --
     PROCEDURE logDeployment(pWebsiteId IN website.id%type, pSiteId IN website_deploy.site_id%type, pMessage IN VARCHAR2, pStatus IN VARCHAR2 DEFAULT 'OK', pLogTime IN TIMESTAMP DEFAULT current_timestamp);
     --
@@ -243,102 +238,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         INSERT INTO website_deploy(id, website_id, site_id, message, status, log_time) VALUES (seq_log.nextval, pWebsiteId, pSiteId, pMessage, pStatus, pLogTime);
         COMMIT;
     END; 
-
-    /* Return distict characters sorted */
-    FUNCTION chars_used (pCharacters IN VARCHAR2) RETURN VARCHAR2 IS
-        l_chars website_font.chars_normal%type;
-    BEGIN
-        SELECT LISTAGG(DISTINCT SUBSTR(pCharacters, LEVEL, 1), NULL) WITHIN GROUP (
-                  ORDER BY SUBSTR(pCharacters, LEVEL, 1))
-        INTO l_chars
-        FROM dual
-        CONNECT BY LEVEL <= LENGTH(pCharacters);
-        RETURN(l_chars);
-    END;
-
-    /* 
-    ** EXTRACT DISTINCT ITALIC / NORMAL / BOLD CHARACTERS IN TEXT
-    */
-    PROCEDURE extract_styles(pText IN VARCHAR2, pBoldItalic IN OUT VARCHAR2, pBoldNormal IN OUT VARCHAR2, pItalic IN OUT VARCHAR2, pNormal IN OUT VARCHAR2,
-        pBoldItalicPage IN OUT PLS_INTEGER, pBoldNormalPage IN OUT PLS_INTEGER, pItalicPage IN OUT PLS_INTEGER, pNormalPage IN OUT PLS_INTEGER) IS
-        l_text LONG:=pText;
-        l_italics_regex varchar2(12):='<i>(.+?)</i>';
-        l_italics_substr LONG;
-        l_italics_bold_regex varchar2(30):='<i><strong>(.+?)</strong></i>';
-        l_italics_bold_substr LONG;
-        l_bold_regex varchar2(30):='<strong>(.+?)</strong>';
-        l_bold_substr LONG;
-        l_char VARCHAR2(4);
-        n PLS_INTEGER;
-        len PLS_INTEGER;
-    BEGIN
-        IF (pText IS NULL) THEN
-            RETURN;
-        END IF;
-        n:=REGEXP_COUNT(l_text,l_italics_bold_regex);
-        FOR i IN 1..n LOOP
-            l_italics_bold_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italics_bold_regex,1,i)));
-            len:=LENGTH(l_italics_bold_substr);
-            IF (len>0) THEN
-                pBoldItalicPage:=pBoldItalicPage+1;
-                FOR k IN 1..len LOOP
-                    l_char:=SUBSTR(l_italics_bold_substr,k,1);
-                    IF (pBoldItalic IS NULL OR INSTR(pBoldItalic,l_char)=0) THEN
-                        pBoldItalic:=pBoldItalic || l_char;
-                    END IF;
-                END LOOP;
-            END IF;
-        END LOOP;
-
-        l_text:=REGEXP_REPLACE(l_text,l_italics_bold_regex,null);
-
-        n:=REGEXP_COUNT(l_text,l_italics_regex);
-        FOR i IN 1..n LOOP
-            l_italics_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italics_regex,1,i)));
-            len:=LENGTH(l_italics_substr);
-            IF (len>0) THEN
-                pItalicPage:=pItalicPage+1;
-                FOR k IN 1..len LOOP
-                    l_char:=SUBSTR(l_italics_substr,k,1);
-                    IF (pItalic IS NULL OR INSTR(pItalic,l_char)=0) THEN
-                        pItalic:=pItalic || l_char;
-                    END IF;
-                END LOOP;
-            END IF;
-        END LOOP;
-
-        l_text:=REGEXP_REPLACE(l_text,l_italics_regex,null);
-
-        n:=REGEXP_COUNT(l_text,l_bold_regex);
-        FOR i IN 1..n LOOP
-            l_bold_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_regex,1,i)));
-            len:=LENGTH(l_bold_substr);
-            IF (len>0) THEN
-                pBoldNormalPage:=pBoldNormalPage+1;
-                FOR k IN 1..len LOOP
-                    l_char:=SUBSTR(l_bold_substr,k,1);
-                    IF (pBoldNormal IS NULL OR INSTR(pBoldNormal,l_char)=0) THEN
-                        pBoldNormal:=pBoldNormal || l_char;
-                    END IF;
-                END LOOP;
-            END IF;
-        END LOOP;
-
-        l_text:=REGEXP_REPLACE(l_text,l_bold_regex,null);
-
-        l_text:=utl_i18n.unescape_reference(apex_escape.striphtml(l_text));
-        len:=LENGTH(l_text);
-        
-        IF (len>0) THEN
-            pNormalPage:=pNormalPage+1;
-            FOR i IN 1..len LOOP
-                l_char:=SUBSTR(l_text,i,1);
-                IF (pNormal IS NULL OR INSTR(pNormal,l_char)=0) THEN
-                    pNormal:=pNormal || l_char;
-                END IF;
-            END LOOP;
-        END IF;
-    END;
 
     /*
     ** ADJUST <img> ELEMENTS TO INCLUDE SRCSET WITH SIZES="ANY"
@@ -650,116 +549,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_files:= new JSON_OBJECT_T;
         
         FOR i IN 1..l_labels.COUNT LOOP
-
-            /* For each context collect distinct set of characters styles used in order to optimise font */
-            l_body_html:=l_labels(i).body_html;
-
-            /* Remove <code> elements which are always rendered in local monospace font */
-            l_body_html:=REGEXP_REPLACE(l_body_html,l_code_regex,null);
-
-            IF (i=1) THEN
-                FOR C IN (
-                    SELECT 
-                        f.id font_id,
-                        f.family,
-                        CASE WHEN f.variable=1 THEN NVL(wf.wght,LEAST(f.wght_end,700)) ELSE LEAST(f.wght_end_static,700) END wght_bold,
-                        CASE WHEN f.variable=1 THEN NVL(wf.wght,LEAST(f.wght_end,400)) ELSE LEAST(f.wght_end_static,400) END wght_normal,
-                        wf.context,
-                        wf.chars_normal,
-                        wf.chars_italic,
-                        wf.chars_bold_normal,
-                        wf.chars_bold_italic,
-                        COUNT(DISTINCT wf.font_id) OVER () nb_fonts,
-                        CASE 
-                            WHEN wf.context='headings' THEN 
-                                '<h1>' || DECODE(wf.ital,1,'<i>') || l_title || DECODE(wf.ital,1,'</i>') || '</h1>'
-                            WHEN wf.context='text' THEN 
-                                '<p>' || DECODE(wf.ital,1,'<i>') || l_subtitle || DECODE(wf.ital,1,'</i>') || '</p>' ||
-                                '<span>' || l_contact_email || '</span>' || 
-                                '<span>' || l_telephone_number || '</span>' || 
-                                '<span>' || l_mobile_number || '</span>' || 
-                                '<span>' || CASE WHEN l_linkedin_name IS NOT NULL THEN 'Let''s Connect' END || '</span>' || 
-                                '<span>' || l_instagram_name || '</span>'
-                        END html
-                      FROM website_font wf, font f
-                     WHERE wf.website_id=pWebsiteId
-                       AND wf.font_id=f.id
-                ) 
-                LOOP
-                    l_fonts(C.context).font_id:=C.font_id;
-                    l_fonts(C.context).family:=C.family;
-                    l_fonts(C.context).wght_bold:=C.wght_bold;
-                    l_fonts(C.context).wght_normal:=C.wght_normal;
-                    l_fonts(C.context).prev_chars_normal:=C.chars_normal;
-                    l_fonts(C.context).prev_chars_italic:=C.chars_italic;
-                    l_fonts(C.context).prev_chars_bold_normal:=C.chars_bold_normal;
-                    l_fonts(C.context).prev_chars_bold_italic:=C.chars_bold_italic;
-                    l_body_html:=l_body_html || C.html;
-                    l_nb_fonts:=C.nb_fonts;
-                END LOOP;
-            END IF;
-
-            l_fonts('headings').chars_normal_page:=0;
-            l_fonts('headings').chars_italic_page:=0;
-            l_fonts('headings').chars_bold_normal_page:=0;
-            l_fonts('headings').chars_bold_italic_page:=0;
-            l_fonts('text').chars_normal_page:=0;
-            l_fonts('text').chars_italic_page:=0;
-            l_fonts('text').chars_bold_normal_page:=0;
-            l_fonts('text').chars_bold_italic_page:=0;
-
-            n:=REGEXP_COUNT(l_body_html,l_headings_regex);
-            IF (n>0) THEN
-                FOR j IN 1..n 
-                LOOP
-                    IF (j=1) THEN
-                        l_labels(i).page_title:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_body_html,l_headings_regex,1,j)));
-                    END IF;
-                    extract_styles(REGEXP_SUBSTR(l_body_html,l_headings_regex,1,j), l_fonts('headings').chars_bold_italic, l_fonts('headings').chars_bold_normal, l_fonts('headings').chars_bold_italic, l_fonts('headings').chars_bold_normal, 
-                        l_fonts('headings').chars_bold_italic_page, l_fonts('headings').chars_bold_normal_page, l_fonts('headings').chars_italic_page, l_fonts('headings').chars_normal_page);
-                END LOOP;
-                l_body_html:=REGEXP_REPLACE(l_body_html,l_headings_regex,null);
-            END IF;
-            extract_styles(l_body_html, l_fonts('text').chars_bold_italic, l_fonts('text').chars_bold_normal, l_fonts('text').chars_italic, l_fonts('text').chars_normal,
-                l_fonts('text').chars_bold_italic_page, l_fonts('text').chars_bold_normal_page, l_fonts('text').chars_italic_page, l_fonts('text').chars_normal_page);                    
-            
-            /*
-            ** MAKE PRELOAD LINKS FOR ALL FONTS USED IN PAGE
-            */
-            l_context:=l_fonts.FIRST;
-            l_font_preload:=NULL;
-            WHILE l_context IS NOT NULL LOOP
-                IF (l_fonts(l_context).family<>'system-ui') THEN
-                    IF (l_fonts(l_context).chars_normal_page>0) THEN
-                        l_font_preload:=l_font_preload || 
-                            '<link rel="preload" href="/' || 
-                            getFontFilename(l_fonts(l_context).family, '0', l_fonts(l_context).wght_normal) 
-                            || '" as="font" type="font/woff2" />'; 
-                    END IF;
-                    IF (l_fonts(l_context).chars_italic_page>0) THEN
-                        l_font_preload:=l_font_preload || 
-                            '<link rel="preload" href="/' || 
-                            getFontFilename(l_fonts(l_context).family, '1', l_fonts(l_context).wght_normal) 
-                            || '" as="font" type="font/woff2" />'; 
-                    END IF;
-                    IF (l_fonts(l_context).chars_bold_normal_page>0) THEN
-                        l_font_preload:=l_font_preload || 
-                            '<link rel="preload" href="/' || 
-                            getFontFilename(l_fonts(l_context).family, '0', l_fonts(l_context).wght_bold) 
-                            || '" as="font" type="font/woff2" />'; 
-                    END IF;
-                    IF (l_fonts(l_context).chars_bold_italic_page>0) THEN
-                        l_font_preload:=l_font_preload || 
-                            '<link rel="preload" href="/' || 
-                            getFontFilename(l_fonts(l_context).family, '1', l_fonts(l_context).wght_bold) 
-                            || '" as="font" type="font/woff2" />'; 
-                    END IF;
-                END IF;
-
-                l_context:=l_fonts.NEXT(l_context);
-            END LOOP;
-            --l_labels(i).font_preload:=l_font_preload;
-
+            pck_fonts.getCharsUsed(l_labels(i).article_id);
+        -- getFontFiles(pWebsiteId, pArticleId);
             /*
             ** SET IMAGE SRCSET FOR ANY IMAGES INCLUDED IN BODY_HTML
             */
@@ -800,13 +591,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ** MERGE headings and text if only one font selected
         */
         logDeployment(pWebsiteId, pSiteId, 'Optimizing FONTS');
-        IF (l_nb_fonts=1) THEN
-            l_fonts('text').chars_italic:=l_fonts('text').chars_italic || l_fonts('headings').chars_italic;
-            l_fonts('text').chars_normal:=l_fonts('text').chars_normal || l_fonts('headings').chars_normal;
-            l_fonts('text').chars_bold_italic:=l_fonts('text').chars_bold_italic || l_fonts('headings').chars_bold_italic;
-            l_fonts('text').chars_bold_normal:=l_fonts('text').chars_bold_normal || l_fonts('headings').chars_bold_normal;
-            l_fonts.DELETE('headings');
-        END IF;
         
         l_context:=l_fonts.FIRST;
         WHILE l_context IS NOT NULL LOOP
