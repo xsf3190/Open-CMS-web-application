@@ -1,5 +1,9 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
+    PROCEDURE getCharsUsed(pArticleId IN article.id%type);
+    --
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pArticleId IN article.id%type DEFAULT NULL);
+    --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type DEFAULT NULL, pVariable IN font.variable%type DEFAULT NULL, pItalic IN font.italic%type DEFAULT NULL, pStatus OUT NUMBER);
     --
     PROCEDURE loadGoogleFonts;
@@ -9,6 +13,216 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
 end "PCK_FONTS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
+
+    /* 
+    ** Return distict characters sorted 
+    */
+    FUNCTION distinct_chars(pCharacters IN VARCHAR2) RETURN VARCHAR2 IS
+        l_chars website_font.chars_normal%type;
+    BEGIN
+        SELECT LISTAGG(DISTINCT SUBSTR(pCharacters, LEVEL, 1), NULL) WITHIN GROUP (
+                  ORDER BY SUBSTR(pCharacters, LEVEL, 1))
+        INTO l_chars
+        FROM dual
+        CONNECT BY LEVEL <= LENGTH(pCharacters);
+        RETURN(l_chars);
+    END;
+
+    /* 
+    ** EXTRACT DISTINCT ITALIC / NORMAL / BOLD CHARACTERS IN TEXT
+    */
+    PROCEDURE extract_styles(pText IN VARCHAR2, pBoldItalic IN OUT VARCHAR2, pBoldNormal IN OUT VARCHAR2, pItalic IN OUT VARCHAR2, pNormal IN OUT VARCHAR2) IS
+        l_text LONG:=pText;
+        l_italics_regex varchar2(12):='<i>(.+?)</i>';
+        l_italics_substr LONG;
+        l_italics_bold_regex varchar2(30):='<i><strong>(.+?)</strong></i>';
+        l_italics_bold_substr LONG;
+        l_bold_regex varchar2(30):='<strong>(.+?)</strong>';
+        l_bold_substr LONG;
+        l_char VARCHAR2(4);
+        n PLS_INTEGER;
+        len PLS_INTEGER;
+    BEGIN
+        IF (pText IS NULL) THEN
+            RETURN;
+        END IF;
+        n:=REGEXP_COUNT(l_text,l_italics_bold_regex);
+        FOR i IN 1..n LOOP
+            l_italics_bold_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italics_bold_regex,1,i)));
+            len:=LENGTH(l_italics_bold_substr);
+            IF (len>0) THEN
+                FOR k IN 1..len LOOP
+                    l_char:=SUBSTR(l_italics_bold_substr,k,1);
+                    IF (pBoldItalic IS NULL OR INSTR(pBoldItalic,l_char)=0) THEN
+                        pBoldItalic:=pBoldItalic || l_char;
+                    END IF;
+                END LOOP;
+            END IF;
+        END LOOP;
+
+        l_text:=REGEXP_REPLACE(l_text,l_italics_bold_regex,null);
+
+        n:=REGEXP_COUNT(l_text,l_italics_regex);
+        FOR i IN 1..n LOOP
+            l_italics_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italics_regex,1,i)));
+            len:=LENGTH(l_italics_substr);
+            IF (len>0) THEN
+                FOR k IN 1..len LOOP
+                    l_char:=SUBSTR(l_italics_substr,k,1);
+                    IF (pItalic IS NULL OR INSTR(pItalic,l_char)=0) THEN
+                        pItalic:=pItalic || l_char;
+                    END IF;
+                END LOOP;
+            END IF;
+        END LOOP;
+
+        l_text:=REGEXP_REPLACE(l_text,l_italics_regex,null);
+
+        n:=REGEXP_COUNT(l_text,l_bold_regex);
+        FOR i IN 1..n LOOP
+            l_bold_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_regex,1,i)));
+            len:=LENGTH(l_bold_substr);
+            IF (len>0) THEN
+                FOR k IN 1..len LOOP
+                    l_char:=SUBSTR(l_bold_substr,k,1);
+                    IF (pBoldNormal IS NULL OR INSTR(pBoldNormal,l_char)=0) THEN
+                        pBoldNormal:=pBoldNormal || l_char;
+                    END IF;
+                END LOOP;
+            END IF;
+        END LOOP;
+
+        l_text:=REGEXP_REPLACE(l_text,l_bold_regex,null);
+
+        l_text:=utl_i18n.unescape_reference(apex_escape.striphtml(l_text));
+        len:=LENGTH(l_text);
+        
+        IF (len>0) THEN
+            FOR i IN 1..len LOOP
+                l_char:=SUBSTR(l_text,i,1);
+                IF (pNormal IS NULL OR INSTR(pNormal,l_char)=0) THEN
+                    pNormal:=pNormal || l_char;
+                END IF;
+            END LOOP;
+        END IF;
+    END;
+
+    /*
+    **  COLLECT DISTINCT CHARACTES USED IN AN ARTICLE
+    */
+    PROCEDURE getCharsUsed(pArticleId IN article.id%type) IS
+        l_body_html article.body_html%type;
+        l_code_regex varchar2(30):='<code(.+?)<\/code>';
+        l_headings_regex varchar2(30):='<h[1-4]>(.+?)<\/h[1-4]>';
+        l_chars_normal article_chars.chars_normal%type;
+        l_chars_italic article_chars.chars_italic%type;
+        l_chars_bold_normal article_chars.chars_bold_normal%type;
+        l_chars_bold_italic article_chars.chars_bold_italic%type;
+        n PLS_INTEGER;
+    BEGIN
+        DELETE article_chars WHERE article_id=pArticleId;
+
+        SELECT body_html INTO l_body_html FROM article WHERE id=pArticleId;
+        
+        /* 
+        ** IMPLEMENT LATER FOR USER_SELECTED MONOSPACE FONT
+        */
+        l_body_html:=REGEXP_REPLACE(l_body_html,l_code_regex,null);
+
+        /* 
+        ** GET DISTINCT CHARACTERS USED IN HEADINGS
+        */
+        n:=REGEXP_COUNT(l_body_html,l_headings_regex);
+        IF (n>0) THEN
+            FOR j IN 1..n 
+            LOOP
+                extract_styles(REGEXP_SUBSTR(l_body_html,l_headings_regex,1,j), l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
+            END LOOP;
+        END IF;
+
+        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
+        VALUES (pArticleId, 'headings', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
+
+        /* 
+        ** GET DISTINCT CHARACTERS USED IN REMAINDER OF DOCUMENT (REFINE LATER TO ISOLATE "TITLE", "CODE", "BLOCKQUOTE" ETC)
+        */
+        l_body_html:=REGEXP_REPLACE(l_body_html,l_headings_regex,null);
+        
+        l_chars_bold_italic:=null;
+        l_chars_bold_normal:=null;
+        l_chars_italic:=null;
+        l_chars_normal:=null;
+
+        extract_styles(l_body_html, l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
+        
+        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
+        VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
+    END;
+
+    /* 
+    **  CALL GOOGLE FONTS API TO GET URL. UPDATE WEBSITE_FONTS TABLE
+    */
+    PROCEDURE getFontfaceUrl(pWebsiteId IN website.id%type, pFontid IN website_font.font_id%type, pUrl IN VARCHAR2) IS
+        l_fontface VARCHAR2(500);
+        l_fontface_url website_font.fontface_url%type;
+        l_url_regex VARCHAR2(9):='\((.+?)\)';
+    BEGIN
+        pck_api.callGoogleAPI(pUrl,pData=>l_fontface);
+        l_fontface_url:=REGEXP_SUBSTR(l_fontface, l_url_regex, 1, 1, NULL, 1);
+        
+        UPDATE website_font 
+           SET fontface_url=l_fontface_url
+         WHERE website_id=pWebsiteId
+           AND font_id=pFontid;
+    END;
+
+    /* 
+    **  CALL GOOGLE FONTS API TO GET URL OF EACH FONT USED IN THE WEBSITE 
+    */
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pArticleId IN article.id%type DEFAULT NULL) IS
+        l_api_url VARCHAR2(500);
+    BEGIN
+        FOR C IN (
+            SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic,
+                    LTRIM(NVL2(f.opsz_start,',opsz',NULL) || NVL2(f.slnt_start,',slnt',NULL)  || 
+                        NVL2(f.wdth_start,',wdth',NULL) || NVL2(f.wght_start,',wght',NULL),',') axes,
+                    LTRIM(NVL2(f.opsz_start,f.opsz_start||'..'||f.opsz_end,NULL) || NVL2(f.slnt_start,','||f.slnt_start||'..'||f.slnt_end,NULL) || 
+                        NVL2(f.wdth_start,','||f.wdth_start||'..'||f.wdth_end,NULL) || NVL2(f.wght_start,','||f.wght_start||'..'||f.wght_end,NULL),',') ranges,
+                    wght_start_static, wght_end_static
+              FROM website_font wf, font f, article_chars ac
+             WHERE wf.website_id=pWebsiteId
+               AND wf.font_id=f.id
+               AND ac.context=wf.context
+               AND ac.article_id=pArticleId
+        ) LOOP
+            CASE C.variable
+                WHEN 1 THEN
+                    /*
+                    **  "ital" AND "slnt" AXES ARE MUTUALLY EXCLUSIVE IN GOOGLE FONTS
+                    */
+                    
+                    IF (COALESCE(C.chars_italic,C.chars_bold_italic) IS NOT NULL) THEN
+                        l_api_url:='https://fonts.googleapis.com/css2?family=' || REPLACE(C.family,' ','+');
+                        IF (INSTR(C.axes,'slnt')=0) THEN
+                            l_api_url:=l_api_url || ':ital,' || C.axes || '@1,' || C.ranges;
+                        ELSE
+                            l_api_url:=l_api_url || ':' || C.axes || '@' || C.ranges;
+                        END IF;
+                        l_api_url:=l_api_url || '&text=' || 
+                            utl_url.escape(distinct_chars(C.chars_italic||C.chars_bold_italic),TRUE,'UTF-8');
+                        getFontfaceUrl(pWebsiteId, C.font_id, l_api_url);
+                    END IF;                    
+
+                    IF (COALESCE(C.chars_normal,C.chars_bold_normal) IS NOT NULL) THEN
+                        l_api_url:='https://fonts.googleapis.com/css2?family=' || REPLACE(C.family,' ','+');
+                        l_api_url:=l_api_url || ':' || C.axes || '@' || C.ranges;
+                        l_api_url:=l_api_url || '&text=' || utl_url.escape(distinct_chars(C.chars_normal||C.chars_bold_normal),TRUE,'UTF-8');
+                        getFontfaceUrl(pWebsiteId, C.font_id, l_api_url);
+                    END IF;
+            END CASE;
+        END LOOP;
+    END;
+
 
     /* 
     **  BUILD HTML FORM TO SELECT WEBSITE FONTS
@@ -25,17 +239,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     BEGIN
         l_header:='<small>Select complementary fonts for headings and text</small>';
 
-        l_article:='<div class="flex-items" style="--flex-gap:.5em;--flex-direction:column;--flex-vertical-alignment:flex-start">';
+        l_article:=
+        '<div class="flex-items" style="--flex-gap:.5em;--flex-direction:column;--flex-vertical-alignment:flex-start">';        
+
         FOR C IN (
-            SELECT wf.font_id, wf.context, f.category, f.family, f.variable, f.italic, wf.wght, f.wght_start, f.wght_end
+            SELECT wf.font_id, wf.context, f.category, f.family, f.variable, f.italic
               FROM website_font wf, font f
              WHERE wf.website_id=pWebsiteId
                AND wf.font_id=f.id 
              ORDER BY context
         ) LOOP
             l_article:=l_article ||
-            '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:95%;">' ||
-                '<legend>' || INITCAP(C.context) || '</legend>' ||
+            '<details open><summary>' || INITCAP(C.context) || '</summary>' ||
+            '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:100%;">' ||
+                --'<legend>' || INITCAP(C.context) || '</legend>' ||
                 '<div>' ||
 					'<label for="' || C.context || '-variable">Variable</label>' ||
 					'<input type="checkbox" id="' || C.context || '-variable" role="switch"' || CASE WHEN C.variable=0 THEN ' checked aria-checked="false"' ELSE ' aria-checked="true"' END || '/>' ||
@@ -100,17 +317,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '<small id="' || C.context || '-info" popover style="position-anchor:--' || C.context || '-font-family;position-area:bottom span-all;color:red;padding:.5em;max-width:30ch"></small>' ||
                 '<span class="loader icon" popovertarget="' || C.context || '-info" style="anchor-name:--' || C.context || '-font-family"></span>' ||
                 '<div>'; 
-            IF (C.wght_start IS NOT NULL) THEN
+            IF (C.variable=1) THEN
                 l_article:=l_article ||
-                '<label for="' || C.context || '-wght' || '">Weight</label>' ||
-                '<input id="' || C.context || '-wght" type="range" min=' || C.wght_start || '" max="' || C.wght_end || '"' || CASE WHEN C.wght IS NOT NULL THEN ' value="' || C.wght || '"' END || '/>';
+                '<button type="button" class="button" style="anchor-name:--' || C.context || '-axes" popovertarget="' || C.context || '-axes' || '">Font Settings</button>' ||
+                '<div popover id="' || C.context || '-axes" style="position-anchor:--' || C.context || '-axes">Hello Axes</div>';
             END IF;
-            l_article:=l_article ||     
+            l_article:=l_article ||
                 '</div>' ||
-            '</fieldset>';
+            '</fieldset>' ||
+            '</details>';
         END LOOP;
-        l_article:=l_article || 
-        '</div>';
 
         FOR C IN (SELECT SUM(nb_fonts) nb_fonts, MAX(last_modified) last_modified FROM font_category) LOOP
             l_footer:=
@@ -121,41 +337,55 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
 
         /*
-        ** SEND FONTFACE DETAILS FOR FONT CATEGORY SELECT ELEMENT
+        ** RETURN DIALOG CONTENTS TO CLIENT 
         */
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('header',l_header);
         l_json.put('article',l_article);
         l_json.put('footer',l_footer);
-        l_fonts:= new JSON_ARRAY_T;
-        FOR C IN (
-            SELECT category,fontface_url 
-              FROM font_category
-             WHERE category<>'system-ui') 
-        LOOP
-            l_fonts_obj:=new JSON_OBJECT_T;
-            l_fonts_obj.put('family',C.category);
-            l_fonts_obj.put('url', C.fontface_url);
-            l_fonts.append(l_fonts_obj);
-        END LOOP;
+        apex_util.prn(l_json.to_clob,false);
+        /*
+        ** INCLUDE FONTFACE DETAILS FOR FONT CATEGORY SELECT ELEMENT
+        */
+        -- l_fonts:= new JSON_ARRAY_T;
+        -- FOR C IN (
+        --     SELECT category,fontface_url 
+        --       FROM font_category
+        --      WHERE category<>'system-ui') 
+        -- LOOP
+        --     l_fonts_obj:=new JSON_OBJECT_T;
+        --     l_fonts_obj.put('family',C.category);
+        --     l_fonts_obj.put('url', C.fontface_url);
+        --     l_fonts.append(l_fonts_obj);
+        -- END LOOP;
 
-        /* Get full axis fonts from Google in case user wants to change weight / width etc */
+        /*
+        ** INCLUDE FONTFACE DETAILS FOR CURRENTLY SELECTED FONTS
+        */
+        /*
+        getCharsUsed(pArticleId);
+        getFontFiles(pWebsiteId, pArticleId);
+        
         FOR C IN (
-            SELECT wf.font_id, f.family, f.wght_start, f.wght_end
-              FROM website_font wf, font f
+            SELECT wf.font_id, f.variable, f.family, f.wght_start, f.wght_end, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic
+              FROM website_font wf, font f, article_chars ac
              WHERE wf.website_id=pWebsiteId
                AND wf.font_id=f.id 
-               AND f.variable=1
+               AND ac.context=wf.context
+               AND ac.article_id=pArticleId
         ) LOOP
         null;
         END LOOP;
+        */
 
-        l_json.put('fonts',l_fonts);
-        apex_util.prn(l_json.to_clob,false);
+        -- l_json.put('fonts',l_fonts);
+        
     END;
 
-
+    /*
+    ** USER CHANGES FONT CATEGORY OR CHOICE OF VARIABLE FONTS OR CHOICE OF FONTS THAT INCLUDE ITALiC TYPEFACE
+    */
     PROCEDURE getFontsInCategory(pCategory IN font.category%type, pVariable IN font.variable%type, pItalic IN font.italic%type) IS
         l_html CLOB;
         l_json JSON_OBJECT_T;
@@ -207,7 +437,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         
     BEGIN
         /*
-        **  GET NORMAL/ITALIC/BOLD CHARACTERS USED IN PAGE 
+        **  GET NORMAL/ITALIC/BOLD CHARACTERS USED IN CURRENT PAGE 
         */
         SELECT body_html INTO l_body_html FROM article WHERE id=pArticleId;
         
@@ -301,7 +531,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /* 
-    **  BUILD SELECT LIST OF FONT FAMILIES FOR GIVEN CATEGORY (if font_id=0) ELSE GET FONT SETTINGS FOR A SPECIFIC FONT
+    **  BUILD OPENING DIALOG CONTENT OR LIST OF FONT FAMILIES FOR A SELECTED CATEGORY
     */
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, 
                 pVariable IN font.variable%type, pItalic IN font.italic%type, pStatus OUT NUMBER) IS
@@ -378,18 +608,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 END LOOP;
                 l_json.put('urls',l_urls);
             END IF;
-
-            /* 
-            ** RETURN AXES DETAILS IF VARIABLE FONT
-            */
-            FOR C IN (
-                SELECT wght_start, wght_end, wdth_start, wdth_end, slnt_start, slnt_end, opsz_start, opsz_end
-                  FROM font
-                 WHERE id=l_font_id 
-                   AND variable=1
-            ) LOOP
-                null;
-            END LOOP;
 
         END IF;
 
