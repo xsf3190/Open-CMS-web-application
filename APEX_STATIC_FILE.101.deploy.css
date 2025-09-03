@@ -930,7 +930,7 @@ summary {
 /* POPOVER ANCHOR BUTTONS */
 [popovertarget] {
     cursor: pointer;
-    background-color: transparent;
+    /* background-color: transparent; */
     border: none;
 }
 
