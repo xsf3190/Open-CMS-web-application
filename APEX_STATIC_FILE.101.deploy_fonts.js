@@ -35,15 +35,6 @@ const buildFontList = (context) => {
 
 export const init = () => {
 
-    /*
-    **  LOAD FONTS FOR CATEGORY SELECT LIST
-    */
-    // for (const fontface of fontfaces) {
-    //     const fontFile = new FontFace(fontface.family,fontface.url);
-    //     document.fonts.add(fontFile);
-    //     fontFile.load();
-    // };
-
     dialog_article.addEventListener("change", (e) => {
         /*
         ** ANY CHANGE REBUILDS LIST Of FONT NAMES
@@ -88,25 +79,18 @@ export const init = () => {
             obj.context = context;
             callAPI('fonts/:ID/:PAGE','PUT', obj)
                 .then((data) => {
-                    if (data.info) {
-                        const info_id = context + "-info";
-                        const info = document.getElementById(info_id);
-                        info.textContent = data.info;
-	                    info.showPopover();
-                    } else {
-                        const font_family = e.target.options[e.target.selectedIndex].text;
-                        if (font_family!=="system-ui") {
-                            for (const url of data.urls) {
-                                const fontFile = new FontFace(font_family,url);
-                                document.fonts.add(fontFile);
-                                fontFile.load();
-                            };
-                            document.fonts.ready.then(()=>{
-                                console.log(`Loaded ${font_family}`);
-                            });
-                        }
-                        document.documentElement.style.setProperty('--font-family-' + context, font_family); 
+                    const font_family = e.target.options[e.target.selectedIndex].text;
+                    if (font_family!=="system-ui") {
+                        for (const url of data.urls) {
+                            const fontFile = new FontFace(font_family,url);
+                            document.fonts.add(fontFile);
+                            fontFile.load();
+                        };
+                        document.fonts.ready.then(()=>{
+                            console.log(`Loaded ${font_family}`);
+                        });
                     }
+                    document.documentElement.style.setProperty('--font-family-' + context, font_family); 
                     loader.style.opacity=0;
                 })
                 .catch((error) => {
