@@ -160,22 +160,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 l_root_css:=l_root_css || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
             END LOOP;
             FOR C1 IN (
-                SELECT wf.context, f.family, f.category, f.variable, wf.wght, f.wght_end, f.wght_end_static
+                SELECT wf.context, f.family, f.category
                   FROM font f, website_font wf
                  WHERE f.id=wf.font_id
                    AND wf.website_id=pWebsiteId
                  ORDER BY wf.context
             ) LOOP
                 l_root_css:=l_root_css || 
-                '--font-family-' || C1.context || ':"' || C1.family || '",' || CASE WHEN C1.category IN ('serif','sans-serif') THEN C1.category ELSE 'sans-serif' END || ';' ||
-                '--font-weight-' || C1.context || ':' || 
-                    CASE 
-                        WHEN C1.context='headings' THEN 
-                            CASE WHEN C1.variable=1 THEN NVL(C1.wght,LEAST(C1.wght_end,700)) ELSE LEAST(C1.wght_end_static,700) END 
-                        WHEN C1.context='text' THEN 
-                            CASE WHEN C1.variable=1 THEN NVL(C1.wght,LEAST(C1.wght_end,400)) ELSE LEAST(C1.wght_end_static,400) END 
-                    END
-                    || ';';
+                '--font-family-' || C1.context || ':"' || C1.family || '",' || CASE WHEN C1.category IN ('serif','sans-serif') THEN C1.category ELSE 'sans-serif' END || ';';
             END LOOP;
             l_root_css:=l_root_css || 
             '--font-family-ui: system-ui, sans-serif;' ||
@@ -434,7 +426,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         /* Build font syles collection once */
         IF (g_font_styles_title IS NULL) THEN
             FOR C IN (
-                SELECT context, font_size, color, underline, margin, ital
+                SELECT context, font_size, color, underline, margin
                   FROM website_font
                  WHERE website_id=pWebsiteId
             ) LOOP
@@ -448,10 +440,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 
                 IF (C.margin>0) THEN
                     l_font_styles:=l_font_styles || ';margin-block:' || C.margin || 'vh' ;
-                END IF;
-                
-                IF (C.ital=1) THEN
-                    l_font_styles:=l_font_styles || ';font-style:italic';
                 END IF;
 
                 CASE C.context
