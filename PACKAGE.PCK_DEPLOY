@@ -459,7 +459,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_files:= new JSON_OBJECT_T;
         
         FOR i IN 1..l_labels.COUNT LOOP
+            /*
+            ** EXTRACT CHARACTERS USED IN ARTICLE TO OPTIMIZE FONTS
+            */
             pck_fonts.getCharsUsed(l_labels(i).article_id);
+
+            /*
+            ** PRELOAD FONTS USED IN PAGE
+            */
+            FOR C IN (
+                SELECT a.context, a.chars_normal, a.chars_bold_normal, a.chars_italic, a.chars_bold_italic, f.italic
+                  FROM article_chars a, website_font wf, font f
+                 WHERE a.article_id=l_labels(i).article_id
+                   AND wf.context=a.context
+                   AND wf.website_id=pWebsiteid
+                   AND f.id=wf.font_id
+            ) LOOP
+                IF (C.chars_normal IS NOT NULL OR C.chars_bold_normal IS NOT NuLL) THEN
+                    l_labels(i).font_preload:=l_labels(i).font_preload || 
+                    '<link rel="preload" href="fonts/' || C.context || '.normal.woff2" AS="font" type="font/woff2">';
+                END IF;
+                IF (COALESCE(C.chars_italic, C.chars_bold_italic) IS NOT NuLL AND C.italic=1) THEN
+                    l_labels(i).font_preload:=l_labels(i).font_preload || 
+                    '<link rel="preload" href="fonts/' || C.context || '.italic.woff2" AS="font" type="font/woff2">';
+                END IF;
+            END LOOP;
+
             /*
             ** SET IMAGE SRCSET FOR ANY IMAGES INCLUDED IN BODY_HTML
             */
@@ -496,31 +521,76 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        ** GET FONT FILES For THE WEBSITE
+        ** GET FONT FILES
         */
         logDeployment(pWebsiteId, pSiteId, 'Optimizing FONTS');
         pck_fonts.getFontFiles(pWebsiteid, pSiteId);
         
         /* DOWNLOAD FONT FILES FROM GOOGLE AND SELF-HOST */
+        
         FOr C IN (
-            SELECT context, font_family, font_style, font_weight, font_stretch, src_url
-              FROM website_fontface
-             WHERE website_id=pWebsiteid
+            SELECT ff.context, ff.font_family, ff.font_style, ff.font_weight, ff.font_stretch, ff.src_url, wf.updated_date, NVL(df.sha1_updated,df.created_date) sha1_updated_date, df.sha1
+              FROM website_fontface ff, website_font wf, website_files df
+             WHERE ff.website_id=pWebsiteid
+               AND wf.website_id=ff.website_id
+               AND wf.context=ff.context
+               AND df.website_id(+)=ff.website_id
+               AND df.file_name(+)='fonts/' || ff.context || '.' || ff.font_style || '.woff2'
         ) LOOP
             l_file_name:='fonts/' || C.context || '.' || C.font_style || '.woff2';
-            logDeployment(pWebsiteId, pSiteId, 'Download Google - '|| l_file_name);
-            l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
-            addDeploy(pFilename=>l_file_name, pFileContent=>l_font_download);
             l_fontfaces:=l_fontfaces ||
             '@font-face {' ||
-                'font-family:"' || C.font_family || '";' ||
+                'font-family:' || C.font_family || ';' ||
                 'font-style:' || C.font_style || ';' ||
                 'font-weight:' || C.font_weight || ';' ||
                 'font-stretch:' || C.font_stretch || ';' ||
                 'font-display:swap;' ||
                 'src: url("/' || l_file_name || '") format("woff2");' ||
             '}';
+            /* 
+            **  CHECK CONDiTIONS FOR DOWNLOADING FONT
+            */
+            n:=0;
+            IF (C.updated_date>C.sha1_updated_date OR C.sha1_updated_date IS NULL) THEN
+                n:=n+1;
+            ELSE
+                FOR C1 IN (
+                    SELECT COUNT(old), COUNT(new), chars_normal, chars_bold_normal, chars_italic, chars_bold_italic
+                    FROM 
+                    (
+                    SELECT 1 old, TO_NUMBER(null) new, chars_normal, chars_bold_normal, chars_italic, chars_bold_italic 
+                      FROM website_font 
+                     WHERE website_id=pWebsiteid 
+                       AND context=C.context
+                    UNION ALL
+                    SELECT TO_NUMBER(null) new, 0 old, pck_fonts.g_chars_used(C.context).chars_normal, pck_fonts.g_chars_used(C.context).chars_bold_normal, pck_fonts.g_chars_used(C.context).chars_italic, pck_fonts.g_chars_used(C.context).chars_bold_italic 
+                      FROM dual
+                    )
+                    GROUP BY chars_normal, chars_bold_normal, chars_italic, chars_bold_italic
+                    HAVING COUNT(old)<>COUNT(new)
+                ) LOOP
+                    n:=n+1;
+                    UPDATE website_font 
+                       SET chars_normal=pck_fonts.g_chars_used(C.context).chars_normal,
+                           chars_bold_normal=pck_fonts.g_chars_used(C.context).chars_bold_normal,
+                           chars_italic=pck_fonts.g_chars_used(C.context).chars_italic,
+                           chars_bold_italic=pck_fonts.g_chars_used(C.context).chars_bold_italic,
+                           updated_date=current_timestamp
+                     WHERE website_id=pWebsiteid
+                       AND context=C.context;
+                END LOOP;
+            END IF;
+
+            IF (n>0) THEN
+                logDeployment(pWebsiteId, pSiteId, 'Download Google - '|| l_file_name);
+                l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
+                addDeploy(pFilename=>l_file_name, pFileContent=>l_font_download);
+            ELSE
+                l_files.put(l_file_name,C.sha1);
+            END IF;
+        
         END LOOP;
+        
 
         /*
         ** Assemble complete css file from
@@ -532,7 +602,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ** Nb. toptal minifier only accepts form-url-encoded which forces us to restrict content size to <32K
         ** ==> NEED TO OPTIMISE THIS PROCESS
         */
-        n:=0;
+        
 
         /* DETERMINE IF MAIN CSS FILE CHANGED SINCE LAST DEPLOYMENT */
         SELECT CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)
@@ -562,16 +632,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             n:=n+1;
             UPDATE website SET css_root=l_css_root WHERE id=pWebsiteid;
         END IF;
-
-        /* DETERMINE IF FONT FACES CHANGED SINCE LAST DEPLOYMENT */
-        FOR C IN (
-            SELECT MAX(updated_date) fonts_updated_date FROM website_font WHERE website_id=pWebsiteid
-        ) LOOP
-            IF (NVL(C.fonts_updated_date,current_timestamp)>NVL(l_css_prev_updated_date,current_timestamp)) THEN
-                n:=n+1;
-            END IF;
-        END LOOP;
-        n:=n+1;
 
         /* n>0 MEANS DEPLOY CSS */
         IF (n>0) THEN
