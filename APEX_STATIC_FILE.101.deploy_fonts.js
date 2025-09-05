@@ -2,13 +2,14 @@ import { dialog_header, dialog_article } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 const show_result = (ele) => {
-	const span = ele.parentElement.querySelector("span");
+	const span_on = ele.parentElement.querySelector("span:first-of-type");
+    const span_off = ele.parentElement.querySelector("span:last-of-type");
 	if (ele.checked) {
-		span.replaceChildren();
-		span.insertAdjacentHTML('afterbegin','&#10060;');
+		span_off.style.textDecoration = "underline";
+        span_on.style.textDecoration = "none";
 	} else {
-		span.replaceChildren();
-		span.insertAdjacentHTML('afterbegin','&#9989;');
+		span_off.style.textDecoration = "none";
+        span_on.style.textDecoration = "underline";
 	}
 }
 
@@ -34,81 +35,82 @@ const buildFontList = (context) => {
 }
 
 export const init = () => {
-
-    dialog_article.addEventListener("change", (e) => {
-        /*
-        ** ANY CHANGE REBUILDS LIST Of FONT NAMES
-        */
-        const name = e.target.getAttribute("id");
-        const context = name.split("-")[0];
-
-        /* 
-        ** SWITCH FOR VARIABLE FONTS
-        */
-        if (name.includes("variable")) {
-            show_result(e.target);
-            buildFontList(context);
-        }
-
-        /* 
-        ** SWITCH FOR FONTS WITH ITALIC
-        */
-        if (name.includes("italic")) {
-            show_result(e.target);
-            buildFontList(context);
-        }
-
-        /* 
-        ** USER SELECTS FONT CATEGORY
-        */
-        if (name.includes("font-category")) {
-            buildFontList(context);
-        }
-        
-        /* 
-        ** USER SELECTS FONT FAMILY - LOAD SELECTED FONT AND SET CSS ROOT PROPERTY
-        */
-        if (name.includes("font-family")) {
-            if (!e.target.value) {
-                return;
-            }
-            const loader = e.target.closest("fieldset").querySelector(".loader");
-            loader.style.opacity=1;
-            const obj = {};
-            obj.font_id = e.target.value;
-            obj.context = context;
-            callAPI('fonts/:ID/:PAGE','PUT', obj)
-                .then((data) => {
-                    const font_family = e.target.options[e.target.selectedIndex].text;
-                    if (font_family!=="system-ui") {
-                        for (const url of data.urls) {
-                            const fontFile = new FontFace(font_family,url);
-                            document.fonts.add(fontFile);
-                            fontFile.load();
-                        };
-                        document.fonts.ready.then(()=>{
-                            console.log(`Loaded ${font_family}`);
-                        });
-                    }
-                    document.documentElement.style.setProperty('--font-family-' + context, font_family); 
-                    loader.style.opacity=0;
-                })
-                .catch((error) => {
-                    loader.style.opacity=0;
-                    handleError(error);
-                });
-        }
-        if (name.includes("wght")) {
-            console.log("change event",e.target.value); /* finger off - update website_font*/
-        }
-
-    });
-    
-    dialog_article.addEventListener("input", (e) => {
-        const name = e.target.getAttribute("id");
-        const context = name.split("-")[0];
-        if (name.includes("wght")) {
-            document.documentElement.style.setProperty("--font-weight-" + context, e.target.value); 
-        }
-    });
+    console.log("Module deploy_fonts loaded successfully");
 }
+
+dialog_article.addEventListener("change", (e) => {
+    /*
+    ** ANY CHANGE REBUILDS LIST Of FONT NAMES
+    */
+    const name = e.target.getAttribute("id");
+    const context = name.split("-")[0];
+
+    /* 
+    ** SWITCH FOR VARIABLE FONTS
+    */
+    if (name.includes("variable")) {
+        show_result(e.target);
+        buildFontList(context);
+    }
+
+    /* 
+    ** SWITCH FOR FONTS WITH ITALIC
+    */
+    if (name.includes("italic")) {
+        show_result(e.target);
+        buildFontList(context);
+    }
+
+    /* 
+    ** USER SELECTS FONT CATEGORY
+    */
+    if (name.includes("font-category")) {
+        buildFontList(context);
+    }
+    
+    /* 
+    ** USER SELECTS FONT FAMILY - LOAD SELECTED FONT AND SET CSS ROOT PROPERTY
+    */
+    if (name.includes("font-family")) {
+        if (!e.target.value) {
+            return;
+        }
+        const loader = e.target.closest("fieldset").querySelector(".loader");
+        loader.style.opacity=1;
+        const obj = {};
+        obj.font_id = e.target.value;
+        obj.context = context;
+        callAPI('fonts/:ID/:PAGE','PUT', obj)
+            .then((data) => {
+                const font_family = e.target.options[e.target.selectedIndex].text;
+                if (font_family!=="system-ui") {
+                    for (const url of data.urls) {
+                        const fontFile = new FontFace(font_family,url);
+                        document.fonts.add(fontFile);
+                        fontFile.load();
+                    };
+                    document.fonts.ready.then(()=>{
+                        console.log(`Loaded ${font_family}`);
+                    });
+                }
+                document.documentElement.style.setProperty('--font-family-' + context, font_family); 
+                loader.style.opacity=0;
+            })
+            .catch((error) => {
+                loader.style.opacity=0;
+                handleError(error);
+            });
+    }
+    if (name.includes("wght")) {
+        console.log("change event",e.target.value); /* finger off - update website_font*/
+    }
+
+});
+
+dialog_article.addEventListener("input", (e) => {
+    const name = e.target.getAttribute("id");
+    const context = name.split("-")[0];
+    if (name.includes("wght")) {
+        document.documentElement.style.setProperty("--font-weight-" + context, e.target.value); 
+    }
+});
