@@ -196,12 +196,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_api_url VARCHAR2(500):='https://fonts.googleapis.com/css2?family=';
     
-        FUNCTION getValue(pKeyword IN VARCHAR,pPosition IN PLS_INTEGER) RETURN VARCHAR2 IS
+        FUNCTION getValue(pKeyword IN VARCHAR) RETURN VARCHAR2 IS
             j PLS_INTEGER;
             k PLS_INTEGER;
             l PLS_INTEGER;
         BEGIN
-            j:=INSTR(l_fontface,pKeyword,1,pPosition);
+            j:=INSTR(l_fontface,pKeyword,1,1);
             k:=INSTR(l_fontface,':',j,1);
             l:=INSTR(l_fontface,';',k,1);
             RETURN (SUBSTR(l_fontface,k+2,l-k-2));
@@ -210,19 +210,38 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     BEGIN
         pck_api.callGoogleAPI(pUrl=>l_api_url || REPLACE(pFamily,' ','+') || pUrl, pData=>l_fontface);
         
-        FOR i IN 1..10 LOOP
-            l_font_family:=getValue('font-family',i);
-            IF (l_font_family IS NULL) THEN
-                EXIT;
-            END IF;
-            l_font_style:=getValue('font-style',i);
-            l_font_weight:=getValue('font-weight',i);
-            l_font_stretch:=getValue('font-stretch',i);
-            l_src_url:=getValue('src: url',i);
-            l_src_url:=SUBSTR(l_src_url,INSTR(l_src_url,'(')+1,INSTR(l_src_url,')')-INSTR(l_src_url,'(')-1);
-            INSERT INTO website_fontface(website_id, context, font_family, font_style, font_weight, font_stretch, src_url)
-                VALUES(pWebsiteId, pContext, l_font_family, l_font_style, l_font_weight, l_font_stretch, l_src_url);
-        END LOOP;
+        l_font_family:=getValue('font-family');
+        l_font_style:=getValue('font-style');
+        l_font_weight:=getValue('font-weight');
+        l_font_stretch:=getValue('font-stretch');
+        l_src_url:=getValue('src: url');
+
+        l_src_url:=SUBSTR(l_src_url,INSTR(l_src_url,'(')+1,INSTR(l_src_url,')')-INSTR(l_src_url,'(')-1);
+        INSERT INTO website_fontface(website_id, context, font_family, font_style, font_weight, font_stretch, src_url)
+            VALUES(pWebsiteId, pContext, l_font_family, l_font_style, l_font_weight, l_font_stretch, l_src_url);
+    END;
+
+    FUNCTION getClosestBold(pFontid IN font.id%type, pStyle IN VARCHAR2) RETURN NUMBER
+    IS
+        l_closest_bold_wght font_static_wght.wght_normal%type;
+    BEGIN
+        CASE pStyle
+            WHEN 'normal' THEN
+                SELECT wght_normal
+                INTO l_closest_bold_wght
+                FROM font_static_wght 
+                WHERE font_id=pFontid
+                ORDER BY ABS(wght_normal - 700)
+                FETCH FIRST ROW ONLY;
+            WHEN 'italic' THEN
+                SELECT wght_italic
+                INTO l_closest_bold_wght
+                FROM font_static_wght 
+                WHERE font_id=pFontid
+                ORDER BY ABS(wght_italic - 700)
+                FETCH FIRST ROW ONLY;
+        END CASE;
+        RETURN (l_closest_bold_wght);
     END;
 
     /* 
@@ -230,16 +249,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     */
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pArticleId IN article.id%type) IS
         l_api_url VARCHAR2(500);
-        l_closest_bold_wght font_static_wght.wght_normal%type;
     BEGIN
         DELETE website_fontface WHERE website_id=pWebsiteId AND context=pContext;
+        
         FOR C IN (
             SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic,
                     LTRIM(NVL2(f.opsz_start,',opsz',NULL) || NVL2(f.slnt_start,',slnt',NULL)  || 
                         NVL2(f.wdth_start,',wdth',NULL) || NVL2(f.wght_start,',wght',NULL),',') axes,
                     LTRIM(NVL2(f.opsz_start,f.opsz_start||'..'||f.opsz_end,NULL) || NVL2(f.slnt_start,','||f.slnt_start||'..'||f.slnt_end,NULL) || 
-                        NVL2(f.wdth_start,','||f.wdth_start||'..'||f.wdth_end,NULL) || NVL2(f.wght_start,','||f.wght_start||'..'||f.wght_end,NULL),',') ranges,
-                    wght_start_static, wght_end_static
+                        NVL2(f.wdth_start,','||f.wdth_start||'..'||f.wdth_end,NULL) || NVL2(f.wght_start,','||f.wght_start||'..'||f.wght_end,NULL),',') ranges
               FROM website_font wf, font f, article_chars ac
              WHERE wf.website_id=pWebsiteId
                AND wf.context=pContext
@@ -270,42 +288,42 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     END IF;
 
                 WHEN 0 THEN
-                    IF (COALESCE(C.chars_italic,C.chars_bold_italic) IS NOT NULL) THEN
+                    IF (C.chars_italic IS NOT NULL) THEN
                         IF (C.italic=1) THEN
-                            l_api_url:=':ital';
-                            l_closest_bold_wght:=null;
                             IF (C.context='headings') THEN
-                                SELECT wght_italic
-                                INTO l_closest_bold_wght
-                                FROM font_static_wght 
-                                WHERE font_id=C.font_id
-                                ORDER BY ABS(wght_italic - 700)
-                                FETCH FIRST ROW ONLY;
-                                l_api_url:=l_api_url || ',wght';
+                                l_api_url:=':ital,wght@1,' || getClosestBold(C.font_id,'italic');
+                            ELSE
+                                l_api_url:=':ital@1';
                             END IF;
-                            l_api_url:=l_api_url || '@1' || CASE WHEN l_closest_bold_wght IS NOT NULL THEN ',' || l_closest_bold_wght END;
+                            l_api_url:=l_api_url || '&text=' || utl_url.escape(C.chars_italic,TRUE,'UTF-8');
+                            getFontface(pWebsiteId, C.context, C.family, l_api_url);
+                        END IF;
+                    END IF;
+
+                    IF (C.chars_bold_italic IS NOT NULL) THEN
+                        IF (C.italic=1) THEN
+                            l_api_url:=':ital,wght@1,' || getClosestBold(C.font_id,'italic');
+                            l_api_url:=l_api_url || '&text=' || utl_url.escape(C.chars_bold_italic,TRUE,'UTF-8');
+                            getFontface(pWebsiteId, C.context, C.family, l_api_url);
+                        END IF;
+                    END IF;
+
+                    IF (C.chars_normal IS NOT NULL) THEN
+                        IF (C.context='headings') THEN
+                            l_api_url:=':wght@' || getClosestBold(C.font_id,'normal');
                         ELSE
                             l_api_url:=null;
                         END IF;
-                        l_api_url:=l_api_url || '&text=' || utl_url.escape(distinct_chars(C.chars_italic||C.chars_bold_italic),TRUE,'UTF-8');
+                        l_api_url:=l_api_url || '&text=' || utl_url.escape(C.chars_normal,TRUE,'UTF-8');
                         getFontface(pWebsiteId, C.context, C.family, l_api_url);
                     END IF;
 
-                    IF (COALESCE(C.chars_normal,C.chars_bold_normal) IS NOT NULL) THEN
-                        IF (C.context='headings') THEN
-                            SELECT wght_normal
-                            INTO l_closest_bold_wght
-                            FROM font_static_wght 
-                            WHERE font_id=C.font_id
-                            ORDER BY ABS(wght_normal - 700)
-                            FETCH FIRST ROW ONLY;
-                            l_api_url:=':wght' || '@' || l_closest_bold_wght;
-                        ELSE
-                            l_api_url:=null;
-                        END IF;
-                        l_api_url:=l_api_url || '&text=' || utl_url.escape(distinct_chars(C.chars_normal||C.chars_bold_normal),TRUE,'UTF-8');
+                    IF (C.chars_bold_normal IS NOT NULL) THEN
+                        l_api_url:=':wght@' || getClosestBold(C.font_id,'normal');
+                        l_api_url:=l_api_url || '&text=' || utl_url.escape(C.chars_bold_normal,TRUE,'UTF-8');
                         getFontface(pWebsiteId, C.context, C.family, l_api_url);
                     END IF;
+
             END CASE;
         END LOOP;
     END;
