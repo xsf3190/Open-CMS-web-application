@@ -156,21 +156,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             ':root {' ||
                 '-webkit-text-size-adjust: none;' ||
                 'text-size-adjust: none;';
+                
             FOR i IN 1..l_fluid_types.COUNT LOOP
                 l_root_css:=l_root_css || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
             END LOOP;
+            
+            l_root_css:=l_root_css || 
+                '--font-family-ui: system-ui;';
+            
             FOR C1 IN (
-                SELECT wf.context, f.family, f.category
+                SELECT wf.context, f.family
                   FROM font f, website_font wf
                  WHERE f.id=wf.font_id
                    AND wf.website_id=pWebsiteId
                  ORDER BY wf.context
             ) LOOP
                 l_root_css:=l_root_css || 
-                '--font-family-' || C1.context || ':"' || C1.family || '",' || CASE WHEN C1.category IN ('serif','sans-serif') THEN C1.category ELSE 'sans-serif' END || ';';
+                '--font-family-' || C1.context || ':"' || C1.family || '",system-ui;';
             END LOOP;
+            
             l_root_css:=l_root_css || 
-            '--font-family-ui: system-ui, sans-serif;' ||
             '--max-width: ' || C.max_width || ';' || 
             '--img-border-radius: ' || C.img_border_radius || ';' ||
             '--color-text: ' || C.color_text || ';' || 
