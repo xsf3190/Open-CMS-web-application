@@ -1,24 +1,10 @@
 import { dialog_header, dialog_article } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-const show_result = (ele) => {
-	const span_on = ele.parentElement.querySelector("span:first-of-type");
-    const span_off = ele.parentElement.querySelector("span:last-of-type");
-	if (ele.checked) {
-		span_off.style.textDecoration = "underline";
-        span_on.style.textDecoration = "none";
-	} else {
-		span_off.style.textDecoration = "none";
-        span_on.style.textDecoration = "underline";
-	}
-}
-
 const buildFontList = (context) => {
-    const variable = document.getElementById(context + "-variable").checked ? 0 : 1;
-	const italic = document.getElementById(context + "-italic").checked ? 0 : 1;
     const category = document.getElementById(context + "-font-category").value;
 
-    const query = "?category=" + category + "&context=" + context + "&variable=" + variable + "&italic=" + italic;
+    const query = "?category=" + category + "&context=" + context;
 
     callAPI('fonts/:ID/:PAGE','GET', query)
         .then((data) => {
@@ -44,22 +30,6 @@ dialog_article.addEventListener("change", (e) => {
     */
     const name = e.target.getAttribute("id");
     const context = name.split("-")[0];
-
-    /* 
-    ** SWITCH FOR VARIABLE FONTS
-    */
-    if (name.includes("variable")) {
-        show_result(e.target);
-        buildFontList(context);
-    }
-
-    /* 
-    ** SWITCH FOR FONTS WITH ITALIC
-    */
-    if (name.includes("italic")) {
-        show_result(e.target);
-        buildFontList(context);
-    }
 
     /* 
     ** USER SELECTS FONT CATEGORY
