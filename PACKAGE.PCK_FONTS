@@ -244,6 +244,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 FETCH FIRST ROW ONLY;
         END CASE;
         RETURN (l_closest_bold_wght);
+        
+        EXCEPTION WHEN NO_DATA_FOUND /* I.E. VARIABLE FONT */
+            THEN RETURN (700);
     END;
 
     /* 
@@ -255,11 +258,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         DELETE website_fontface WHERE website_id=pWebsiteId AND context=pContext;
         
         FOR C IN (
-            SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic,
-                    LTRIM(NVL2(f.opsz_start,',opsz',NULL) || NVL2(f.slnt_start,',slnt',NULL)  || 
-                        NVL2(f.wdth_start,',wdth',NULL) || NVL2(f.wght_start,',wght',NULL),',') axes,
-                    LTRIM(NVL2(f.opsz_start,f.opsz_start||'..'||f.opsz_end,NULL) || NVL2(f.slnt_start,','||f.slnt_start||'..'||f.slnt_end,NULL) || 
-                        NVL2(f.wdth_start,','||f.wdth_start||'..'||f.wdth_end,NULL) || NVL2(f.wght_start,','||f.wght_start||'..'||f.wght_end,NULL),',') ranges
+            SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic, 
+                CASE WHEN f.slnt_start IS NOT NULL THEN 'slnt' ELSE 'ital' END ital_axis, NVL(f.slnt_start,1) ital_value,
+                CASE WHEN f.variable=1 AND f.wght_end>=700 THEN 700 END wght_value
               FROM website_font wf, font f, article_chars ac
              WHERE wf.website_id=pWebsiteId
                AND wf.context=pContext
@@ -267,61 +268,38 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                AND ac.context=wf.context
                AND ac.article_id=pArticleId
         ) LOOP
-            CASE C.variable
-                WHEN 1 THEN
-                    /*
-                    **  "ital" AND "slnt" AXES ARE MUTUALLY EXCLUSIVE IN GOOGLE FONTS
-                    */
-                    IF (COALESCE(C.chars_italic,C.chars_bold_italic) IS NOT NULL) THEN
-                        IF (C.italic=1) THEN
-                            IF (INSTR(C.axes,'slnt')=0) THEN
-                                l_api_url:=':ital,' || C.axes || '@1,' || C.ranges;
-                            ELSE
-                                l_api_url:=':' || C.axes || '@' || C.ranges;
-                            END IF;
-                            getFontface(pWebsiteId, C.context, C.family, l_api_url, distinct_chars(C.chars_italic||C.chars_bold_italic));
-                        END IF;
-                    END IF;                    
-
-                    IF (COALESCE(C.chars_normal,C.chars_bold_normal) IS NOT NULL) THEN
-                        l_api_url:=':' || C.axes || '@' || C.ranges;
-                        getFontface(pWebsiteId, C.context, C.family, l_api_url, distinct_chars(C.chars_normal||C.chars_bold_normal));
+            IF (C.chars_italic IS NOT NULL) THEN
+                IF (C.italic=1) THEN
+                    IF (C.context='headings') THEN
+                        l_api_url:=':' || C.ital_axis || ',wght@' || C.ital_value || ',' || NVL(C.wght_value,getClosestBold(C.font_id,'italic'));
+                    ELSE
+                        l_api_url:=':' || C.ital_axis || '@' || C.ital_value;
                     END IF;
+                    getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_italic);
+                END IF;
+            END IF;
 
-                WHEN 0 THEN
-                    IF (C.chars_italic IS NOT NULL) THEN
-                        IF (C.italic=1) THEN
-                            IF (C.context='headings') THEN
-                                l_api_url:=':ital,wght@1,' || getClosestBold(C.font_id,'italic');
-                            ELSE
-                                l_api_url:=':ital@1';
-                            END IF;
-                            getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_italic);
-                        END IF;
-                    END IF;
+            IF (C.chars_bold_italic IS NOT NULL) THEN
+                IF (C.italic=1) THEN
+                    l_api_url:=':' || C.ital_axis|| ',wght@' || C.ital_value || ',' || getClosestBold(C.font_id,'italic');
+                    getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_bold_italic);
+                END IF;
+            END IF;
 
-                    IF (C.chars_bold_italic IS NOT NULL) THEN
-                        IF (C.italic=1) THEN
-                            l_api_url:=':ital,wght@1,' || getClosestBold(C.font_id,'italic');
-                            getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_bold_italic);
-                        END IF;
-                    END IF;
+            IF (C.chars_normal IS NOT NULL) THEN
+                IF (C.context='headings') THEN
+                    l_api_url:=':wght@' || getClosestBold(C.font_id,'normal');
+                ELSE
+                    l_api_url:=null;
+                END IF;
+                getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_normal);
+            END IF;
 
-                    IF (C.chars_normal IS NOT NULL) THEN
-                        IF (C.context='headings') THEN
-                            l_api_url:=':wght@' || getClosestBold(C.font_id,'normal');
-                        ELSE
-                            l_api_url:=null;
-                        END IF;
-                        getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_normal);
-                    END IF;
+            IF (C.chars_bold_normal IS NOT NULL) THEN
+                l_api_url:=':wght@' || getClosestBold(C.font_id,'normal');
+                getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_bold_normal);
+            END IF;
 
-                    IF (C.chars_bold_normal IS NOT NULL) THEN
-                        l_api_url:=':wght@' || getClosestBold(C.font_id,'normal');
-                        getFontface(pWebsiteId, C.context, C.family, l_api_url, C.chars_bold_normal);
-                    END IF;
-
-            END CASE;
         END LOOP;
     END;
 
