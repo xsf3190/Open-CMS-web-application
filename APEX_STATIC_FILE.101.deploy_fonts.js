@@ -54,8 +54,13 @@ dialog_article.addEventListener("change", (e) => {
             .then((data) => {
                 const font_family = e.target.options[e.target.selectedIndex].text;
                 if (font_family!=="system-ui") {
-                    for (const url of data.urls) {
-                        const fontFile = new FontFace(font_family,url);
+                    for (const fontface of data.urls) {
+                        const fontFile = new FontFace(font_family,fontface.src_url);
+                        fontFile.style = fontface.font_style;
+                        fontFile.weight = fontface.font_weight;
+                        if (fontface.font_stretch) {
+                            fontFile.stretch = fontface.font_stretch;
+                        }
                         document.fonts.add(fontFile);
                         fontFile.load();
                     };
