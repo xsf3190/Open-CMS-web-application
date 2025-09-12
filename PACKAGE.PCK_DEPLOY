@@ -429,6 +429,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /*
             ** PRELOAD FONTS USED IN PAGE
             */
+            /*
             FOR C IN (
                 SELECT a.context, a.chars_normal, a.chars_bold_normal, a.chars_italic, a.chars_bold_italic, f.italic
                   FROM article_chars a, website_font wf, font f
@@ -437,16 +438,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                    AND wf.website_id=pWebsiteid
                    AND f.id=wf.font_id
             ) LOOP
-                IF (C.chars_normal IS NOT NULL OR C.chars_bold_normal IS NOT NULL) THEN
-                    l_labels(i).font_preload:=l_labels(i).font_preload || 
-                    '<link rel="prefetch" href="fonts/' || C.context || '.normal.woff2" AS="font" type="font/woff2">';
-                END IF;
-                IF ((C.chars_italic IS NOT NULL OR C.chars_bold_italic IS NOT NULL) AND C.italic=1) THEN
+                IF (C.chars_italic IS NOT NULL AND C.italic=1) THEN
                     l_labels(i).font_preload:=l_labels(i).font_preload || 
                     '<link rel="prefetch" href="fonts/' || C.context || '.italic.woff2" AS="font" type="font/woff2">';
                 END IF;
+                IF (C.chars_bold_italic IS NOT NULL AND C.italic=1) THEN
+                    l_labels(i).font_preload:=l_labels(i).font_preload || 
+                    '<link rel="prefetch" href="fonts/' || C.context || '.italic.bold.woff2" AS="font" type="font/woff2">';
+                END IF;
+                IF (C.chars_normal IS NOT NULL) THEN
+                    l_labels(i).font_preload:=l_labels(i).font_preload || 
+                    '<link rel="prefetch" href="fonts/' || C.context || '.normal.woff2" AS="font" type="font/woff2">';
+                END IF;
+                IF (C.chars_bold_normal IS NOT NULL) THEN
+                    l_labels(i).font_preload:=l_labels(i).font_preload || 
+                    '<link rel="prefetch" href="fonts/' || C.context || '.normal.bold.woff2" AS="font" type="font/woff2">';
+                END IF;
             END LOOP;
-
+            */
             /*
             ** SET IMAGE SRCSET FOR ANY IMAGES INCLUDED IN BODY_HTML
             */
@@ -497,9 +506,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wf.website_id=ff.website_id
                AND wf.context=ff.context
                AND df.website_id(+)=ff.website_id
-               AND df.file_name(+)='fonts/' || ff.context || '.' || ff.font_style || '.woff2'
+               AND df.file_name(+)='fonts/' || ff.context || '.' || ff.font_style || CASE WHEN ff.font_weight>400 THEN '.bold' END || '.woff2'
         ) LOOP
-            l_file_name:='fonts/' || C.context || '.' || C.font_style || '.woff2';
+            l_file_name:='fonts/' || C.context || '.' || C.font_style || CASE WHEN C.font_weight>400 THEN '.bold' END || '.woff2';
             l_fontfaces:=l_fontfaces ||
             '@font-face {' ||
                 'font-family:' || C.font_family || ';' ||
