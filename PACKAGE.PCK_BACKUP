@@ -58,10 +58,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         /* 
         ** Delete any files left over from previous operation to avoid ora-39001  
         */
-        FOR C IN (SELECT object_name FROM DBMS_CLOUD.LIST_FILES('DATA_PUMP_DIR')) LOOP
-            pck_core.log('File in DATA_PUMP_DIR:'||C.object_name);
-            DBMS_CLOUD.DELETE_FILE(directory_name=>'DATA_PUMP_DIR',file_name=>C.object_name);
-        END LOOP;
+
+        -- FOR C IN (SELECT object_name FROM DBMS_CLOUD.LIST_FILES('DATA_PUMP_DIR')) LOOP
+        --     pck_core.log('File in DATA_PUMP_DIR:'||C.object_name);
+        --     DBMS_CLOUD.DELETE_FILE(directory_name=>'DATA_PUMP_DIR',file_name=>C.object_name);
+        -- END LOOP;
 
         /* 
         ** Drop any tables not needed in backup
