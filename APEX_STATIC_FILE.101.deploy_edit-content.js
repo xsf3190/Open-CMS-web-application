@@ -38,28 +38,34 @@ export const init = async (element) => {
     link.setAttribute('href', CK_CSS);
     document.head.appendChild(link);
 
-    /* Get html and last updated date for <main> section of current page */
-    let initialdata, last_update;
-    await callAPI(endpoint,'GET')
-        .then((data) => {
-            if (data.html.startsWith('<article class="flow">')) {
-                initialdata = data.html;
-            } else {
-                initialdata = "<article class='flow'>" + data.html + "</article>";
-            }
-            last_update = data.last_update;
-        })
-        .catch((error) => {
-            handleError(error);
-            return;
-        });
-    
+
     /* Get apprpriate set of plugins from CKEDITOR CDN */
-    const { ClassicEditor, Essentials, Alignment, Autosave, BlockQuote, Bold, ButtonView, Clipboard, Code, CodeBlock, 
-            FontSize, FontColor, FontBackgroundColor,
-            GeneralHtmlSupport, Heading, HorizontalLine,
+    const { InlineEditor, 
+            Essentials, 
+            Alignment, 
+            Autosave, 
+            BlockQuote, 
+            Bold,
+            ButtonView, 
+            Clipboard, 
+            Code, 
+            CodeBlock, 
+            FontSize, 
+            FontColor, 
+            FontBackgroundColor,
+            Heading, HeadingButtonsUI, 
+            HorizontalLine,
             Image, ImageCaption, ImageResize, ImageStyle, ImageToolbar, ImageInsert, ImageInsertViaUrl,
-            Italic, Link, List, MenuBarMenuListItemButtonView, Paragraph, Plugin, SelectAll, ShowBlocks, SourceEditing, Underline, WordCount
+            Italic, 
+            Link, 
+            List, 
+            MenuBarMenuListItemButtonView, 
+            Paragraph, ParagraphButtonUI, 
+            Plugin, 
+            SelectAll, 
+            ShowBlocks, 
+            Underline, 
+            WordCount
             } = await import(CK_JS)
             .catch((error) => {
                 handleError(error);
@@ -167,35 +173,70 @@ export const init = async (element) => {
         }
     }
 
-    /* Configure CKEDITOR */
-    let editor;
+    const headerConfig = {
+        plugins: [ Essentials, Italic, Bold, Underline, Autosave, Heading, Paragraph, HeadingButtonsUI, ParagraphButtonUI, SelectFonts, FontSize, FontColor, Alignment ],
+        toolbar: [ 'heading1', 'paragraph', 'italic', 'bold', 'underline', 'selectFonts', 'fontSize', 'fontColor', 'alignment' ],
+        // licenseKey: "GPL",
+        alignment: {
+            options: [
+                {name:'left', className: 'align-left'},
+                {name:'right', className: 'align-right'},
+                {name:'center', className: 'align-center'}
+            ]
+        },
+        heading: {
+            options: [
+                { 
+                    model: 'heading1', 
+                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><text x="6" y="18" fill="red" font-size="20" font-weight="700" font-family="system-ui">T</text>',
+                    view: {
+                        name: 'h1',
+                        classes: 'title'
+                    },
+                    title: 'Title', 
+                    class: 'ck-heading_heading1' 
+                },
+                { 
+                    model: 'paragraph', 
+                    title: 'Subtitle', 
+                    class: 'ck-heading_paragraph' 
+                }
+            ]
+        },
+        autosave: {
+                waitingTime: 2000,
+                save( editor ) {
+                    return saveData( editor.getData(), endpoint, 'header' );
+                }
+        },
+    };
 
-    editor = await ClassicEditor.create( document.querySelector( '#editor' ), {
+    /* Main Config */
+    const mainConfig = {
         plugins: [ Essentials,  Alignment, Autosave, BlockQuote, Bold, Clipboard, Code, CodeBlock,  
                     FontSize, FontColor, FontBackgroundColor,
-                    GeneralHtmlSupport, Heading, HorizontalLine, 
+                    Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
                     Italic, Link, List, ListImages, Paragraph, 
-                    SelectAll, SelectFonts, ShowBlocks, SourceEditing, Underline, UploadImage, WordCount ],
+                    SelectAll, SelectFonts, ShowBlocks, Underline, UploadImage, WordCount ],
         toolbar: [ 'heading', '|', 'undo', 'redo',  '|', 'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
                     '|', 'uploadImage', 'listImages', 'insertImage'],
         menuBar: {
             isVisible: true
         },
-        initialData: initialdata,
         alignment: {
             options: [
-            {name:'left', className: 'align-left'},
-            {name:'right', className: 'align-right'},
-            {name:'center', className: 'align-center'},
-            {name:'justify', className: 'align-justify'}
+                {name:'left', className: 'align-left'},
+                {name:'right', className: 'align-right'},
+                {name:'center', className: 'align-center'},
+                {name:'justify', className: 'align-justify'}
             ]
         },
         autosave: {
             waitingTime: 2000,
             save( editor ) {
-            return saveData( editor.getData(), endpoint );
+                return saveData( editor.getData(), endpoint, 'main' );
             }
         },
         codeBlock: {
@@ -206,16 +247,6 @@ export const init = async (element) => {
             { language: 'sql', label: 'SQL' },
             { language: 'plsql', label: 'PL/SQL' },
             { language: 'shell', label: 'shell' }
-            ]
-        },
-        htmlSupport: {
-            allow: [
-            {
-                name: /.*/,
-                attributes: true,
-                classes: true,
-                styles: false
-            }
             ]
         },
         image: {
@@ -240,46 +271,53 @@ export const init = async (element) => {
             reversed: true
             }
         },
-        placeholder: 'Enter content',
-        title: {
-            placeholder: 'New title'
-        },
-        ui: {
-            viewportOffset: {
-            top: 0
-            }
-        },
         wordCount: {
             displayCharacters: true
         },
+    };
+
+    const footerConfig = {
+        plugins: [ Essentials, Paragraph, Heading, List, SelectFonts, FontSize, FontColor, FontBackgroundColor, Bold, Italic ],
+        toolbar: [ 'heading', 'bold', 'italic', '|', 'selectFonts', 'fontSize', 'fontColor', 'fontBackgroundColor','|', /*'simpleBox'*/ ],
+    }
+
+    const editors = [
+        'header', 'main', 'footer'
+    ];
+
+    editors.forEach(id => {
+        const element = document.getElementById( id );
+
+        if ( !element ) {
+            return;
+        }
+
+        let config;
+        switch (id) {
+            case "header" : 
+                config = headerConfig;
+                break;
+            case "main" : 
+                config = mainConfig;
+                break;
+            case "footer" : 
+                config = footerConfig;
+                break;
+            default:
+                console.error(id + "not supported");
+        }
+
+        InlineEditor.create(
+            element,
+            config
+        )
+            .then( editor => {
+                window.editor = editor;
+            } )
+            .catch( error => {
+                console.error( error.stack );
+            } );
     })
-    .catch( error => {
-        handleError(error);
-    });
-
-    /* Configure word count plugin and position at bottom of ediitor */
-    const wordCountPlugin = editor.plugins.get( 'WordCount' );
-    const wordCountWrapper = document.querySelector( '.ck-editor__main' );
-    wordCountWrapper.appendChild(wordCountPlugin.wordCountContainer );
-
-    /* Put editor status element at end of the toolbar */
-    const toolbar_items = document.querySelector(".ck-toolbar__items");
-    toolbar_items.insertAdjacentHTML('afterend','<span id="editor-status"></span>');
-    
-    /* Put Last Update date in editor status element */
-    document.querySelector("#editor-status").textContent = last_update;
-
-    /* Listen for request to show MEDIA  */
-    // toolbar_items.querySelector(".show-media").addEventListener("click", () => {
-        // show_media("copy");
-    // });
-
-    /* Hide all other elements in <main> when in Editor mode */
-    document.querySelectorAll("main > *:not(.ck)").forEach ((ele) => {
-        ele.style.display = "none";
-    })
-
-    document.querySelector("#editor").scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
 
 /*
@@ -291,15 +329,17 @@ const pages_set = new Set(pages_edited);
 const page_id = Number(document.body.dataset.articleid);
 
 
-const saveData = async ( data, endpoint ) => {
-    const word_count = document.querySelector(".ck-word-count__words").textContent;
-    const editor_status = document.querySelector("#editor-status");
+const saveData = async ( data, endpoint, id ) => {
+    const word_count = 100;
+    // const word_count = document.querySelector(".ck-word-count__words").textContent;
+    // const editor_status = document.querySelector("#editor-status");
 
-    editor_status.textContent = "...";
+    // editor_status.textContent = "...";
 
-    callAPI(endpoint,'PUT', {body_html: data, word_count: word_count})
+    callAPI(endpoint,'PUT', {body_html: data, word_count: word_count, id: id})
         .then((data) => {
-            editor_status.textContent = data.message;
+            // editor_status.textContent = data.message;
+            console.log(data.message);
             if (!pages_set.has(page_id)) {
                 pages_set.add(page_id);
                 sessionStorage.setItem("pages_edited",JSON.stringify(Array.from(pages_set)));
