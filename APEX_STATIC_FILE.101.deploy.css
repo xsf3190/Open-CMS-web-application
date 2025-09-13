@@ -74,7 +74,7 @@ img {
   border-radius: var(--img-border-radius,1em);
 }
 
-.wrapper {
+body>main {
   max-width: var(--max-width);
   margin-inline: auto;
 }
@@ -180,61 +180,18 @@ p + .image.image-style-side {
 /* HEADER STYLES */
 
 body>header {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template: "container";
-  place-items: center;
   background-color: var(--color-primary);
-  color: var(--header-text-color);
 }
 
-body>header:has(img)>div {
-  display:contents;
+body>header u {
+    text-decoration-thickness: 0.5ex;
+    text-decoration-skip-ink: none;
+    text-underline-offset: 0.8ex;
 }
 
-body>header:has(img)+svg {
-  display:none;
-}
-
-body>header>div {
-  border:1px solid var(--header-text-color);
-  padding: 1em;
-  margin-block: 1em;
-}
-
-body>header img {
-  grid-area: container;
-  grid-column: 1/-1;
-  grid-row: 1/-1;
-  width:100%;
-  height:auto;
-  object-fit:cover;
-  max-height: 60dvh;
-  border-radius: initial;
-}
-
-.title {
-  grid-area: container;
-  place-self: start center;
-  line-height: 1;
-  text-align: center;
-  font-family: var(--font-family-headings);
-}
-
-.subtitle {
-  grid-area: container;
-  line-height: 1;
-  text-align: center;
-  font-family: var(--font-family-text);
-  margin-block-start: 3vmin;
-  place-self:end center;
-}
-
-.subtitle:empty {
-    display: none;
-}
 
 /* FOOTER STYLES */
+
 body>footer {
   margin-block-start: 1rem;
   font-family: var(--font-family-text);
@@ -315,11 +272,38 @@ aside.login {
   padding-inline-end: 0.5em;
 }
 
-.align-center {
-  text-align: center;
+/* 
+** FONT SIZES
+*/
+.text-tiny:not(.ck-button) {
+  font-size: var(--step--2);
 }
-.align-end {
-  text-align: end;
+.text-small:not(.ck-button) {
+  font-size: var(--step--1);
+}
+.text-big:not(.ck-button) {
+  font-size: var(--step-3);
+}
+.text-huge:not(.ck-button) {
+  font-size: var(--step-6);
+}
+
+/* ALIGNMENT */
+
+.align-left {
+    text-align: left;
+}
+
+.align-right {
+    text-align: right;
+}
+
+.align-center {
+    text-align: center;
+}
+
+.align-justify {
+    text-align: justify;
 }
 
 .flow > * + * {
@@ -347,6 +331,7 @@ small {
   font-size:var(--step--2);
 }
 
+h1,
 main h2,
 main h3,
 main h4 {
@@ -1362,18 +1347,3 @@ li:has([role='alert']) {
   display: none;
 }
 
-/* 
-** CKEDITOR FONTSIZE PLUGIN SETS THESE CLASSES WHICH WE ASSIGN TO OUR FLUID TYPES
-*/
-.text-tiny:not(.ck-button) {
-  font-size: var(--step--2);
-}
-.text-small:not(.ck-button) {
-  font-size: var(--step--1);
-}
-.text-big:not(.ck-button) {
-  font-size: var(--step-3);
-}
-.text-huge:not(.ck-button) {
-  font-size: var(--step-6);
-}
