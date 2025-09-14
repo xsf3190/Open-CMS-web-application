@@ -313,6 +313,10 @@ export const init = async (element) => {
         )
             .then( editor => {
                 window.editor = editor;
+                editor.editing.view.change( writer => {
+                    const viewEditableRoot = editor.editing.view.document.getRoot();
+                    writer.removeClass( 'ck-editor__editable_inline', viewEditableRoot );
+                });
             } )
             .catch( error => {
                 console.error( error.stack );
