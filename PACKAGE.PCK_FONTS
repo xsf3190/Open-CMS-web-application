@@ -9,7 +9,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     TYPE t_chars_used IS TABLE OF tt_chars_used INDEX BY VARCHAR2(40);
     g_chars_used t_chars_used:=t_chars_used( 'headings' => tt_chars_used(null,null,null,null), 'text' => tt_chars_used(null,null,null,null));
     --
-    PROCEDURE getCharsUsed(pArticleId IN article.id%type);
+    PROCEDURE getCharsUsed(pWebsiteid website.id%type, pArticleId IN article.id%type);
     --
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pSiteid IN website.netlify_site_id%type);
     --
@@ -119,7 +119,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
     **  COLLECT DISTINCT CHARACTERS USED IN AN ARTICLE - SAVE IN TABLE ARTICLE_CHARS AS WELL AS GLOBAL VARIABLES FOR REFERENCE IN DEPLOYMENT
     */
-    PROCEDURE getCharsUsed(pArticleId IN article.id%type) IS
+    PROCEDURE getCharsUsed(pWebsiteid in website.id%type, pArticleId IN article.id%type) IS
         l_body_html article.body_html%type;
         l_code_regex varchar2(30):='<code(.+?)<\/code>';
         l_headings_regex varchar2(30):='<h[1-4]>(.+?)<\/h[1-4]>';
@@ -139,7 +139,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     BEGIN
         DELETE article_chars WHERE article_id=pArticleId;
 
-        SELECT body_html INTO l_body_html FROM article WHERE id=pArticleId;
+        SELECT a.body_html || wa.header_html
+          INTO l_body_html 
+          FROM article a, website_article wa
+         WHERE a.id=pArticleId
+           AND wa.website_id=pWebsiteid
+           AND wa.article_id=a.id;
         
         /* 
         ** IMPLEMENT LATER FOR USER_SELECTED MONOSPACE FONT
@@ -611,7 +616,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
          WHERE EXISTS (SELECT null FROM font WHERE id=l_font_id AND category='system-ui');
         
         IF (l_system_ui=0) THEN
-            getCharsUsed(pArticleId);
+            getCharsUsed(pWebsiteId,pArticleId);
             getFontFiles(pWebsiteId, pContext=>l_context, pArticleId=>pArticleId);
         END IF;
 
