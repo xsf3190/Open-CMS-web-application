@@ -22,8 +22,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CODEPEN" is
         pArticleId IN article.id%type, 
         pCollectionType IN website_article.collection_type%type, 
         pIsMedia IN BOOLEAN, 
-        pTitle website.title%type,
-        pSubtitle website.subtitle%type,
         pHeaderEffect website.header_effect%type,
         pHeroAssetId website.hero_asset_id%type,
         pContactEmail website.contact_email%type,
@@ -390,8 +388,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         pArticleId IN article.id%type, 
         pCollectionType IN website_article.collection_type%type, 
         pIsMedia IN BOOLEAN, 
-        pTitle website.title%type,
-        pSubtitle website.subtitle%type,
         pHeaderEffect website.header_effect%type,
         pHeroAssetId website.hero_asset_id%type,
         pContactEmail website.contact_email%type,
@@ -477,9 +473,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         END IF;
 
         /* Enclose content in <article class="flow"> container if article.body_html was created in ckeditor for example */
-        IF (pHtml IS NULL OR INSTR(pHtml,'<article')=0) THEN
-            pHtml:='<article class="flow">' || pHtml || '</article>';
-        END IF;
+        -- IF (pHtml IS NULL OR INSTR(pHtml,'<article')=0) THEN
+        --     pHtml:='<article class="flow">' || pHtml || '</article>';
+        -- END IF;
     
         /* Build index if page is index of Blog / Media / Product */
         IF (pCollectionType='BLOG') THEN
@@ -506,18 +502,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         /* 
         ** Build website header 
         */
-        l_header:=
-            '<header>' ||
-                '<div>' ||
-                    CASE WHEN pHeroAssetId IS NOT NULL THEN pck_media.getImageSrcset(pHeroAssetId) END ||
-                    '<h1 class="title" style="' || g_font_styles_title ||'">' || pTitle || '</h1>' ||
-                    '<p class="subtitle" style="' || g_font_styles_subtitle   ||'">' || pSubtitle || '</p>' ||
-                '</div>' ||
-            '</header>' || 
-            CASE WHEN pHeroAssetId IS NULL THEN g_curve END;
+        SELECT '<header id="header">' || header_html || '</header>' || CASE WHEN pHeroAssetId IS NULL THEN g_curve END
+          INTO l_header
+          FROM website_article
+         WHERE website_id=pWebsiteId
+           AND article_id=pArticleId;
 
         l_footer:=
-            '<footer class="flex-items">' ||
+            '<footer id="footer" class="flex-items">' ||
                 CASE WHEN pContactEmail IS NOT NULL THEN
                 '<a class="icon-with-text" href="mailto:' || pContactEmail || '">' ||
                     '<svg class="icon" aria-hidden="true" focusable="false"><use href="#email"></use></svg><span>' || pContactEmail || '</span>' ||
@@ -556,14 +548,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         */
         pHtml:=
             buildNavLabels(pWebsiteId,pArticleId) || 
-            CASE WHEN pEnv='TEST' THEN '<form class="edit-header"></form>' END ||
             l_header || 
-            '<main class="wrapper flow">' || 
+            '<main id="main" class="flow">' || 
                 pPromotion ||
-                CASE WHEN pEnv='TEST' THEN '<div id="editor"></div>' END ||
                 pHtml  || 
             '</main>' || 
-            CASE WHEN pEnv='TEST' THEN '<form class="edit-footer"></form>' END ||
             l_footer;
 
         /* 
@@ -641,8 +630,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 pArticleId, 
                 C.collection_type, 
                 l_is_media, 
-                C.title, 
-                C.subtitle, 
                 C.header_effect,
                 C.hero_asset_id,
                 C.contact_email,
