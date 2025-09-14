@@ -433,18 +433,38 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     */
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_word_count article.word_count%type;
+         l_word_count NUMBER;
+        l_html CLOB;
+        l_id VARCHAR2(6);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        UPDATE article t SET (t.word_count, t.body_html, t.updated_date) = 
-            (
-                SELECT REGEXP_SUBSTR(j.word_count,'(\d)+') word_count, j.body_html, current_timestamp as updated_date
-                  FROM article x, JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (word_count, body_html CLOB)) j
-                 WHERE x.id=pArticleId
-            )
-        WHERE t.id=pArticleId;
-        --RETURNING t.word_count INTO l_word_count;
+        SELECT REGEXP_SUBSTR(word_count,'(\d)+') word_count, body_html, id
+          INTO l_word_count, l_html, l_id
+          FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (word_count, body_html CLOB, id));
+
+        CASE l_id
+            WHEN 'header' THEN
+                UPDATE website_article 
+                   SET header_html=l_html,
+                       updated_date = current_timestamp
+                 WHERE website_id=pWebsiteid
+                   AND article_id=pArticleId;
+
+            WHEN 'main' THEN
+                UPDATE article 
+                   SET word_count=l_word_count, 
+                       body_html=l_html,
+                       updated_date = current_timestamp
+                 WHERE id=pArticleId;
+
+            WHEN 'footer' THEN
+                UPDATE website_article 
+                   SET footer_html=l_html,
+                       updated_date = current_timestamp
+                 WHERE website_id=pWebsiteid
+                   AND article_id=pArticleId;
+        END CASE;
 
         APEX_JSON.open_object; 
         APEX_JSON.write('success', TRUE);
