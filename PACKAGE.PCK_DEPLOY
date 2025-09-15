@@ -278,6 +278,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_file_name VARCHAR2(200);
         l_sha1 website_files.sha1%type;
         l_sha1_prev website_files.sha1%type;
+        l_sha1_updated website_files.sha1_updated%type;
         l_current_timestamp website_files.created_date%type;
         l_script_src VARCHAR2(500);
         
@@ -375,6 +376,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_deploy_files(l_sha1).md5:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_md5));
                 l_deploy_files(l_sha1).content_length:=dbms_lob.getlength(pFileContent);
             END IF;
+        END;
+
+        PROCEDURE deleteFontface(pContext IN VARCHAR2, pDeployFilename IN VARCHAR2) IS
+        n pls_integer;
+        BEGIN
+            DELETE website_fontface 
+             WHERE website_id=pWebsiteid 
+               AND context=pContext
+               AND deploy_filename=pDeployFilename;
+            n:=sql%rowcount;
+            pck_core.log('DELETE website_fontface:'||pContext||':'|| pDeployFilename||':'||n);
+
+            DELETE website_files 
+             WHERE website_id=pWebsiteid
+               AND file_name=pDeployFilename;
         END;
 
     BEGIN
@@ -486,23 +502,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        ** GET FONT FILES
+        ** GET GOOGLE FONT FILES - UPDATES WEBSITE_FONTFACE TABLE
         */
         logDeployment(pWebsiteId, pSiteId, 'Optimizing FONTS');
         pck_fonts.getFontFiles(pWebsiteid, pSiteId);
-        
-        /* DOWNLOAD FONT FILES FROM GOOGLE AND SELF-HOST */
-        
-        FOr C IN (
-            SELECT ff.context, ff.font_family, ff.font_style, ff.font_weight, ff.font_stretch, ff.src_url, wf.updated_date, NVL(df.sha1_updated,df.created_date) sha1_updated_date, df.sha1
-              FROM website_fontface ff, website_font wf, website_files df
-             WHERE ff.website_id=pWebsiteid
-               AND wf.website_id=ff.website_id
-               AND wf.context=ff.context
-               AND df.website_id(+)=ff.website_id
-               AND df.file_name(+)='fonts/' || ff.context || '.' || ff.font_style || CASE WHEN ff.font_weight>400 THEN '.bold' END || '.woff2'
+
+        /*
+        ** DELETE ANY UNUSED WEBSITE_FONTFACE
+        */
+        FOR C IN (
+            SELECT context FROM website_font WHERE website_id=pWebsiteid
         ) LOOP
-            l_file_name:='fonts/' || C.context || '.' || C.font_style || CASE WHEN C.font_weight>400 THEN '.bold' END || '.woff2';
+            IF (pck_fonts.g_chars_used(C.context).chars_normal IS NULL) THEN
+                deleteFontface(C.context,'fonts/' || C.context || '.normal.woff2');
+            END IF;
+
+            IF (pck_fonts.g_chars_used(C.context).chars_bold_normal IS NULL) THEN
+                deleteFontface(C.context,'fonts/' || C.context || '.normal.bold.woff2');
+            END IF;
+
+            IF (pck_fonts.g_chars_used(C.context).chars_italic IS NULL) THEN
+                deleteFontface(C.context,'fonts/' || C.context || '.italic.woff2');
+            END IF;
+
+            IF (pck_fonts.g_chars_used(C.context).chars_bold_italic IS NULL) THEN
+                deleteFontface(C.context,'fonts/' || C.context || '.italic.bold.woff2');
+            END IF;
+        END LOOP;
+        
+        /* DOWNLOAD FONT FILES FROM GOOGLE AND UPLOAD IF ANY CHANGE */
+        n:=0;
+        FOR C IN (
+            SELECT ff.context, ff.font_family, ff.font_style, ff.font_weight, ff.font_stretch, ff.src_url, ff.deploy_filename,
+                    ff.created_date, wf.sha1, NVL(wf.sha1_updated,wf.created_date) sha1_updated
+              FROM website_fontface ff, website_files wf
+             WHERE ff.website_id=pWebsiteid
+               AND ff.deploy_filename=wf.file_name(+)
+        ) LOOP
             l_fontfaces:=l_fontfaces ||
             '@font-face {' ||
                 'font-family:' || C.font_family || ';' ||
@@ -513,52 +549,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END
                 ||
                 'font-display:swap;' ||
-                'src: url("/' || l_file_name || '") format("woff2");' ||
+                'src: url("/' || C.deploy_filename || '") format("woff2");' ||
             '}';
+
             /* 
-            **  CHECK IF FONT NEEDS TO BE DOWNLOADED FROM GOOGLE
+            **  DEPLOY FONT FILE IF WAS DOWNLOADED FROM GOOGLE AFTER PREVIOUS DEPLOYMENT
             */
-            n:=0;
-            IF (C.updated_date>C.sha1_updated_date OR C.sha1_updated_date IS NULL) THEN
-                pck_core.log('C.updated_date>C.sha1_updated_date OR C.sha1_updated_date IS NULL');
-                /* MEANS FONT HAS CHANGED */
+            IF (C.created_date>C.sha1_updated OR C.sha1_updated IS NULL) THEN
+                logDeployment(pWebsiteId, pSiteId, 'Download Google - '|| C.deploy_filename);
+                l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_font_download);
                 n:=n+1;
             ELSE
-                FOR C1 IN (
-                    SELECT COUNT(old), COUNT(new), chars_normal, chars_bold_normal, chars_italic, chars_bold_italic
-                    FROM 
-                    (
-                    SELECT 1 old, TO_NUMBER(null) new, chars_normal, chars_bold_normal, chars_italic, chars_bold_italic 
-                      FROM website_font 
-                     WHERE website_id=pWebsiteid 
-                       AND context=C.context
-                    UNION ALL
-                    SELECT TO_NUMBER(null) old, 1 new, pck_fonts.g_chars_used(C.context).chars_normal, pck_fonts.g_chars_used(C.context).chars_bold_normal, pck_fonts.g_chars_used(C.context).chars_italic, pck_fonts.g_chars_used(C.context).chars_bold_italic 
-                      FROM dual
-                    )
-                    GROUP BY chars_normal, chars_bold_normal, chars_italic, chars_bold_italic
-                    HAVING COUNT(old)<>COUNT(new)
-                ) LOOP
-                    /* MEANS CONTENT HAS CHANGED */
-                    pck_core.log('chars difference');
-                    n:=n+1;
-                    UPDATE website_font 
-                       SET chars_normal=pck_fonts.g_chars_used(C.context).chars_normal,
-                           chars_bold_normal=pck_fonts.g_chars_used(C.context).chars_bold_normal,
-                           chars_italic=pck_fonts.g_chars_used(C.context).chars_italic,
-                           chars_bold_italic=pck_fonts.g_chars_used(C.context).chars_bold_italic,
-                           updated_date=current_timestamp
-                     WHERE website_id=pWebsiteid
-                       AND context=C.context;
-                END LOOP;
-            END IF;
-
-            IF (n>0) THEN
-                logDeployment(pWebsiteId, pSiteId, 'Download Google - '|| l_file_name);
-                l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
-                addDeploy(pFilename=>l_file_name, pFileContent=>l_font_download);
-            ELSE
-                l_files.put(l_file_name,C.sha1);
+                l_files.put(C.deploy_filename,C.sha1);
             END IF;
         
         END LOOP;
