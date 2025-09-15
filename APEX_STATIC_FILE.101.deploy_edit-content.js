@@ -173,9 +173,37 @@ export const init = async (element) => {
         }
     }
 
+    /* Background Color and shape plugin  */
+    class ColorShape extends Plugin {
+        init() {
+            const editor = this.editor;
+            editor.ui.componentFactory.add( 'colorShape', () => {
+                const button = new ButtonView();
+                button.set( {
+                    label: 'Nackground Colors and Shape',
+                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="0" y="0" width="100" height="100" fill="white" stroke="black" stroke-width="20"/><text x="10" y="70" fill="red" font-size="40" font-weight="900" font-family="system-ui">COL</text>',
+                    tooltip: 'Background color and shape',
+                    withText: false
+                } );
+                button.on('execute', (_) => {
+                    const context = editor.config.get('context');
+                    console.log("id",context);
+                    callAPI("color/:ID/:PAGE","GET", "?context=" + context)
+                    .then( (data) => {
+                        loadForm(data);
+                    })
+                    .catch((error) => {
+                        handleError(error);
+                    });
+                });
+                return button;
+            } );
+        }
+    }
+
     const headerConfig = {
-        plugins: [ Essentials, Italic, Bold, Underline, Autosave, Heading, Paragraph, HeadingButtonsUI, ParagraphButtonUI, SelectFonts, FontSize, FontColor, Alignment ],
-        toolbar: [ 'heading1', 'paragraph', 'italic', 'bold', 'underline', 'selectFonts', 'fontSize', 'fontColor', 'alignment' ],
+        plugins: [ Essentials, Alignment, Autosave, Bold, ColorShape, FontSize, FontColor, Heading, HeadingButtonsUI, Italic, Paragraph, ParagraphButtonUI, SelectFonts, Underline ],
+        toolbar: [ 'heading1', 'paragraph', 'italic', 'bold', 'underline', 'colorShape', '|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment' ],
         // licenseKey: "GPL",
         alignment: {
             options: [
@@ -209,6 +237,7 @@ export const init = async (element) => {
                     return saveData( editor.getData(), endpoint, 'header' );
                 }
         },
+        context: "header",
     };
 
     /* Main Config */
