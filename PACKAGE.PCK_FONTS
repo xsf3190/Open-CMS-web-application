@@ -144,7 +144,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
           FROM article a, website_article wa
          WHERE a.id=pArticleId
            AND wa.website_id=pWebsiteid
-           AND wa.article_id=a.id;
+           AND wa.article_id(+)=a.id;
         
         /* 
         ** IMPLEMENT LATER FOR USER_SELECTED MONOSPACE FONT
@@ -158,7 +158,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         IF (n>0) THEN
             FOR j IN 1..n 
             LOOP
-                extract_styles(REGEXP_SUBSTR(l_body_html,l_headings_regex,1,j), l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
+                extract_styles(REGEXP_SUBSTR(l_body_html,l_headings_regex,1,j), l_chars_bold_italic, l_chars_bold_normal, l_chars_bold_italic, l_chars_bold_normal);
             END LOOP;
         END IF;
 
@@ -189,7 +189,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  CALL GOOGLE FONTS API.
     */
-    PROCEDURE getFontface(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pFamily IN VARCHAR2, pUrl IN VARCHAR2, pChars IN VARCHAR2) IS
+    PROCEDURE getFontface(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pFamily IN VARCHAR2, pApiParams IN VARCHAR2, pChars IN VARCHAR2) IS
         l_fontface VARCHAR2(500);
 
         l_font_family website_fontface.font_family%type;
@@ -197,8 +197,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_font_weight website_fontface.font_weight%type;
         l_font_stretch website_fontface.font_stretch%type;
         l_src_url website_fontface.src_url%type;
+        l_deploy_filename  website_fontface.deploy_filename%type;
 
         l_api_url VARCHAR2(500):='https://fonts.googleapis.com/css2?family=';
+
+        n PLS_INTEGER;
     
         FUNCTION getValue(pKeyword IN VARCHAR) RETURN VARCHAR2 IS
             j PLS_INTEGER;
@@ -212,24 +215,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END;
 
     BEGIN
-        pck_api.callGoogleAPI(
-            pUrl=>l_api_url || REPLACE(pFamily,' ','+') || pUrl || '&text=' || utl_url.escape(pChars,TRUE,'UTF-8'),
-            pData=>l_fontface);
-        
-        l_font_family:=getValue('font-family');
-        l_font_style:=getValue('font-style');
-        l_font_weight:=getValue('font-weight');
-        l_font_stretch:=getValue('font-stretch');
-        l_src_url:=getValue('src: url');
+        l_api_url:=l_api_url || REPLACE(pFamily,' ','+') || pApiParams || '&text=' || utl_url.escape(pChars,TRUE,'UTF-8');
 
-        l_src_url:=SUBSTR(l_src_url,INSTR(l_src_url,'(')+1,INSTR(l_src_url,')')-INSTR(l_src_url,'(')-1);
-        INSERT INTO website_fontface(website_id, context, font_family, font_style, font_weight, font_stretch, src_url)
-            VALUES(pWebsiteId, pContext, l_font_family, l_font_style, l_font_weight, l_font_stretch, l_src_url);
+        SELECT COUNT(*) INTO n FROM website_fontface WHERE website_id=pWebsiteId AND api_url=l_api_url;
+
+        IF (n=0) THEN
+            pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
+
+            l_font_family:=getValue('font-family');
+            l_font_style:=getValue('font-style');
+            l_font_weight:=getValue('font-weight');
+            l_font_stretch:=getValue('font-stretch');
+            l_src_url:=getValue('src: url');
+            l_src_url:=SUBSTR(l_src_url,INSTR(l_src_url,'(')+1,INSTR(l_src_url,')')-INSTR(l_src_url,'(')-1);
+            l_deploy_filename:='fonts/' || pContext || '.' || l_font_style || CASE WHEN l_font_weight>400 THEN '.bold' END || '.woff2';
+
+            DELETE website_fontface WHERE website_id=pWebsiteId AND deploy_filename=l_deploy_filename;
+
+            pck_core.log('insert website_fontface:'||pContext||':'||l_deploy_filename);
+
+            INSERT INTO website_fontface(website_id, context, font_family, font_style, font_weight, font_stretch, src_url, api_url, deploy_filename)
+                VALUES(pWebsiteId, pContext, l_font_family, l_font_style, l_font_weight, l_font_stretch, l_src_url, l_api_url, l_deploy_filename);
+        END IF;
     END;
 
     /*
     ** SOME STATIC FONTS HAVE JUMPS BETWEEN WEIGHTS - E.G. 400,800
-    ** THIS FUNCTiON GETS THE CLOSEST WEGHT TO 700 THE "BOLD" WEIGHT BROWSERS APPLY BY  DEFAULT 
+    ** THIS FUNCTiON GETS THE CLOSEST WEIGHT TO THE DEFAULT BROWSER BOLD WEIGHT (700)
     */
     FUNCTION getClosestBold(pFontid IN font.id%type, pStyle IN VARCHAR2) RETURN NUMBER
     IS
@@ -258,7 +270,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    ** BUILD URL PARAMETERS FOR CALL TO GOOGLE FONTS A[I] 
+    ** BUILD URL PARAMETERS FOR CALL TO GOOGLE FONTS API
     */
     PROCEDURE prepareAPICall(pWebsiteid IN NUMBER, pFontid IN NUMBER, pFamily IN VARCHAR2, pContext IN VARCHAR2, pItalicSupported IN PLS_INTEGER, pBoldSupported IN PLS_INTEGER, pItalAxis IN VARCHAR2, pItalValue IN VARCHAR2,
                 pBoldItalic IN VARCHAR2, pBoldNormal IN VARCHAR2, pItalic IN VARCHAR2, pNormal IN VARCHAR2) 
@@ -339,12 +351,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /* 
-    **  CALL GOOGLE FONTS API TO GET URL OF EACH FONT USED IN THE WEBSITE 
+    **  CALL GOOGLE FONTS API TO GET URL OF EACH FONT USED IN THE WEBSITE - CALLED BY DEPLOYMENT
     */
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pSiteid IN website.netlify_site_id%type) IS
         l_api_url LONG;
     BEGIN
-        DELETE website_fontface WHERE website_id=pWebsiteId;
+        -- DELETE website_fontface WHERE website_id=pWebsiteId;
 
         FOR C IN (
             SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, 
