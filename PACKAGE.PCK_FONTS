@@ -37,152 +37,116 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN(l_chars);
     END;
 
-    /* 
-    ** EXTRACT DISTINCT ITALIC / NORMAL / BOLD CHARACTERS
-    */
-    PROCEDURE extract_styles(pText IN VARCHAR2, pBoldItalic IN OUT VARCHAR2, pBoldNormal IN OUT VARCHAR2, pItalic IN OUT VARCHAR2, pNormal IN OUT VARCHAR2) IS
-        l_text LONG:=pText;
-        l_italics_regex varchar2(12):='<i>(.+?)</i>';
-        l_italics_substr LONG;
-        l_italics_bold_regex varchar2(30):='<i><strong>(.+?)</strong></i>';
-        l_italics_bold_substr LONG;
-        l_bold_regex varchar2(30):='<strong>(.+?)</strong>';
-        l_bold_substr LONG;
-        l_char VARCHAR2(4);
-        n PLS_INTEGER;
-        len PLS_INTEGER;
-    BEGIN
-        IF (pText IS NULL) THEN
-            RETURN;
-        END IF;
-        n:=REGEXP_COUNT(l_text,l_italics_bold_regex);
-        FOR i IN 1..n LOOP
-            l_italics_bold_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italics_bold_regex,1,i)));
-            len:=LENGTH(l_italics_bold_substr);
-            IF (len>0) THEN
-                FOR k IN 1..len LOOP
-                    l_char:=SUBSTR(l_italics_bold_substr,k,1);
-                    IF (pBoldItalic IS NULL OR INSTR(pBoldItalic,l_char)=0) THEN
-                        pBoldItalic:=pBoldItalic || l_char;
-                    END IF;
-                END LOOP;
-            END IF;
-        END LOOP;
-
-        l_text:=REGEXP_REPLACE(l_text,l_italics_bold_regex,null);
-
-        n:=REGEXP_COUNT(l_text,l_italics_regex);
-        FOR i IN 1..n LOOP
-            l_italics_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italics_regex,1,i)));
-            len:=LENGTH(l_italics_substr);
-            IF (len>0) THEN
-                FOR k IN 1..len LOOP
-                    l_char:=SUBSTR(l_italics_substr,k,1);
-                    IF (pItalic IS NULL OR INSTR(pItalic,l_char)=0) THEN
-                        pItalic:=pItalic || l_char;
-                    END IF;
-                END LOOP;
-            END IF;
-        END LOOP;
-
-        l_text:=REGEXP_REPLACE(l_text,l_italics_regex,null);
-
-        n:=REGEXP_COUNT(l_text,l_bold_regex);
-        FOR i IN 1..n LOOP
-            l_bold_substr:=utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_regex,1,i)));
-            len:=LENGTH(l_bold_substr);
-            IF (len>0) THEN
-                FOR k IN 1..len LOOP
-                    l_char:=SUBSTR(l_bold_substr,k,1);
-                    IF (pBoldNormal IS NULL OR INSTR(pBoldNormal,l_char)=0) THEN
-                        pBoldNormal:=pBoldNormal || l_char;
-                    END IF;
-                END LOOP;
-            END IF;
-        END LOOP;
-
-        l_text:=REGEXP_REPLACE(l_text,l_bold_regex,null);
-
-        l_text:=utl_i18n.unescape_reference(apex_escape.striphtml(l_text));
-        len:=LENGTH(l_text);
-        
-        IF (len>0) THEN
-            FOR i IN 1..len LOOP
-                l_char:=SUBSTR(l_text,i,1);
-                IF (pNormal IS NULL OR INSTR(pNormal,l_char)=0) THEN
-                    pNormal:=pNormal || l_char;
-                END IF;
-            END LOOP;
-        END IF;
-    END;
-
     /*
     **  COLLECT DISTINCT CHARACTERS USED IN AN ARTICLE - SAVE IN TABLE ARTICLE_CHARS AS WELL AS GLOBAL VARIABLES FOR REFERENCE IN DEPLOYMENT
     */
     PROCEDURE getCharsUsed(pWebsiteid in website.id%type, pArticleId IN article.id%type) IS
-        l_body_html article.body_html%type;
-        l_code_regex varchar2(30):='<code(.+?)<\/code>';
-        l_headings_regex varchar2(30):='<h[1-4]>(.+?)<\/h[1-4]>';
-        l_chars_normal article_chars.chars_normal%type;
-        l_chars_italic article_chars.chars_italic%type;
-        l_chars_bold_normal article_chars.chars_bold_normal%type;
-        l_chars_bold_italic article_chars.chars_bold_italic%type;
-        n PLS_INTEGER;
 
-        PROCEDURE saveChars(pContext IN VARCHAR2) IS
-        BEGIN
-            g_chars_used(pContext).chars_normal:=distinct_chars(g_chars_used(pContext).chars_normal || l_chars_normal);
-            g_chars_used(pContext).chars_bold_normal:=distinct_chars(g_chars_used(pContext).chars_bold_normal || l_chars_bold_normal);
-            g_chars_used(pContext).chars_italic:=distinct_chars(g_chars_used(pContext).chars_italic || l_chars_italic);
-            g_chars_used(pContext).chars_bold_italic:=distinct_chars(g_chars_used(pContext).chars_bold_italic || l_chars_bold_italic);
-        END;
+        l_text CLOB;
+
+        hd pls_integer;
+        it pls_integer;
+        bi pls_integer;
+        b pls_integer;
+
+        l_heading LONG;
+        l_heading_regex varchar2(30):='<h[1-4](.+?)</h[1-4]>';
+        l_italic_regex varchar2(15):='<i>(.+?)</i>';
+        l_code_regex varchar2(30):='<code(.+?)</code>';
+        l_nbsp_regex varchar2(30):='<p>&nbsp;</p>';
+        l_bold_italic_regex varchar2(30):='<i><strong>(.+?)</strong></i>';
+        l_bold_regex varchar2(30):='<strong>(.+?)</strong>';
+
+        l_headings LONG;
+        l_headings_italic LONG;
+        l_chars_normal LONG;
+        l_chars_italic LONG;
+        l_chars_bold_normal LONG;
+        l_chars_bold_italic LONG;
+
     BEGIN
         DELETE article_chars WHERE article_id=pArticleId;
 
         SELECT a.body_html || wa.header_html
-          INTO l_body_html 
+          INTO l_text 
           FROM article a, website_article wa
          WHERE a.id=pArticleId
            AND wa.website_id=pWebsiteid
            AND wa.article_id(+)=a.id;
         
         /* 
-        ** IMPLEMENT LATER FOR USER_SELECTED MONOSPACE FONT
+        ** REMOVE <code></code>  AND <p>&nbsp;</p>
+        ** 1 - start at beginnning
+        ** 0 - replace all occurrences
+        ** 'n' - ignore line breaks 
         */
-        l_body_html:=REGEXP_REPLACE(l_body_html,l_code_regex,null);
+        l_text:=REGEXP_REPLACE(l_text,l_code_regex,null,1,0,'n');
+        l_text:=REGEXP_REPLACE(l_text,l_nbsp_regex,null,1,0);
 
-        /* 
-        ** GET DISTINCT CHARACTERS USED IN HEADINGS
-        */
-        n:=REGEXP_COUNT(l_body_html,l_headings_regex);
-        IF (n>0) THEN
-            FOR j IN 1..n 
-            LOOP
-                extract_styles(REGEXP_SUBSTR(l_body_html,l_headings_regex,1,j), l_chars_bold_italic, l_chars_bold_normal, l_chars_bold_italic, l_chars_bold_normal);
+        hd:=REGEXP_COUNT(l_text,l_heading_regex);
+
+        FOR i IN 1..hd LOOP
+            l_heading:=REGEXP_SUBSTR(l_text,l_heading_regex,1,i);
+            it:=REGEXP_COUNT(l_heading,l_italic_regex);
+
+            FOR j IN 1..it LOOP
+                l_headings_italic:=l_headings_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_heading,l_italic_regex,1,j)));
             END LOOP;
+
+            l_heading:=REGEXP_REPLACE(l_heading,l_italic_regex,null,1,0);
+
+            l_headings:=l_headings || utl_i18n.unescape_reference(apex_escape.striphtml(l_heading));
+        END LOOP;
+        l_headings_italic:=distinct_chars(l_headings_italic);
+        l_headings:=distinct_chars(l_headings);
+
+        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal)
+        VALUES (pArticleId, 'headings', l_headings_italic, l_headings);
+
+        g_chars_used('headings').chars_bold_normal:=distinct_chars(g_chars_used('headings').chars_bold_normal || l_headings);
+        g_chars_used('headings').chars_bold_italic:=distinct_chars(g_chars_used('headings').chars_bold_italic || l_headings_italic);
+
+        IF (hd>0) THEN
+            l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
         END IF;
 
-        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
-        VALUES (pArticleId, 'headings', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
-
-        saveChars('headings');
-
-        /* 
-        ** GET DISTINCT CHARACTERS USED IN REMAINDER OF DOCUMENT (REFINE LATER TO ISOLATE "TITLE", "CODE", "BLOCKQUOTE" ETC)
+        /*
+        **  NOW PROCESS REST OF THE TEXT
         */
-        l_body_html:=REGEXP_REPLACE(l_body_html,l_headings_regex,null);
-        
-        l_chars_bold_italic:=null;
-        l_chars_bold_normal:=null;
-        l_chars_italic:=null;
-        l_chars_normal:=null;
 
-        extract_styles(l_body_html, l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
-        
+        bi:=REGEXP_COUNT(l_text, l_bold_italic_regex);
+        FOR i IN 1..bi LOOP
+            l_chars_bold_italic:=l_chars_bold_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_italic_regex,1,i)));
+        END LOOP;
+        l_text:=REGEXP_REPLACE(l_text,l_bold_italic_regex,null,1,0);
+
+        it:=REGEXP_COUNT(l_text,l_italic_regex);
+        FOR i IN 1..it LOOP
+            l_chars_italic:=l_chars_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italic_regex,1,i)));
+        END LOOP;
+        l_text:=REGEXP_REPLACE(l_text,l_italic_regex,null,1,0);
+
+        b:=REGEXP_COUNT(l_text,l_bold_regex);
+        FOR i IN 1..b LOOP
+            l_chars_bold_normal:=l_chars_bold_normal || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_regex,1,i)));
+        END LOOP;
+        l_text:=REGEXP_REPLACE(l_text,l_bold_regex,null,1,0);
+        /*
+        ** THE REST IS NORMAL !
+        */
+        l_chars_normal:=distinct_chars(utl_i18n.unescape_reference(apex_escape.striphtml(l_text)));
+        l_chars_bold_normal:=distinct_chars(l_chars_bold_normal);
+        l_chars_italic:=distinct_chars(l_chars_italic);
+        l_chars_bold_italic:=distinct_chars(l_chars_bold_italic);
+
+
         INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
         VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
 
-        saveChars('text');
+        g_chars_used('text').chars_normal:=distinct_chars(g_chars_used('text').chars_normal || l_chars_normal);
+        g_chars_used('text').chars_bold_normal:=distinct_chars(g_chars_used('text').chars_bold_normal || l_chars_bold_normal);
+        g_chars_used('text').chars_italic:=distinct_chars(g_chars_used('text').chars_italic || l_chars_italic);
+        g_chars_used('text').chars_bold_italic:=distinct_chars(g_chars_used('text').chars_bold_italic || l_chars_bold_italic);
 
     END;
 
@@ -270,49 +234,37 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    ** BUILD URL PARAMETERS FOR CALL TO GOOGLE FONTS API
+    ** BUILD URL PARAMETERS FOR VALID CALL TO GOOGLE FONTS API
     */
     PROCEDURE prepareAPICall(pWebsiteid IN NUMBER, pFontid IN NUMBER, pFamily IN VARCHAR2, pContext IN VARCHAR2, pItalicSupported IN PLS_INTEGER, pBoldSupported IN PLS_INTEGER, pItalAxis IN VARCHAR2, pItalValue IN VARCHAR2,
                 pBoldItalic IN VARCHAR2, pBoldNormal IN VARCHAR2, pItalic IN VARCHAR2, pNormal IN VARCHAR2) 
     IS
         l_api_url VARCHAR2(500);
-        l_chars_normal article_chars.chars_normal%type;
-        l_chars_bold_normal article_chars.chars_bold_normal%type;
     BEGIN
         IF (pItalic IS NOT NULL) THEN
             IF (pItalicSupported=1) THEN
-                IF (pContext='headings') THEN
-                    l_api_url:=':' || pItalAxis || CASE WHEN pBoldSupported=1 THEN ',wght' END || '@' || pItalValue || CASE WHEN pBoldSupported=1 THEN ',' || getClosestBold(pFontid,'italic') END;
-                ELSE
-                    l_api_url:=':' || pItalAxis || '@' || pItalValue;
-                END IF;
+                l_api_url:=':' || pItalAxis || '@' || pItalValue;
                 getFontface(pWebsiteId, pContext, pFamily, l_api_url, pItalic);
-            ELSE
-                l_chars_normal:=distinct_chars(pNormal || pItalic);
             END IF;
         END IF;
 
         IF (pBoldItalic IS NOT NULL) THEN
-            IF (pItalicSupported=1) THEN
-                l_api_url:=':' || pItalAxis || CASE WHEN pBoldSupported=1 THEN ',wght' END || '@' || pItalValue || CASE WHEN pBoldSupported=1 THEN ',' || getClosestBold(pFontid,'italic') END;
+            IF (pItalicSupported=1 AND pBoldSupported=1) THEN
+                l_api_url:=':' || pItalAxis || ',wght@' || pItalValue || ',' || getClosestBold(pFontid,'italic');
                 getFontface(pWebsiteId, pContext, pFamily, l_api_url, pBoldItalic);
-            ELSE
-                l_chars_bold_normal:=distinct_chars(pBoldNormal || pBoldItalic);
             END IF;
         END IF;
 
-        IF (NVL(l_chars_normal,pNormal) IS NOT NULL) THEN
-            IF (pContext='headings') THEN
-                l_api_url:=CASE WHEN pBoldSupported=1 THEN ':wght@' || getClosestBold(pFontid,'normal') END;
-            ELSE
-                l_api_url:=null;
-            END IF;
-            getFontface(pWebsiteId, pContext, pFamily, l_api_url, NVL(l_chars_normal,pNormal));
+        IF (pNormal IS NOT NULL) THEN
+            l_api_url:=null;
+            getFontface(pWebsiteId, pContext, pFamily, l_api_url, pNormal);
         END IF;
 
-        IF (NVL(l_chars_bold_normal,pBoldNormal) IS NOT NULL) THEN
-            l_api_url:=CASE WHEN pBoldSupported=1 THEN ':wght@' || getClosestBold(pFontid,'normal') END;
-            getFontface(pWebsiteId, pContext, pFamily, l_api_url, NVL(l_chars_bold_normal,pBoldNormal));
+        IF (pBoldNormal IS NOT NULL) THEN
+            IF (pBoldSupported=1) THEN
+                l_api_url:=':wght@' || getClosestBold(pFontid,'normal');
+                getFontface(pWebsiteId, pContext, pFamily, l_api_url, pBoldNormal);
+            END IF;
         END IF;
     END;
 
