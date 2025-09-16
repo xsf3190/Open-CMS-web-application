@@ -4,6 +4,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
+    PROCEDURE getColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pContext IN VARCHAR2, pStatus OUT NUMBER);
+    --
     PROCEDURE getDeploymentStatus(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
@@ -857,6 +859,45 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         apex_json.open_object;
         apex_json.write('success', TRUE);
         apex_json.close_object;
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+
+    END;
+
+    /*
+    ** GET HANDLER FOR SETTING BACKGROUND COLOR AND SHAPES
+    ** pContext IDENTIFIES PAGE SECTION, I.E. "header", "main", "footer"
+    */
+    PROCEDURE getColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pContext IN VARCHAR2, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        l_header:='<small>Select background color for ' || pContext || '</small>';
+
+        l_article:=
+        '<form>' ||
+            '<fieldset>' ||
+                '<label for="' || pContext || '-background-color">Background Color</label>' ||
+                '<input type="color" id="' || pContext || '-background-color" value="' || '#f3f3f3' || '">' || 
+            '</fieldset>' ||
+        '</form>';
+
+        l_footer:='<small>Get shapes from <a href="https://www.shapedivider.app">Shape Divider App</a></small>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
