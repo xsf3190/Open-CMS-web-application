@@ -22,6 +22,27 @@ const loadForm = (data) => {
     output_dialog.showModal();
 }
 
+dialog_article.addEventListener("input", e => {
+
+    const id = e.target.id;
+
+    if (['header-background-color','main-background-color','footer-background-color'].includes(id)) {
+        console.log("id",id);
+        document.documentElement.style.setProperty('--' + id,  e.target.value); 
+        const obj = {};
+        obj.background_color = e.target.value;
+        obj.content=id;
+        callAPI("color/:ID/:PAGE","PUT", obj)
+        .then ( (data) => {
+            console.log("updated backgroundcolor for " +id,data);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+    }
+});
+
+
 export const init = async (element) => {
     if (document.querySelector("head > link[href='" + CK_CSS + "']")) {
         return;
@@ -180,15 +201,15 @@ export const init = async (element) => {
             editor.ui.componentFactory.add( 'colorShape', () => {
                 const button = new ButtonView();
                 button.set( {
-                    label: 'Nackground Colors and Shape',
-                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="0" y="0" width="100" height="100" fill="white" stroke="black" stroke-width="20"/><text x="10" y="70" fill="red" font-size="40" font-weight="900" font-family="system-ui">COL</text>',
-                    tooltip: 'Background color and shape',
+                    label: 'Background Color',
+                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" fill="purple" stroke="black" stroke-width="2"/>',
+                    tooltip: 'Background color',
                     withText: false
                 } );
                 button.on('execute', (_) => {
-                    const context = editor.config.get('context');
-                    console.log("id",context);
-                    callAPI("color/:ID/:PAGE","GET", "?context=" + context)
+                    const content = editor.config.get('content');
+                    console.log("content",content);
+                    callAPI("color/:ID/:PAGE","GET", "?content=" + content)
                     .then( (data) => {
                         loadForm(data);
                     })
@@ -203,7 +224,7 @@ export const init = async (element) => {
 
     const headerConfig = {
         plugins: [ Essentials, Alignment, Autosave, Bold, ColorShape, FontSize, FontColor, Heading, HeadingButtonsUI, Italic, Paragraph, ParagraphButtonUI, SelectFonts, Underline ],
-        toolbar: [ 'heading1', 'paragraph', 'italic', 'bold', 'underline', 'colorShape', '|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment' ],
+        toolbar: [  'colorShape', 'heading1', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment' ],
         // licenseKey: "GPL",
         alignment: {
             options: [
@@ -237,18 +258,20 @@ export const init = async (element) => {
                     return saveData( editor.getData(), endpoint, 'header' );
                 }
         },
-        context: "header",
+        content: "header",
     };
 
     /* Main Config */
+    const wordcount = document.querySelector(".wordcount");
+
     const mainConfig = {
         plugins: [ Essentials,  Alignment, Autosave, BlockQuote, Bold, Clipboard, Code, CodeBlock,  
-                    FontSize, FontColor, FontBackgroundColor,
+                    ColorShape, FontSize, FontColor, FontBackgroundColor,
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
                     Italic, Link, List, ListImages, Paragraph, 
                     SelectAll, SelectFonts, ShowBlocks, Underline, UploadImage, WordCount ],
-        toolbar: [ 'heading', '|', 'undo', 'redo',  '|', 'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
+        toolbar: [ 'colorShape', 'heading', '|', 'undo', 'redo',  '|', 'colorShape, ', 'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
                     '|', 'uploadImage', 'listImages', 'insertImage'],
         menuBar: {
@@ -301,13 +324,17 @@ export const init = async (element) => {
             }
         },
         wordCount: {
-            displayCharacters: true
+            onUpdate: stats => {
+                wordcount.textContent = `Word count: ${ stats.words }`;
+            }
         },
+        content: "main",
     };
 
     const footerConfig = {
-        plugins: [ Essentials, Paragraph, Heading, List, SelectFonts, FontSize, FontColor, FontBackgroundColor, Bold, Italic ],
-        toolbar: [ 'heading', 'bold', 'italic', '|', 'selectFonts', 'fontSize', 'fontColor', 'fontBackgroundColor','|', /*'simpleBox'*/ ],
+        plugins: [ Essentials, ColorShape, Paragraph, Heading, List, FontSize, FontColor, Bold, Italic ],
+        toolbar: [ 'colorShape', 'heading', 'bold', 'italic', '|', 'fontSize', 'fontColor' ],
+        content: "footer",
     }
 
     const editors = [
