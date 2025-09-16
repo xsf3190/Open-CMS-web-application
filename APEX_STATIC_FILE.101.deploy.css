@@ -15,8 +15,6 @@
 }
 
 body {
-    background-color: var(--color-background);
-    color: var(--color-text);
     font-family: var(--font-family-text);
     font-size: var(--step-0);
     line-height: 1.4;
@@ -177,10 +175,14 @@ p + .image.image-style-side {
 }
 
 
-/* HEADER STYLES */
+/* BACKGROUND COLORS */
 
 body>header {
-  background-color: var(--color-primary);
+  background-color: var(--header-background-color);
+}
+
+body>main {
+  background-color: var(--main-background-color);
 }
 
 body>header u {
@@ -196,7 +198,6 @@ body>footer {
   margin-block-start: 1rem;
   font-size: var(--step--1);
   background-color: var(--footer-background-color);
-  color: var(--footer-color);
   padding: 1em;
 }
 
@@ -637,6 +638,7 @@ fieldset {
   align-items: center;
   gap: var(--button-gap);
   padding: var(--button-padding);
+  text-align: center;
 
   /* Colours */
   background: var(--button-bg);
