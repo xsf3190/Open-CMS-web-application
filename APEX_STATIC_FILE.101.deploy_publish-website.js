@@ -9,12 +9,10 @@ const header = output_dialog.querySelector("header");
 const content = output_dialog.querySelector("article");
 const footer = output_dialog.querySelector("footer");
 
-let endpoint;
+const endpoint = "publish-website/:ID";
 let intervalId;
 
 export const init = (element) => {
-    
-    endpoint = element.dataset.endpoint;
 
     sessionStorage.removeItem("pages_edited");
 
