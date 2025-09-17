@@ -93,6 +93,32 @@ export const init = async (element) => {
                 return;
             })
 
+    /* Add "Edit Pages" button to toolbar */
+    class EditPages extends Plugin {
+        init() {
+            const editor = this.editor;
+            editor.ui.componentFactory.add( 'editPages', () => {
+                const button = new ButtonView();
+                button.set( {
+                    label: 'Edit Pages',
+                    class: "my-ck-button_with-text",
+                    withText: true
+                } );
+                button.on('execute', (_) => {
+                    import("deploy_edit-pages")
+                    .then((module) => {
+                        module.init();
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                        console.error("Failed to load EditPages plugin");
+                    });
+                });
+                return button;
+            } );
+        }
+    }
+
     /* Add "Upload Image" button to toolbar */
     class UploadImage extends Plugin {
         init() {
@@ -222,9 +248,35 @@ export const init = async (element) => {
         }
     }
 
+    /* Deploy website  plugin  */
+    class Deploy extends Plugin {
+        init() {
+            const editor = this.editor;
+            editor.ui.componentFactory.add( 'deploy', () => {
+                const button = new ButtonView();
+                button.set( {
+                    label: 'Deploy Website',
+                    class: "my-ck-button_with-text",
+                    withText: true
+                } );
+                button.on('execute', (_) => {
+                    import("deploy_publish-website")
+                    .then((module) => {
+                        module.init();
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                        console.error("Failed to load module deploy_publish-website");
+                    });
+                });
+                return button;
+            } );
+        }
+    }
+
     const headerConfig = {
-        plugins: [ Essentials, Alignment, Autosave, Bold, ColorShape, FontSize, FontColor, Heading, HeadingButtonsUI, Italic, Paragraph, ParagraphButtonUI, SelectFonts, Underline ],
-        toolbar: [  'colorShape', 'heading1', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment' ],
+        plugins: [ Essentials, Alignment, Autosave, Bold, ColorShape, Deploy, EditPages, FontSize, FontColor, Heading, HeadingButtonsUI, Italic, Paragraph, ParagraphButtonUI, SelectFonts, Underline ],
+        toolbar: [  'colorShape', 'heading1', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment', '|', 'editPages', '|', 'deploy' ],
         // licenseKey: "GPL",
         alignment: {
             options: [
@@ -266,14 +318,15 @@ export const init = async (element) => {
 
     const mainConfig = {
         plugins: [ Essentials,  Alignment, Autosave, BlockQuote, Bold, Clipboard, Code, CodeBlock,  
-                    ColorShape, FontSize, FontColor, FontBackgroundColor,
+                    ColorShape, Deploy, 
+                    FontSize, FontColor, FontBackgroundColor,
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
                     Italic, Link, List, ListImages, Paragraph, 
                     SelectAll, SelectFonts, ShowBlocks, Underline, UploadImage, WordCount ],
         toolbar: [ 'colorShape', 'heading', '|', 'undo', 'redo',  '|', 'colorShape, ', 'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
-                    '|', 'uploadImage', 'listImages', 'insertImage'],
+                    '|', 'uploadImage', 'listImages', 'insertImage', '|', 'deploy'],
         menuBar: {
             isVisible: true
         },
@@ -318,9 +371,9 @@ export const init = async (element) => {
         },
         list: {
             properties: {
-            styles: true,
-            startIndex: true,
-            reversed: true
+                styles: true,
+                startIndex: true,
+                reversed: true
             }
         },
         wordCount: {
@@ -332,8 +385,8 @@ export const init = async (element) => {
     };
 
     const footerConfig = {
-        plugins: [ Essentials, ColorShape, Paragraph, Heading, List, FontSize, FontColor, Bold, Italic ],
-        toolbar: [ 'colorShape', 'heading', 'bold', 'italic', '|', 'fontSize', 'fontColor' ],
+        plugins: [ Essentials, ColorShape, Deploy, Paragraph, Heading, List, FontSize, FontColor, Bold, Italic ],
+        toolbar: [ 'colorShape', 'heading', 'bold', 'italic', '|', 'fontSize', 'fontColor', '|', 'deploy' ],
         content: "footer",
     }
 
