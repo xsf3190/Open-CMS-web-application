@@ -322,6 +322,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_menulist LONG;
         l_reports LONG;
         l_test_site BOOLEAN:=FALSE;
+        l_domain_name website.domain_name%type;
         l_netlify_site_id_custom website.netlify_site_id_custom%type;
         l_can_publish VARCHAR2(3);
         n PLS_INTEGER;
@@ -340,8 +341,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         */
         l_test_site:=INSTR(pUrl,'netlify.app')>0;
 
-        SELECT netlify_site_id_custom, CASE WHEN netlify_site_id_custom IS NOT NULL AND NVL(netlify_last_published_custom,created_date) < netlify_last_published THEN 'OK'  ELSE 'NOK' END 
-          INTO l_netlify_site_id_custom, l_can_publish
+        SELECT domain_name, netlify_site_id_custom, CASE WHEN netlify_site_id_custom IS NOT NULL AND NVL(netlify_last_published_custom,created_date) < netlify_last_published THEN 'OK'  ELSE 'NOK' END 
+          INTO l_domain_name, l_netlify_site_id_custom, l_can_publish
           FROM website
          WHERE id=pWebsiteId;
 
@@ -355,7 +356,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                AND r.name=pScope
                AND a.template_id=o.template_id
                AND INSTR(o.uri_template,'authenticate')=0
-             ORDER BY DECODE(o.label,'Publish Website',1,'Website Analytics',2,'Edit Header',3,'Edit Content',4,'Edit Footer',5,'Edit Pages',6,7)
+             ORDER BY DECODE(o.label,'Publish Website',1,'Website Analytics',2,'Edit Content',3,'Edit Footer',4,'Edit Pages',5,6)
         )
         LOOP
             l_reports:=NULL;
@@ -384,6 +385,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_menulist:=l_menulist || '<li><a class="button" data-button-variant="nav-item" href="https://' || REPLACE(pUrl,'.','-') || '.netlify.app' || '">Edit Site</a></li>';
             END IF;
         END LOOP;
+
+        l_menulist:=l_menulist || 
+        '<li><a class="button" data-button-variant="nav-item" href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a></li>';
 
         RETURN (l_menulist);
     END;
