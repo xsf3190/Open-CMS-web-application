@@ -4,7 +4,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
-    PROCEDURE getColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pContext IN VARCHAR2, pStatus OUT NUMBER);
+    PROCEDURE getColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pContent IN VARCHAR2, pStatus OUT NUMBER);
     --
     PROCEDURE getDeploymentStatus(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
@@ -17,6 +17,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     PROCEDURE getFooter(pWebsiteId IN website.id%type, pEyeDropper IN VARCHAR2, pStatus OUT NUMBER);
     --
     PROCEDURE getPages(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    --
+    PROCEDURE updateColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -871,32 +873,67 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     ** GET HANDLER FOR SETTING BACKGROUND COLOR AND SHAPES
     ** pContext IDENTIFIES PAGE SECTION, I.E. "header", "main", "footer"
     */
-    PROCEDURE getColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pContext IN VARCHAR2, pStatus OUT NUMBER) IS
+    PROCEDURE getColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pContent IN VARCHAR2, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
+        l_background_color website_article.header_background_color%type;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        l_header:='<small>Select background color for ' || pContext || '</small>';
+        l_header:='<small>Select background color for ' || pContent || '</small>';
+
+        SELECT CASE pContent WHEN 'header' THEN header_background_color WHEN 'main' THEN main_background_color WHEN 'footer' THEN footer_background_color END
+          INTO l_background_color 
+          FROM website_article
+         WHERE website_id=pWebsiteId
+           AND article_id=pArticleid;
 
         l_article:=
         '<form>' ||
             '<fieldset>' ||
-                '<label for="' || pContext || '-background-color">Background Color</label>' ||
-                '<input type="color" id="' || pContext || '-background-color" value="' || '#f3f3f3' || '">' || 
+                '<label for="' || pContent || '-background-color">Background Color</label>' ||
+                '<input type="color" id="' || pContent || '-background-color" value="' || l_background_color || '">' || 
             '</fieldset>' ||
         '</form>';
 
-        l_footer:='<small>Get shapes from <a href="https://www.shapedivider.app">Shape Divider App</a></small>';
+        l_footer:='<small>Get shapes from <a href="https://www.shapedivider.app" target="a_blank">Shape Divider App</a></small>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('header',l_header);
         l_json.put('article',l_article);
         l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+
+    END;
+
+    /*
+    ** UPDATE BACKGROUND COLOR ACCORDING TO CONTENT
+    */
+    PROCEDURE updateColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodytext IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_ddl VARCHar2(500);
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        FOR C IN (
+            SELECT background_color, REPLACE(content,'-','_') content FROM JSON_TABLE(pBodytext, '$' COLUMNS(background_color, content))
+        ) LOOP
+            l_ddl:='UPDATE website_article SET ' || C.content || '=:B1 WHERE website_id=:B2 AND article_id=:B3';
+            pck_core.log(l_ddl);
+            EXECUTE IMMEDIATE l_ddl USING C.background_color, pWebsiteId, pArticleid;
+        END LOOP;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
