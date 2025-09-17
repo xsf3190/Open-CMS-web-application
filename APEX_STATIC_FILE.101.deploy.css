@@ -1,3 +1,8 @@
+.my-ck-button_with-text {
+  background-color:rebeccapurple !important;
+  color: white !important;
+}
+
 @media (prefers-reduced-motion: no-preference) {
     @view-transition {
         navigation: auto;
@@ -18,7 +23,13 @@ body {
     font-family: var(--font-family-text);
     font-size: var(--step-0);
     line-height: 1.4;
-    font-synthesis: none;
+    /* font-synthesis: none; */
+    animation: 3s infinite flip-synthesis;   
+}
+
+@keyframes flip-synthesis {
+    0% { font-synthesis: none; }
+    100% { font-synthesis: initial; }
 }
 
 blockquote,
@@ -35,10 +46,7 @@ form,
   margin: 0;
 }
 
-main {
-  padding-inline: 1rem;
-  container-type: inline-size;
-}
+
 
 /* Prevent auto font increase on nested elements */
 li {
@@ -73,6 +81,8 @@ img {
 }
 
 body>main {
+  padding-inline: 1rem;
+  container-type: inline-size;
   max-width: var(--max-width);
   margin-inline: auto;
 }
