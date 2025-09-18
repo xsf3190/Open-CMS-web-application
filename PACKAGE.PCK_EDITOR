@@ -16,7 +16,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE getFooter(pWebsiteId IN website.id%type, pEyeDropper IN VARCHAR2, pStatus OUT NUMBER);
     --
-    PROCEDURE getPages(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    PROCEDURE getPages(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE updateColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
     --
@@ -279,13 +279,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /* 
     **  BUILD FORM CONTROLS TO EDIT WEBSITE PAGES
     */
-    PROCEDURE getPages(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
+    PROCEDURE getPages(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_html LONG;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
-            
-        l_html:=
+        
+        l_header:='<small>Manage Website Pages</small>';
+
+        SELECT wa.article_id, wa.navigation_label, wa.collection_type
+          BULK COLLECT INTO pck_codepen.g_nav_labels
+          FROM website w, website_article wa
+         WHERE w.id=pWebsiteId
+           AND wa.website_id=w.id
+         ORDER BY wa.display_order;
+        
+        l_article:=
+            pck_codepen.buildNavLabels(pWebsiteId, pArticleId) ||
             '<fieldset class="flex-items">' ||
                 '<legend><strong>Change / Add / Delete Pages</strong></legend>' ||
                 '<div>' ||
@@ -304,16 +317,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
                 '<button type="button" class="button add-page">Add Page</button>' ||
                 '<button type="button" class="button delete-page">Delete Page</button>' ||
-            '</fieldset>' ||
-            '<ul class="flex-items">' ||
-                '<li><button type="button" class="button publish-changes" data-endpoint="publish-website/" style="--button-bg:rebeccapurple">PUBLISH</button></li>' ||
-                '<li><button type="button" class="button cancel-changes" style="--button-bg:rebeccapurple">CANCEL</button></li>' ||
-            '</ul>';
+                '<button type="button" class="button deploy">Deploy</button>' ||
+            '</fieldset>';
 
-        apex_json.open_object;
-        apex_json.write('success', TRUE); 
-        apex_json.write('html', l_html);
-        apex_json.close_object;
+        l_footer:='<small>DO NOT change navigation labels if migrating an existing site </small>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
