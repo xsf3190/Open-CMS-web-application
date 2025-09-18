@@ -1,12 +1,13 @@
 /*
 **  ADD / CHANGE / DELETE PAGES
 */
-import { output_dialog, dialog_header, dialog_article, dialog_footer } from "deploy_elements";
+import { output_dialog, dialog_header, dialog_article, dialog_footer, dropdown } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-let nav_items;
+let nav_items, edit, errors;
 
 const endpoint = "edit-pages/:ID/:PAGE";
+
 export const init = () => {
     callAPI(endpoint,'GET')
         .then((data) => {
@@ -19,18 +20,19 @@ export const init = () => {
             output_dialog.showModal();
 
             nav_items = dialog_article.querySelector("nav>ul");
+            errors = dialog_article.querySelector(".errors");
 
-            const edit = dialog_article.querySelector("input[name='navigation_label']");
-            const current = nav_items.querySelector("[aria-current='page']")
-            edit.value = current.textContent;
-            setCollectionType(current.dataset.collection);
-            nav_items.querySelector(".visually-hidden")?.classList.remove("visually-hidden");
+            edit = dialog_article.querySelector("input[name='navigation_label']");
+            edit.value = dialog_article.querySelector(".active>a").textContent;
+            setCollectionType(dialog_article.querySelector(".active>a").dataset.collection);
 
             nav_items.addEventListener("click", (e) => {
                 e.preventDefault();
-                removeAriaCurrent();
-                e.target.setAttribute("aria-current","page");
-                const edit = dialog_article.querySelector("input[name='navigation_label']");
+                
+                for(let li of nav_items.children){ //all children of nav 
+                    li.classList.remove("active");
+                }
+                e.target.parentElement.classList.add("active");
                 edit.value = e.target.textContent;
                 setCollectionType(e.target.dataset.collection);
             })
@@ -39,14 +41,6 @@ export const init = () => {
         .catch((error) => {
             handleError(error);
         });
-}
-
-let tmp = 0;
-
-const removeAriaCurrent = () => {
-  nav_items.querySelectorAll("a").forEach( (a) => {
-    a.removeAttribute("aria-current");
-  })
 }
 
 const setCollectionType = (data) => {
@@ -69,30 +63,37 @@ const setCollectionType = (data) => {
 */
 dialog_article.addEventListener("input", (e) => {
     if (e.target.matches("[name='navigation_label']")) {
-        nav_items.querySelector("[aria-current='page']").textContent = e.target.value;
+        errors.textContent = "";
+        nav_items.querySelector(".active>a").textContent = e.target.value;
     }
 
     if (e.target.matches("[name='collection_type']")) {
-        nav_items.querySelector("[aria-current='page']").dataset.collection = e.target.value;
+        errors.textContent = "";
+        nav_items.querySelector(".active>a").dataset.collection = e.target.value;
     }
 })
 
 /*
 ** BUTTON CLICK EVENT HANDLERS
 */
+let tmp = 0;
+const newLabel = "[NEW PAGE]";
+
 dialog_article.addEventListener("click", async (e) => {
     if (e.target.matches(".add-page")) {
-        const target = nav_items.querySelector("[aria-current='page']").parentElement;  // returns <li>
-        removeAriaCurrent();
+        const target = nav_items.querySelector(".active");
+
         const clone = target.cloneNode(true);
-        clone.firstChild.textContent = "[NEW PAGE]";
-        clone.firstChild.dataset.id = tmp--;
-        clone.firstChild.dataset.collection = "N/A";
-        clone.firstChild.setAttribute("aria-current","page");
+        const a = clone.querySelector("a");
+        a.textContent = newLabel;
+        a.dataset.id = tmp--;
+        a.dataset.collection = "N/A";
         
         nav_items.insertBefore(clone, target.nextSibling);
         const edit = dialog_article.querySelector("input[name='navigation_label']");
-        edit.value = "[NEW PAGE]";
+        edit.value = newLabel;
+
+        target.classList.remove("active");
         return;
     }
 
@@ -115,15 +116,45 @@ dialog_article.addEventListener("click", async (e) => {
             e.target.textContent = "Delete Site";
             return;
         }
-        const target = nav_items.querySelector("[aria-current='page']").parentElement;
+        const target = nav_items.querySelector(".active");
         if (target.nextElementSibling) {
-            target.nextElementSibling.firstChild.setAttribute("aria-current","page");
+            target.nextElementSibling.classList.add("active");
         } else {
-            target.previousElementSibling.firstChild.setAttribute("aria-current","page");
+            target.previousElementSibling.classList.add("active");
         }
         const edit = dialog_article.querySelector("input[name='navigation_label']");
-        edit.value = nav_items.querySelector("[aria-current='page']").textContent;
+        edit.value = nav_items.querySelector(".active>a").textContent;
         target.remove();
         return;
+    }
+
+    if (e.target.matches(".deploy")) {
+        const arr = [];
+        nav_items.querySelectorAll("a").forEach ((item) => {
+            const obj = {};
+            obj.article_id = item.dataset.id;
+            obj.collection_type = item.dataset.collection;
+            if (item.textContent === '' || item.textContent===newLabel) {
+                errors.textContent += "Navigation Labels not complete";
+            }
+            obj.navigation_label = item.textContent;
+            arr.push(obj);
+        })
+        if (errors.textContent) {
+            return;
+        }
+
+        await callAPI(endpoint,'POST', arr)
+            .then((data) => {
+                console.log("data",data);
+                if (data.deleted>0) {
+                    window.history.replaceState({}, "", "index.html");
+                }
+            })
+            .catch((error) => {
+                handleError(error);
+            });
+
+        dropdown.querySelector("button.publish-website").click();
     }
 })
