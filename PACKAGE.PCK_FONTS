@@ -83,7 +83,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_text:=REGEXP_REPLACE(l_text,l_code_regex,null,1,0,'n');
         l_text:=REGEXP_REPLACE(l_text,l_nbsp_regex,null,1,0);
 
-        hd:=REGEXP_COUNT(l_text,l_heading_regex);
+        hd:=NVL(REGEXP_COUNT(l_text,l_heading_regex),0);
 
         FOR i IN 1..hd LOOP
             l_heading:=REGEXP_SUBSTR(l_text,l_heading_regex,1,i);
@@ -106,27 +106,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         g_chars_used('headings').chars_bold_normal:=distinct_chars(g_chars_used('headings').chars_bold_normal || l_headings);
         g_chars_used('headings').chars_bold_italic:=distinct_chars(g_chars_used('headings').chars_bold_italic || l_headings_italic);
 
-        IF (hd>0) THEN
+        -- IF (hd>0) THEN
             l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
-        END IF;
+        -- END IF;
 
         /*
         **  NOW PROCESS REST OF THE TEXT
         */
 
-        bi:=REGEXP_COUNT(l_text, l_bold_italic_regex);
+        bi:=NVL(REGEXP_COUNT(l_text, l_bold_italic_regex),0);
         FOR i IN 1..bi LOOP
             l_chars_bold_italic:=l_chars_bold_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_italic_regex,1,i)));
         END LOOP;
         l_text:=REGEXP_REPLACE(l_text,l_bold_italic_regex,null,1,0);
 
-        it:=REGEXP_COUNT(l_text,l_italic_regex);
+        it:=NVL(REGEXP_COUNT(l_text,l_italic_regex),0);
         FOR i IN 1..it LOOP
             l_chars_italic:=l_chars_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_italic_regex,1,i)));
         END LOOP;
         l_text:=REGEXP_REPLACE(l_text,l_italic_regex,null,1,0);
 
-        b:=REGEXP_COUNT(l_text,l_bold_regex);
+        b:=NVL(REGEXP_COUNT(l_text,l_bold_regex),0);
         FOR i IN 1..b LOOP
             l_chars_bold_normal:=l_chars_bold_normal || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_regex,1,i)));
         END LOOP;
