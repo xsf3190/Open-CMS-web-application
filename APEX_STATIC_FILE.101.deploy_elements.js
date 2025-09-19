@@ -43,12 +43,15 @@ export const set_alert = (alert) => {
     }, 1500);
 }
 
-export const selectColorFromScreen = async (abortController) => {
-  const eyeDropper = new EyeDropper();
-  try {
-    const result = await eyeDropper.open({ signal: abortController.signal });
-    return result.sRGBHex;
-  } catch (e) {
-    return null;
-  }
+/*
+** APPLICATION USES SINGLE HTML DIALOG ELEMENT FOR CUSTOM EDITOR FUNCTIONS
+*/
+export const initDialog = (data) => {
+    dialog_header.replaceChildren();
+    dialog_header.insertAdjacentHTML('afterbegin',data.header);
+    dialog_article.replaceChildren();
+    dialog_article.insertAdjacentHTML('afterbegin',data.article);
+    dialog_footer.replaceChildren();
+    dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
+    output_dialog.showModal();
 }
