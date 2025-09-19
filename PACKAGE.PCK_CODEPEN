@@ -12,7 +12,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CODEPEN" is
     --
     FUNCTION buildCssRoot(pWebsiteId IN website.id%type) RETURN VARCHAR2;
     --
-    FUNCTION buildNavLabels(pWebsiteId IN website.id%type, pArticleId IN article.id%type) RETURN VARCHAR2;
+    FUNCTION buildNavLabels(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pEdit in BOOLEAN DEFAULT FALSE) RETURN VARCHAR2;
     --
     PROCEDURE uploadCodepen(pId IN VARCHAR2, pZipFile IN BLOB);
     --
@@ -266,7 +266,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
 
     
 
-    FUNCTION buildNavLabels(pWebsiteId IN website.id%type, pArticleId IN article.id%type) RETURN VARCHAR2 IS
+    FUNCTION buildNavLabels(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pEdit IN BOOLEAN) RETURN VARCHAR2 IS
         l_nav_labels LONG;
         l_nav_length PLS_INTEGER:=0;
         l_article_id article.id%type;
@@ -299,7 +299,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_nav_labels:=l_nav_labels || 
                 '</ul>' ||
             '</nav>';
-        l_nav_labels:=l_nav_labels || buildLoginAside(pWebsiteId) ||
+        IF (pEdit) THEN
+            l_nav_labels:=l_nav_labels ||
+            '<span></span>';
+        ELSE
+            l_nav_labels:=l_nav_labels || buildLoginAside(pWebsiteId);
+        END IF;
+        l_nav_labels:=l_nav_labels ||
         '</div>';
 
         RETURN (l_nav_labels);
