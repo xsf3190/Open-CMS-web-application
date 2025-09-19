@@ -288,7 +288,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
-        l_header:='<small>Manage Website Pages</small>';
+        l_header:='<small>Add / Delete pages, change navigation labels.</small>';
 
         SELECT wa.article_id, wa.navigation_label, wa.collection_type
           BULK COLLECT INTO pck_codepen.g_nav_labels
@@ -298,9 +298,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
          ORDER BY wa.display_order;
         
         l_article:=
-            pck_codepen.buildNavLabels(pWebsiteId, pArticleId) ||
+            pck_codepen.buildNavLabels(pWebsiteId, pArticleId, pEdit=>TRUE) ||
             '<fieldset class="flex-items">' ||
-                '<legend><strong>Change / Add / Delete Pages</strong></legend>' ||
                 '<div>' ||
                     '<label for="navigation-label">Navigation Label</label>' ||
                     '<input type="text" id="navigation-label" name="navigation_label" maxlength="30" value="">' ||
@@ -314,13 +313,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     '<label for="collection_type-portfolio">Portfolio' ||
                     '<input type="radio" id="collection_type-portfolio" name="collection_type" value="PORTFOLIO"></label>' ||
                 '</fieldset>' ||
-
                 '<button type="button" class="button add-page">Add Page</button>' ||
                 '<button type="button" class="button delete-page">Delete Page</button>' ||
                 '<button type="button" class="button deploy">Deploy</button>' ||
+                '<span class="errors" style="color:red"></span>' ||
             '</fieldset>';
 
-        l_footer:='<small>DO NOT change navigation labels if migrating an existing site </small>';
+        l_footer:='<small>TAKE CARE when migrating an existing website to keep the same label names</small>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
@@ -371,7 +370,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 END LOOP;
                 IF (l_moved_article_id IS NULL) THEN
                     INSERT INTO article (id, body_html, author_user_id) 
-                    VALUES (seq_article.nextval, '<article class="flow"></article>', l_session_data.user_id);
+                    VALUES (seq_article.nextval, '<h1>Click to edit</h1>', l_session_data.user_id);
                     INSERT INTO website_article (website_id, article_id, navigation_label, collection_type, user_id, display_order)
                     VALUES (pWebsiteId, seq_article.currval, l_arr(i).navigation_label, l_arr(i).collection_type, l_session_data.user_id, 1);
                     l_arr(i).article_id:=seq_article.currval;
