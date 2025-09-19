@@ -1,41 +1,59 @@
 /*
 **  ADD / CHANGE / DELETE PAGES
 */
-import { output_dialog, dialog_header, dialog_article, dialog_footer, dropdown } from "deploy_elements";
+import { dialog_article, initDialog, dropdown } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-let nav_items, edit, errors;
+let nav_items, edit, collection, errors;
 
 const endpoint = "edit-pages/:ID/:PAGE";
+
+/*
+** USER CLICKS NAVIGATION LABEL IN EDITOR MAKING IT "active"
+*/
+const clickHandler = (e) => {
+    e.preventDefault();
+                
+    for(let li of nav_items.children){
+        li.classList.remove("active");
+    }
+    e.target.parentElement.classList.add("active");
+    edit.value = e.target.textContent;
+    setCollectionType(e.target.dataset.collection);
+}
+
+/*
+** USER CHANGES NAVIGATION LABEL OR PAGE COLLECTTION TYPE
+*/
+const inputHandler = (e) => {
+    if (e.target.matches("[name='navigation_label']")) {
+        errors.textContent = "";
+        nav_items.querySelector(".active>a").textContent = e.target.value;
+    }
+
+    if (e.target.matches("[name='collection_type']")) {
+        errors.textContent = "";
+        nav_items.querySelector(".active>a").dataset.collection = e.target.value;
+    }
+}
 
 export const init = () => {
     callAPI(endpoint,'GET')
         .then((data) => {
-            dialog_header.replaceChildren();
-            dialog_header.insertAdjacentHTML('afterbegin',data.header);
-            dialog_article.replaceChildren();
-            dialog_article.insertAdjacentHTML('afterbegin',data.article);
-            dialog_footer.replaceChildren();
-            dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
-            output_dialog.showModal();
+            initDialog(data);
 
             nav_items = dialog_article.querySelector("nav>ul");
             errors = dialog_article.querySelector(".errors");
 
             edit = dialog_article.querySelector("input[name='navigation_label']");
             edit.value = dialog_article.querySelector(".active>a").textContent;
+
+            collection = dialog_article.querySelectorAll("[name='collection_type']");
             setCollectionType(dialog_article.querySelector(".active>a").dataset.collection);
 
-            nav_items.addEventListener("click", (e) => {
-                e.preventDefault();
-                
-                for(let li of nav_items.children){ //all children of nav 
-                    li.classList.remove("active");
-                }
-                e.target.parentElement.classList.add("active");
-                edit.value = e.target.textContent;
-                setCollectionType(e.target.dataset.collection);
-            })
+            nav_items.addEventListener("click", clickHandler);
+            dialog_article.addEventListener("input", inputHandler);
+            dialog_article.addEventListener("click", buttonHandler);
 
         })
         .catch((error) => {
@@ -44,7 +62,6 @@ export const init = () => {
 }
 
 const setCollectionType = (data) => {
-    const collection = dialog_article.querySelectorAll("[name='collection_type']");
     switch (data) {
         case "N/A":
             collection[0].checked = true;
@@ -58,20 +75,11 @@ const setCollectionType = (data) => {
     }
 }
 
-/*
-** REFLECT CHANGES IMMEDIATELY IN NAV ELEMENTS
-*/
-dialog_article.addEventListener("input", (e) => {
-    if (e.target.matches("[name='navigation_label']")) {
-        errors.textContent = "";
-        nav_items.querySelector(".active>a").textContent = e.target.value;
+const unsetCollection = () => {
+    for( let i = 0; i < collection.length; i++ ) {
+        collection[i].checked = false;
     }
-
-    if (e.target.matches("[name='collection_type']")) {
-        errors.textContent = "";
-        nav_items.querySelector(".active>a").dataset.collection = e.target.value;
-    }
-})
+}
 
 /*
 ** BUTTON CLICK EVENT HANDLERS
@@ -79,7 +87,7 @@ dialog_article.addEventListener("input", (e) => {
 let tmp = 0;
 const newLabel = "[NEW PAGE]";
 
-dialog_article.addEventListener("click", async (e) => {
+const buttonHandler = async (e) => {
     if (e.target.matches(".add-page")) {
         const target = nav_items.querySelector(".active");
 
@@ -90,8 +98,8 @@ dialog_article.addEventListener("click", async (e) => {
         a.dataset.collection = "N/A";
         
         nav_items.insertBefore(clone, target.nextSibling);
-        const edit = dialog_article.querySelector("input[name='navigation_label']");
         edit.value = newLabel;
+        setCollectionType("N/A");
 
         target.classList.remove("active");
         return;
@@ -117,14 +125,10 @@ dialog_article.addEventListener("click", async (e) => {
             return;
         }
         const target = nav_items.querySelector(".active");
-        if (target.nextElementSibling) {
-            target.nextElementSibling.classList.add("active");
-        } else {
-            target.previousElementSibling.classList.add("active");
-        }
-        const edit = dialog_article.querySelector("input[name='navigation_label']");
-        edit.value = nav_items.querySelector(".active>a").textContent;
         target.remove();
+        edit.value = "";
+        unsetCollection();
+        
         return;
     }
 
@@ -157,4 +161,4 @@ dialog_article.addEventListener("click", async (e) => {
 
         dropdown.querySelector("button.publish-website").click();
     }
-})
+}
