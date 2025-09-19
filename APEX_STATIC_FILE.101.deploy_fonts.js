@@ -1,12 +1,28 @@
-import { dialog_header, dialog_article } from "deploy_elements";
+import { dialog_article, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
+const endpoint = "fonts/:ID/:PAGE";
+
+export const init = () => {
+    callAPI(endpoint,"GET", "?context=HTML")
+        .then((data) => {
+            initDialog(data);
+            dialog_article.addEventListener("change", changeHandler);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+}
+
+/*
+** BUILD LIST OF FONTS FOR "headings" OR "text" 
+*/
 const buildFontList = (context) => {
     const category = document.getElementById(context + "-font-category").value;
 
     const query = "?category=" + category + "&context=" + context;
 
-    callAPI('fonts/:ID/:PAGE','GET', query)
+    callAPI(endpoint,'GET', query)
         .then((data) => {
             const family = document.getElementById(context + "-font-family");
             let index = family.options.length;
@@ -20,14 +36,11 @@ const buildFontList = (context) => {
         });
 }
 
-export const init = () => {
-    console.log("Module deploy_fonts loaded successfully");
-}
 
-dialog_article.addEventListener("change", (e) => {
-    /*
-    ** ANY CHANGE REBUILDS LIST Of FONT NAMES
-    */
+/*
+** USER SELECTS FONT CATEGORY OR FONT
+*/
+const changeHandler = (e) => {
     const name = e.target.getAttribute("id");
     const context = name.split("-")[0];
 
@@ -50,7 +63,7 @@ dialog_article.addEventListener("change", (e) => {
         const obj = {};
         obj.font_id = e.target.value;
         obj.context = context;
-        callAPI('fonts/:ID/:PAGE','PUT', obj)
+        callAPI(endpoint,'PUT', obj)
             .then((data) => {
                 const font_family = e.target.options[e.target.selectedIndex].text;
                 if (font_family!=="system-ui") {
@@ -76,16 +89,4 @@ dialog_article.addEventListener("change", (e) => {
                 handleError(error);
             });
     }
-    if (name.includes("wght")) {
-        console.log("change event",e.target.value); /* finger off - update website_font*/
-    }
-
-});
-
-dialog_article.addEventListener("input", (e) => {
-    const name = e.target.getAttribute("id");
-    const context = name.split("-")[0];
-    if (name.includes("wght")) {
-        document.documentElement.style.setProperty("--font-weight-" + context, e.target.value); 
-    }
-});
+};
