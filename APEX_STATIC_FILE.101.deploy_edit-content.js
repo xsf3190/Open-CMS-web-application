@@ -1,47 +1,13 @@
 /*
-** EDIT CONTENT - WRAP CONTENT OF <main> IN CKEDITOR
-** INCLUDE DEPLOY BUTTON IN CKEDITOR TOOLBAR
+** CONFIGURE INLINE CKEDITOR PLUGINS
 */
 
-import { output_dialog, dialog_header, dialog_article, dialog_footer } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 const CK_CSS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.css";
 const CK_JS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.js";
 
 let endpoint;
-
-const loadForm = (data) => {
-    dialog_header.replaceChildren();
-    dialog_header.insertAdjacentHTML('afterbegin',data.header);
-    dialog_article.replaceChildren();
-    dialog_article.insertAdjacentHTML('afterbegin',data.article);
-    dialog_footer.replaceChildren();
-    dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
-
-    output_dialog.showModal();
-}
-
-dialog_article.addEventListener("input", e => {
-
-    const id = e.target.id;
-
-    if (['header-background-color','main-background-color','footer-background-color'].includes(id)) {
-        console.log("id",id);
-        document.documentElement.style.setProperty('--' + id,  e.target.value); 
-        const obj = {};
-        obj.background_color = e.target.value;
-        obj.content=id;
-        callAPI("color/:ID/:PAGE","PUT", obj)
-        .then ( (data) => {
-            console.log("updated backgroundcolor for " +id,data);
-        })
-        .catch((error) => {
-            handleError(error);
-        });
-    }
-});
-
 
 export const init = async (element) => {
     if (document.querySelector("head > link[href='" + CK_CSS + "']")) {
@@ -159,26 +125,13 @@ export const init = async (element) => {
                     withText: false
                 } );
                 button.on('execute', (_) => {
-                    callAPI("upload-media/:ID/:PAGE","GET","?request=image")
-                    .then( (data) => {
-                        loadForm(data);
-
-                        dialog_article.querySelectorAll("button").forEach( (button) => {
-                            button.addEventListener("click", async (e) => {
-                                dialog_article.querySelectorAll(".copied").forEach( (copied) => {
-                                    copied.classList.toggle("copied");
-                                });
-                                e.target.closest("li").classList.toggle("copied");
-                                try {
-                                    await navigator.clipboard.writeText(e.target.src);
-                                } catch (error) {
-                                    handleError(error);
-                                }
-                            });
-                        });
+                    import("deploy_select-media")
+                    .then((module) => {
+                        module.init();
                     })
                     .catch((error) => {
-                        handleError(error);
+                        console.error(error);
+                        console.error("Failed to load module deploy_select-media");
                     });
                 });
                 return button;
@@ -199,20 +152,13 @@ export const init = async (element) => {
                     withText: false
                 } );
                 button.on('execute', (_) => {
-                    callAPI("fonts/:ID/:PAGE","GET", "?context=HTML")
-                    .then( (data) => {
-                        loadForm(data);
-                        import("deploy_fonts")
-                        .then((module) => {
-                            module.init();
-                        })
-                        .catch((error) => {
-                            console.error(error);
-                            console.error("Failed to load module deploy_fonts");
-                        });
+                    import("deploy_fonts")
+                    .then((module) => {
+                        module.init();
                     })
                     .catch((error) => {
-                        handleError(error);
+                        console.error(error);
+                        console.error("Failed to load module deploy_fonts");
                     });
                 });
                 return button;
@@ -233,11 +179,9 @@ export const init = async (element) => {
                     withText: false
                 } );
                 button.on('execute', (_) => {
-                    const content = editor.config.get('content');
-                    console.log("content",content);
-                    callAPI("color/:ID/:PAGE","GET", "?content=" + content)
-                    .then( (data) => {
-                        loadForm(data);
+                    import("deploy_edit-color")
+                    .then((module) => {
+                        module.init(editor.config.get('content'));
                     })
                     .catch((error) => {
                         handleError(error);
