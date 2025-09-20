@@ -7,7 +7,7 @@ import { callAPI, handleError } from "deploy_callAPI";
 
 let widget;
 
-const createWidget =  () => {
+const createWidget =  (multiple) => {
     const arrayToken = localStorage.getItem("refresh").split(".");
     const parsedToken = JSON.parse(atob(arrayToken[1]));
     const cloudName = parsedToken.cld_cloud_name;
@@ -18,11 +18,11 @@ const createWidget =  () => {
     { 
         uploadPreset: uploadPreset,
         cloudName: cloudName,
-        multiple: false,
-        cropping: true,
+        multiple: multiple,
+        cropping: !multiple,
         singleUploadAutoClose: false,
         clientAllowedFormats: 'image',
-        maxFiles: 1
+        // maxFiles: 1
     },
     (error, result) => {
         if (!error && result && result.event === "success") { 
@@ -51,7 +51,7 @@ const createWidget =  () => {
     });
 };
 
-const loadScript = async (url) => {
+const loadScript = async (url, multiple) => {
     return new Promise((resolve, reject) => {
         if (widget) {
             resolve("Widget already created");
@@ -61,7 +61,7 @@ const loadScript = async (url) => {
         let script = document.createElement('script');
 
         script.addEventListener('load', () => {
-            createWidget();
+            createWidget(multiple);
             resolve("Cloudinary Upload Widget created");
         });
 
@@ -74,8 +74,8 @@ const loadScript = async (url) => {
   });
 }
 
-export const init = () => {
-    loadScript("https://upload-widget.cloudinary.com/latest/global/all.js")
+export const init = (multiple) => {
+    loadScript("https://upload-widget.cloudinary.com/latest/global/all.js", multiple)
         .then((result) => {
             console.log(result);
             widget.open();
