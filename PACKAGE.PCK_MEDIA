@@ -505,8 +505,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
             n:=n+1;
             l_clob:=l_clob ||
                 '<li>' ||
-                    '<button type="button" class="button">' ||
-                        '<img draggable="false" src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" loading="' || CASE WHEN n<=4 THEN 'eager' ELSE 'lazy' END || '">' ||
+                    '<button type="button" class="button copy">' ||
+                        '<img draggable="false" style="pointer-events:none" src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" loading="' || CASE WHEN n<=4 THEN 'eager' ELSE 'lazy' END || '">' ||
                     '</button>' ||
                 '</li>';
             /*
