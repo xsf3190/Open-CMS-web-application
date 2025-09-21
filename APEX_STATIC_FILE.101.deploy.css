@@ -22,7 +22,7 @@
 body {
     font-family: var(--font-family-text);
     font-size: var(--step-0);
-    line-height: 1.4;
+    line-height: 1.5;
     /* font-synthesis: none; */
     animation: 3s infinite flip-synthesis;   
 }
@@ -47,30 +47,12 @@ form,
 }
 
 
-
-/* Prevent auto font increase on nested elements */
-li {
-    font-size: var(--step-0);
-}
-
 [role="list"] {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.flow blockquote {
-  inline-size: fit-content;
-  background: var(--color-primary-lightest);
-  border-inline: 0.2em solid var(--color-primary)!important;
-  border-radius: 0.5em;
-  font-style: normal!important;
-  font-stretch: 200%;
-}
-
-.flow blockquote > * {
-  padding: 1em;
-}
 
 img {
   max-width: 100%;
@@ -88,102 +70,6 @@ body>main {
 }
 
 /* NORMALIZE IMAGE INLINE STYLES AND CLASSES THAT ARE INCLUDED BY CKEDITOR */
-
-.image {
-    clear: both;
-    display: table;
-    margin: .9em auto;
-    min-width: 50px;
-    text-align: center;
-}
-
-.image>figcaption {
-    background-color: var(--ck-color-image-caption-background);
-    caption-side: bottom;
-    color: var(--ck-color-image-caption-text);
-    font-size: .75em;
-    outline-offset: -1px;
-    padding: .6em;
-    word-break: break-word;
-    text-align:center;
-}
-
-
-.image.image-style-block-align-left, .image.image-style-block-align-right {
-    max-width: calc(100% - var(--ck-image-style-spacing));
-}
-.image.image-style-align-left, .image.image-style-align-right {
-    clear: none;
-}
-
-.image.image-style-side {
-    float: right;
-    margin-left: var(--ck-image-style-spacing);
-    max-width: 50%;
-}
-
-.image.image-style-align-left {
-    float: left;
-    margin-right: var(--ck-image-style-spacing);
-}
-
-.image.image-style-align-right {
-    float: right;
-    margin-left: var(--ck-image-style-spacing);
-}
-
-.image.image-style-block-align-right {
-    margin-right: 0;
-    margin-left: auto;
-}
-
-.image.image-style-block-align-left {
-    margin-left: 0;
-    margin-right: auto;
-}
-
-.image-style-align-center {
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.image-style-align-left {
-    float: left;
-    margin-right: var(--ck-image-style-spacing);
-}
-
-.image-style-align-right {
-    float: right;
-    margin-left: var(--ck-image-style-spacing);
-}
-
-p + .image.image-style-align-left,
-p + .image.image-style-align-right,
-p + .image.image-style-side {
-    margin-top: 0;
-}
-
-.image.image-style-align-left, .image.image-style-align-right {
-    margin-top: var(--ck-inline-image-style-spacing);
-    margin-bottom: var(--ck-inline-image-style-spacing);
-}
-
-.image.image-style-align-left {
-    margin-right: var(--ck-inline-image-style-spacing);
-}
-
-.image.image-style-align-right {
-    margin-left: var(--ck-inline-image-style-spacing);
-}
-
-.image img {
-    display: block;
-    height: auto;
-    margin: 0 auto;
-    max-width: 100%;
-    min-width: 100%;
-}
-
 
 /* BACKGROUND COLORS */
 
@@ -223,7 +109,7 @@ body>footer>a {
   top: 0;
   color: var(--color-text);
   background-color: var(--color-background);
-  --flex-wrap: wrap;
+  --flex-wrap: nowrap;
   --flex-gap: 0;
 }
 
@@ -549,9 +435,6 @@ main a:hover {
   white-space: nowrap;
 }
 
-pre {
-  padding: 1em;
-}
 form {
   --border: solid 1px var(--color-primary);
   font-family: var(--font-family-ui);
@@ -860,43 +743,7 @@ dialog hr+span {
 /* STYLES FOR PREFORMATTED CODE BLOCKS */
 
 pre {
-  background: rgba(199, 199, 199, 0.3);
-  border: 1px solid #c4c4c4;
-  border-radius: 2px;
-  color: #353535;
-  direction: ltr;
-  font-style: normal;
-  font-size: 60%;
-  tab-size: 4;
-  text-align: left;
   overflow-x: auto;
-}
-pre:has(code) {
-  position: relative;
-}
-pre:has(code)::after {
-  background: #000;
-  color: #fff;
-  position: absolute;
-  font-size: 75%;
-  padding: var(--space-3xs);
-  right: 0;
-  top: 0;
-}
-pre:has(.language-html)::after {
-  content: "HTML";
-}
-pre:has(.language-css)::after {
-  content: "CSS";
-}
-pre:has(.language-javascript)::after {
-  content: "Javascript";
-}
-pre:has(.language-plsql)::after {
-  content: "PL/SQL";
-}
-pre:has(.language-sql)::after {
-  content: "SQL";
 }
 
 /* DEFAULT POINTER CURSOR FOR SUMMARY ELEMENTS */
