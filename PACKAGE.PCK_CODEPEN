@@ -204,8 +204,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             */
 
             l_root_css:=l_root_css || 
-            '--ck-image-style-spacing: 1.5em;' ||
-	        '--ck-inline-image-style-spacing: calc(var(--ck-image-style-spacing) / 2);' ||
             '}';
 
             
