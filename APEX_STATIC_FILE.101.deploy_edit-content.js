@@ -4,15 +4,28 @@
 
 import { callAPI, handleError } from "deploy_callAPI";
 
-const CK_CSS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.css";
-const CK_JS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.js";
-
 let endpoint;
 
 export const init = async (element) => {
+    let CK_CSS, CK_JS;
+
+    const data = await callAPI('ckeditor/:ID',"GET");
+    CK_CSS  = data.ckeditor_css;
+    CK_JS  = data.ckeditor_js;
+    /*
+    callAPI('ckeditor/:ID',"GET")
+        .then((data) => {
+            CK_CSS  = data.ckeditor_css;
+            CK_JS  = data.ckeditor_js;
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+
     if (document.querySelector("head > link[href='" + CK_CSS + "']")) {
         return;
     }
+    */
 
     /* Close menulist popup */
     document.getElementById("menulist").hidePopover();
@@ -45,6 +58,7 @@ export const init = async (element) => {
             Image, ImageCaption, ImageResize, ImageStyle, ImageToolbar, ImageInsert, ImageInsertViaUrl,
             Italic, 
             Link, 
+            LinkImage,
             List, 
             MenuBarMenuListItemButtonView, 
             Paragraph, ParagraphButtonUI, 
@@ -293,7 +307,7 @@ export const init = async (element) => {
                     FontSize, FontColor, FontBackgroundColor,
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
-                    Italic, Link, List, ListImages, Paragraph, 
+                    Italic, Link, LinkImage, List, ListImages, Paragraph, 
                     SelectAll, SelectFonts, ShowBlocks, Underline, UploadImage, UploadImages, WordCount ],
         toolbar: [ 'colorShape', 'heading', '|', 'undo', 'redo',  '|', 'colorShape, ', 'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
@@ -333,11 +347,15 @@ export const init = async (element) => {
             toolbar: [
                 'imageStyle:inline',
                 'imageStyle:block',
+				'imageStyle:side',
                 '|',
                 'imageStyle:wrapText',
+				'imageStyle:breakText',
                 '|',
                 'toggleImageCaption',
                 'imageTextAlternative',
+                '|',
+                'linkImage'
             ]
         },
         list: {
