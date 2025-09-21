@@ -1,6 +1,7 @@
+/* COMMON ELEMENTS AND FUNCTIONS  USED IN APPLICATION */
 export const bodydata = document.body.dataset;
 
-export const dropdown = document.querySelector("#menulist");
+export const dropdown = document.getElementById("menulist");
 export const email = dropdown.querySelector(".email");
 export const expires = dropdown.querySelector(".expires");
 export const login_btn = dropdown.querySelector(".login-btn");
@@ -11,9 +12,9 @@ export const dialog_article = output_dialog.querySelector("article");
 export const dialog_footer = output_dialog.querySelector("footer");
 
 export const nav = document.querySelector(".topnav");
-export const header = document.querySelector("body>header");
-export const main = document.querySelector("body>main");
-export const footer = document.querySelector("body>footer");
+export const header = document.getElementById("header");
+export const main = document.getElementById("main");
+export const footer = document.getElementById("footer");
 
 export const getJWTClaim = (claim) => {
     const arrayToken = localStorage.getItem("refresh")?.split(".");
