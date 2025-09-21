@@ -6,7 +6,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_MEDIA" IS
     --
     FUNCTION getImageSrcset(pAssetId IN asset.id%type, pSizes IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2;
     --
-    FUNCTION getThumbnails(pArticleId IN article.id%type, pRequest IN VARCHAR2, pNbImages IN OUT NUMBER) RETURN CLOB;
+    FUNCTION getThumbnails(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pRequest IN VARCHAR2, pNbImages IN OUT NUMBER) RETURN CLOB;
     --
     PROCEDURE getThumbnails(pArticleId IN article.id%type, pDeploy IN BOOLEAN DEFAULT FALSE, pHTML IN OUT NOCOPY CLOB);
     --
@@ -53,7 +53,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
             apex_json.write('googleApiKey', l_google_api_key);
             apex_json.close_object;
         ELSE
-            l_thumbnails:=pck_media.getThumbnails(pArticleId, pRequest, l_nb_images);
+            l_thumbnails:=pck_media.getThumbnails(pWebsiteId,pArticleId, pRequest, l_nb_images);
 
             APEX_JSON.open_object; 
             APEX_JSON.write('success', TRUE);
@@ -487,7 +487,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     /*
      **  Build list of thumbnail images for a given article
      */
-    FUNCTION getThumbnails(pArticleId IN article.id%type, pRequest IN VARCHAR2, pNbImages IN OUT NUMBER) RETURN CLOB
+    FUNCTION getThumbnails(pWebsiteid IN website.id%type, pArticleId IN article.id%type, pRequest IN VARCHAR2, pNbImages IN OUT NUMBER) RETURN CLOB
     IS
         l_clob CLOB;
         n PLS_INTEGER:=0;
@@ -495,12 +495,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_clob:='<ul role="list" class="carousel">';
 
         FOR C IN (
-            SELECT id, cld_cloud_name, resource_type, public_id, width, height, format
-              FROM asset
-             WHERE article_id=pArticleId
-               AND NVL(format,'N/A')<>'clt'
-               AND resource_type=pRequest
-             ORDER BY created_date DESC )
+            WITH articles AS
+            (
+                SELECT article_id FROM website_article WHERE website_id=pWebsiteid
+                UNION ALL
+                SELECT id FROM article WHERE parent_id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A')
+            )
+            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format
+              FROM asset a, articles w
+             WHERE a.article_id=w.article_id
+               AND NVL(a.format,'N/A')<>'clt'
+               AND a.resource_type='image'
+             ORDER BY a.created_date DESC )
         LOOP
             n:=n+1;
             l_clob:=l_clob ||
