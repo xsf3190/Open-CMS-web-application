@@ -202,49 +202,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END; 
 
     /*
-    ** ADJUST <img> ELEMENTS TO INCLUDE SRCSET WITH SIZES="ANY"
+    ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT FIRST, ASSUMING ONLY FIRST IMAGE WILL BE IN VIEWPORT
     */
-    PROCEDURE setImgSrcset(pArticleid IN article.id%type, pHeroAssetid IN website.hero_asset_id%type, pImgCount IN OUT PLS_INTEGER, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
-        l_img_regex varchar2(50):='("https://res.cloudinary.com(.+?)")';
-        l_img_src VARCHAR2(2000);
-        l_srcset VARCHAR2(2000);
-        l_public_id asset.public_id%type;
+    PROCEDURE setImgSrcset(pArticleid IN article.id%type, pImgCount IN OUT PLS_INTEGER, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
+        l_img_regex varchar2(15):='<img(.+?)>';
+        l_img_html VARCHAR2(2000);
         n PLS_INTEGER;
     BEGIN
-        -- ONLY DO THIS IF IMAGE FORMATS ARE AVIF
-        SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM asset WHERE article_id=pArticleid AND format='avif');
-        IF (n=0) THEN 
-            RETURN;
-        END IF;
-
-        pImgCount:=REGEXP_COUNT(pBodyHtml,l_img_regex);
-        n:=pImgCount;
-
-        IF (n=0) THEN 
-            RETURN;
-        END IF;
-
-        -- APPEND srcset attribute to <img> element. "alt" attribute is entered by user in editor
-
+        n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
         FOR i IN 1..n LOOP
-            l_img_src:=REGEXP_SUBSTR(pBodyHtml,l_img_regex,1,i);
-            l_public_id:=RTRIM(SUBSTR(l_img_src,INSTR(l_img_src,'/',-1)+1),'"');
-            FOR C IN (
-                SELECT cld_cloud_name, breakpoints FROM asset WHERE article_id=pArticleid AND public_id=l_public_id
-            ) LOOP
-                FOR C1 IN (SELECT column_value AS breakpoint FROM TABLE(apex_string.split(C.breakpoints,','))) LOOP
-                    l_srcset:=l_srcset || 'https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || l_public_id || ' ' || C1.breakpoint || 'w,';
-                END LOOP;
-                l_srcset:=RTRIM(l_srcset,',');
-            END LOOP;
-            l_img_src:=l_img_src || ' sizes="10vw" srcset="' || l_srcset || '"';
-            IF (pHeroAssetid IS NOT NULL) THEN
-                l_img_src:=l_img_src || ' loading="lazy"';
-            ELSIF (i>1) THEN
-                l_img_src:=l_img_src || ' loading="lazy"';
+            l_img_html:=regexp_substr(pBodyHtml,l_img_regex,1,i);
+            IF (i>1) THEN
+                l_img_html:=REPLACE(l_img_html,'<img','<img loading="lazy"');
             END IF;
-            pBodyHtml:=REGEXP_REPLACE(pBodyHtml,l_img_regex,l_img_src,1,i);
+            dbms_output.put_line(l_img_html);
+            pBodyHtml:=regexp_replace(pBodyHtml,l_img_regex,l_img_html,1,i);
         END LOOP;
+        pImgCount:=n;
     END;
 
     /*
@@ -471,7 +445,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /*
             ** SET IMAGE SRCSET FOR ANY IMAGES INCLUDED IN BODY_HTML
             */
-            setImgSrcset(l_labels(i).article_id, l_labels(i).hero_asset_id, l_labels(i).img_count, l_labels(i).body_html);
+            setImgSrcset(l_labels(i).article_id, l_labels(i).img_count, l_labels(i).body_html);
 
             IF (l_labels(i).collection_type='BLOG') THEN
                 l_is_blog:=TRUE;
@@ -578,7 +552,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ** ==> NEED TO OPTIMISE THIS PROCESS
         */
         
-
+        /* GET CKEDITOR CONTENT STYLES IF THIS IS A FIRST DEPLOYMENT */
+        
         /* DETERMINE IF MAIN CSS FILE CHANGED SINCE LAST DEPLOYMENT */
         SELECT CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)
           INTO l_css_updated_date
@@ -628,6 +603,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 
                 pck_api.callMinifyCss(C.file_content, l_css_minified);
                 dbms_lob.append(l_css,l_css_minified);
+
+                pck_api.callCKEditor(l_styles_edit);
+                dbms_lob.append(l_css,l_styles_edit);
 
                 addDeploy('css/styles.min.css', l_css);
                 dbms_lob.freetemporary(l_css);
