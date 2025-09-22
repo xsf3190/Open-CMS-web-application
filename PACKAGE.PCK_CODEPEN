@@ -554,7 +554,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         pHtml:=
             buildNavLabels(pWebsiteId,pArticleId) || 
             l_header || 
-            '<main id="main" class="flow">' || 
+            '<main id="main" class="ck-content flow">' || 
                 pPromotion ||
                 pHtml  || 
             '</main>' || 
