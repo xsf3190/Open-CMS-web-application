@@ -18,6 +18,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_API" IS
     --
     PROCEDURE callBrowserAPI(pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB);
     --
+    PROCEDURE callCKEditor(pData IN OUT NOCOPY CLOB);
+    --
     PROCEDURE callCloudinaryAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
     --
     PROCEDURE callGithubAPI(pUserId IN users.id%type, pRepository IN VARCHAR2 DEFAULT 'DEPLOY', pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
@@ -130,6 +132,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
             RAISE_APPLICATION_ERROR(-20070, 'Error: neither clob nor blob is set ' || l_url);
         END IF;
         
+        IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
+            RETURN;
+        END IF;
+
+        RAISE_APPLICATION_ERROR(-20070, 'Error:' || apex_web_service.g_status_code || ' - ' || l_url);
+    END;
+
+    /*
+    ** CKEDITOR
+    */
+    PROCEDURE callCKEditor(pData IN OUT NOCOPY CLOB) IS
+        l_url VARCHAR2(100):=pck_core.CKEDITOR_CONTENT_CSS;
+    BEGIN
+        apex_web_service.clear_request_headers;
+        pData := apex_web_service.make_rest_request(p_url=>l_url, p_http_method=>'GET');
+
         IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
             RETURN;
         END IF;
