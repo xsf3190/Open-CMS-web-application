@@ -12,6 +12,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CORE" AS
     --
     FUNCTION buildProductList(pWebsiteId IN website_article.website_id%type, pArticleId IN website_article.article_id%type) RETURN CLOB;
     --
+    PROCEDURE getCKEditor(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER);
+    --
     FUNCTION getRestUrl RETURN VARCHAR2;
     --
     PROCEDURE log(pMsg IN VARCHAR2);
@@ -24,9 +26,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CORE" AS
     --
     FUNCTION password RETURN VARCHAR2;
     --
+    CKEDITOR_VERSION CONSTANT VARCHAR2(10):='43.2.0';
+    --
+    CKEDITOR_CSS CONSTANT VARCHAR2(100):='https://cdn.ckeditor.com/ckeditor5/' || CKEDITOR_VERSION || '/ckeditor5.css';
+    CKEDITOR_JS CONSTANT VARCHAR2(100):='https://cdn.ckeditor.com/ckeditor5/' || CKEDITOR_VERSION || '/ckeditor5.js';
+    CKEDITOR_CONTENT_CSS CONSTANT VARCHAR2(100):='https://cdn.ckeditor.com/ckeditor5/' || CKEDITOR_VERSION || '/ckeditor5-content.css';
 END;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
+
+    
 
     PROCEDURE log(pMsg IN OUT NOCOPY CLOB) IS PRAGMA AUTONOMOUS_TRANSACTION;
         l_calling_subprogram1 varchar2(128); -- package name, standalone function name, standalone procedure name or "__anonymous_block".
@@ -128,6 +137,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
         apex_json.close_object;
 
         pStatus:=CASE WHEN SQLCODE=-20000 THEN 401 ELSE 400 END;
+    END;
+
+    /*
+    ** LAST "HASSLE-FREE" VERSION OF CKEDITOR
+    */
+    PROCEDURE getCKEditor(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('ckeditor_css', CKEDITOR_CSS);
+        l_json.put('ckeditor_js', CKEDITOR_JS);
+        apex_util.prn(l_json.to_clob,false);
+        
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
     END;
 
     /*
