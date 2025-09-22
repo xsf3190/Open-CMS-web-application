@@ -219,7 +219,7 @@ h3 {
 h4 {
   font-size: var(--step-1);
 }
-p {
+p, ul:not([role]), ol:not([role]) {
   font-size: var(--step-0);
   text-wrap: pretty;
 }
@@ -1112,66 +1112,6 @@ input:where([type="checkbox"][role="switch"]):checked::before {
 }
 
 /* EDITOR STYLES */
-
-/* COMMON EDITOR STYLES */
-.edit-header, .edit-footer {
-    font-size: var(--step--2);
-}
-.edit-header legend, .edit-footer legend {
-    font-stretch: 125%;
-    font-weight: 600;
-}
-.edit-header label, .edit-footer label {
-    font-weight:500;
-}
-.edit-header label > *, .edit-footer label > * {
-    margin-inline-start: 0.5em;
-    font: inherit;
-}
-
-/* EDIT HEADER STYLES */
-.edit-header:has(*) {
-    display: grid;
-    grid-template-areas:
-        "background title"
-        "buttons subtitle";
-    grid-template-columns: max-content 1fr;
-    gap: 1em;
-    padding: 0.5em;
-}
-
-@media (width <= 600px) {
-    .edit-header {
-        grid-template-areas: 
-            "background"
-            "buttons"
-            "title"
-            "subtitle";
-        grid-template-columns: 1fr;
-    }
-}
-
-.edit-header > fieldset {
-    inline-size: fit-content;
-}
-.edit-header > fieldset.background-color {
-    grid-area: background;
-    align-self: start;
-    justify-self: center;
-}
-.edit-header > fieldset.title-font {
-    grid-area: title;
-}
-.edit-header > fieldset.subtitle-font {
-    grid-area: subtitle;
-}
-.edit-header > div.buttons {
-    grid-area: buttons;
-}
-.edit-header > svg {
-    display: none;
-}
-
 
 /* EDIT FOOTER STYLES */
 edit-footer, edit-footer>div {
