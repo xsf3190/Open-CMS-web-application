@@ -67,12 +67,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     BEGIN
         DELETE article_chars WHERE article_id=pArticleId;
 
-        SELECT a.body_html || wa.header_html
-          INTO l_text 
-          FROM article a, website_article wa
-         WHERE a.id=pArticleId
-           AND wa.website_id=pWebsiteid
-           AND wa.article_id(+)=a.id;
+        /* 
+        ** article content should exist for pArticleId in all cases although may be null 
+        ** if article is top level web page there may also be content in website.article.header_html
+        */ 
+        FOR C IN (
+            SELECT body_html FROM article WHERE id=pArticleId
+        ) LOOP
+            l_text :=C.body_html;
+            FOR C1 IN (
+                SELECT header_html FROM website_article WHERE website_id=pWebsiteid AND article_id=pArticleId
+            ) LOOP
+                l_text:=l_text || C1.header_html;
+            END LOOP;
+        END LOOP;
         
         /* 
         ** REMOVE <code></code>  AND <p>&nbsp;</p>
