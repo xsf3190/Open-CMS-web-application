@@ -507,11 +507,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         /* 
         ** Build website header 
         */
-        SELECT '<header id="header">' || header_html || '</header>' || CASE WHEN pHeroAssetId IS NULL THEN g_curve END
-          INTO l_header
-          FROM website_article
-         WHERE website_id=pWebsiteId
-           AND article_id=pArticleId;
+        l_header:='<header id="header">';
+        FOR C IN (
+            SELECT header_html 
+              FROM website_article
+             WHERE website_id=pWebsiteId
+               AND article_id=pArticleId
+        ) LOOP
+            l_header:=l_header || C.header_html;
+        END LOOP;
+        l_header:=l_header || '</header>';
 
         l_footer:=
             '<footer id="footer" class="flex-items">' ||
