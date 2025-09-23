@@ -7,7 +7,7 @@ export const expires = dropdown.querySelector(".expires");
 export const login_btn = dropdown.querySelector(".login-btn");
 export const login_dialog = document.querySelector("dialog.login-email");
 export const output_dialog = document.querySelector("dialog.output");
-export const dialog_header = output_dialog.querySelector("header>:first-child");
+export const dialog_header = output_dialog.querySelector("header");
 export const dialog_article = output_dialog.querySelector("article");
 export const dialog_footer = output_dialog.querySelector("footer");
 
@@ -49,7 +49,8 @@ export const set_alert = (alert) => {
 */
 export const initDialog = (data) => {
     dialog_header.replaceChildren();
-    dialog_header.insertAdjacentHTML('afterbegin',data.header);
+    const header = data.header + '<button type="button" class="button close no-focus" data-button-variant="round-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#cross"></use></svg></button>';
+    dialog_header.insertAdjacentHTML('afterbegin',header);
     dialog_article.replaceChildren();
     dialog_article.insertAdjacentHTML('afterbegin',data.article);
     dialog_footer.replaceChildren();
