@@ -12,20 +12,6 @@ export const init = async (element) => {
     const data = await callAPI('ckeditor/:ID',"GET");
     CK_CSS  = data.ckeditor_css;
     CK_JS  = data.ckeditor_js;
-    /*
-    callAPI('ckeditor/:ID',"GET")
-        .then((data) => {
-            CK_CSS  = data.ckeditor_css;
-            CK_JS  = data.ckeditor_js;
-        })
-        .catch((error) => {
-            handleError(error);
-        });
-
-    if (document.querySelector("head > link[href='" + CK_CSS + "']")) {
-        return;
-    }
-    */
 
     /* Close menulist popup */
     document.getElementById("menulist").hidePopover();
@@ -108,7 +94,7 @@ export const init = async (element) => {
                 button.set( {
                     label: 'Upload Image',
                     icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M1.201 1C.538 1 0 1.47 0 2.1v14.363c0 .64.534 1.037 1.186 1.037h9.494a3 3 0 0 1-.414-.287 3 3 0 0 1-1.055-2.03 3 3 0 0 1 .693-2.185l.383-.455-.02.018-3.65-3.41a.695.695 0 0 0-.957-.034L1.5 13.6V2.5h15v5.535a2.97 2.97 0 0 1 1.412.932l.088.105V2.1c0-.63-.547-1.1-1.2-1.1zm11.713 2.803a2.146 2.146 0 0 0-2.049 1.992 2.14 2.14 0 0 0 1.28 2.096 2.13 2.13 0 0 0 2.644-3.11 2.13 2.13 0 0 0-1.875-.978"/><path d="M15.522 19.1a.79.79 0 0 0 .79-.79v-5.373l2.059 2.455a.79.79 0 1 0 1.211-1.015l-3.352-3.995a.79.79 0 0 0-.995-.179.8.8 0 0 0-.299.221l-3.35 3.99a.79.79 0 1 0 1.21 1.017l1.936-2.306v5.185c0 .436.353.79.79.79"/><path d="M15.522 19.1a.79.79 0 0 0 .79-.79v-5.373l2.059 2.455a.79.79 0 1 0 1.211-1.015l-3.352-3.995a.79.79 0 0 0-.995-.179.8.8 0 0 0-.299.221l-3.35 3.99a.79.79 0 1 0 1.21 1.017l1.936-2.306v5.185c0 .436.353.79.79.79"/></svg>',
-                    tooltip: 'Upload Image',
+                    tooltip: 'Upload 1 Image to crop',
                     withText: false
                 } );
                 button.on('execute', (_) => {
@@ -276,8 +262,7 @@ export const init = async (element) => {
                     model: 'heading1', 
                     icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><text x="6" y="18" fill="red" font-size="20" font-weight="700" font-family="system-ui">T</text>',
                     view: {
-                        name: 'h1',
-                        classes: 'title'
+                        name: 'h1'
                     },
                     title: 'Title', 
                     class: 'ck-heading_heading1' 
@@ -374,9 +359,16 @@ export const init = async (element) => {
     };
 
     const footerConfig = {
-        plugins: [ Essentials, ColorShape, Deploy, Paragraph, Heading, List, FontSize, FontColor, Bold, Italic ],
-        toolbar: [ 'colorShape', 'heading', 'bold', 'italic', '|', 'fontSize', 'fontColor', '|', 'deploy' ],
+        plugins: [ Essentials, ColorShape, Alignment, Deploy, Paragraph ],
+        toolbar: [ 'colorShape', 'paragraph', 'alignment', '|', 'deploy' ],
         content: "footer",
+        alignment: {
+            options: [
+                {name:'left', className: 'align-left'},
+                {name:'right', className: 'align-right'},
+                {name:'center', className: 'align-center'}
+            ]
+        },
     }
 
     const editors = [
@@ -388,6 +380,10 @@ export const init = async (element) => {
 
         if ( !element ) {
             return;
+        }
+
+        if (element.hasAttribute("nocontent")) {
+            element.insertAdjacentHTML("beforeend",'<p class="align-center"><span class="text-big">Click to add ' + id + ' content</span></p>');
         }
 
         let config;
