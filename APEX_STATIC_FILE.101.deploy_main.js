@@ -2,6 +2,7 @@ const bodydata = document.body.dataset;
 const dropdown = document.querySelector("#menulist");
 const login_btn = dropdown.querySelector(".login-btn");
 const email = dropdown.querySelector(".email");
+const dialog_header = document.querySelector("dialog.output header");
 const vitalsQueue = new Set();
 const narrow_viewport = window.matchMedia("(width <= 600px)");
 
@@ -37,28 +38,45 @@ const pages_set = new Set(pages_visited);
 pages_set.add(page_id);
 sessionStorage.setItem("pages_visited",JSON.stringify(Array.from(pages_set)));
 
-/*
-** DIALOG CLOSE BUTTON HANDLERS
+/* 
+** 1. CLOSE DIALOG IF USER CLICKS CLOSE BUTTON 
+** 2. DYNAMIC LoaD AND EXECUTE MODULE
 */
-document.querySelectorAll("dialog button.close").forEach((button) => {
-    button.addEventListener("click", (e) => {
+const clickHandler = async (e) => {
+    if (e.target.classList.contains("close")) {
         e.target.closest("dialog").close();
-    });
-});
+    } else {
+        let module_name = e.target.dataset.endpoint;
+        if (!module_name) return;
+
+        if (!document.querySelector("head > [type='importmap']")) {
+            await importmap();
+        }
+        
+        module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
+        const module = await import(module_name)
+        .catch((error) => {
+            console.error(error);
+            console.error("Failed to load " + module_name);
+        });
+        module.init(e.target);
+    }
+}
 
 /*
-** SET DROPDOWN ELEMENTS IF LOGGED IN
+** SET DROPDOWN ELEMENTS AND EVENT HANDLERS IF LOGGED IN
 */
 let aud = "";
 const jwt = localStorage.getItem("refresh");
 if (jwt) {
-    console.log("Refresh token exists. User is logged in");
     dropdown.insertAdjacentHTML('beforeend',localStorage.getItem("menulist"));
     login_btn.textContent = "Log Out";
     const array = jwt.split(".");
     const parse = JSON.parse(atob(array[1]));
     email.textContent = parse.sub;
     aud = parse.aud;
+    console.log("Refresh token exists. User is logged in as " + aud);
+    dialog_header.addEventListener("click", clickHandler);
 }
 
 /*
@@ -77,22 +95,7 @@ const importmap = async () => {
 /*
 ** CLICK HANDLER FOR ALL BUTTONS IN DROPDOWN MENULIST
 */
-dropdown.addEventListener("click", async (e) => {
-    let module_name = e.target.dataset.endpoint;
-    if (!module_name) return;
-
-    if (!document.querySelector("head > [type='importmap']")) {
-        await importmap();
-    }
-    
-    module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
-    const module = await import(module_name)
-    .catch((error) => {
-        console.error(error);
-        console.error("Failed to load " + module_name);
-    });
-    module.init(e.target);
-})
+dropdown.addEventListener("click", clickHandler);
 
 /*
 ** PROMOTION BUTTON IS FOR VISITOR TO CREATE THEIR OWN WEBSITE - SIMULATE  LOG IN WITH DOMAIN NAME PROMPT
@@ -221,13 +224,23 @@ if ('onpagehide' in self) {
     }, { capture: true} );
 }
 
+const load_edited_page = async () => {
+    await importmap();
+    const module_name = "deploy_edited-content";
+    const module = await import(module_name)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+    });
+    module.init();
+}
 /*
 ** INITIALIZE EDITOR IF PAGE PREVIOUSLY EDITED IN THE SESSION
 */
 const pages_edited = JSON.parse(sessionStorage.getItem("pages_edited"));
 const pages_edited_set = new Set(pages_edited);
 if (pages_edited_set.has(Number(document.body.dataset.articleid))) {
-    dropdown.querySelector(".edit-content").click();
+    load_edited_page();
 }
 
 const secondsToHms = (d) => {
