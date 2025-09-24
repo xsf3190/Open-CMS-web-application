@@ -34,6 +34,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    FUNCTION createWebsite(pWebsiteId IN website.id%type, pEmail IN users.email%type, pUserId IN users.id%type, pEncKey IN user_ords_clients.client_secret%type, 
+                pcldCloudName IN users.cld_cloud_name%type, pCldUploadPreset IN users.cld_upload_preset%type) RETURN VARCHAR2;
+    --
     PROCEDURE getMenulist(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pDomain IN VARCHAR2, pStatus OUT NUMBER);
@@ -258,7 +261,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_passcode_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_passcode,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
 
                 IF (l_user_id=0) THEN
-                    INSERT INTO users (email, login_status, passcode, domain) VALUES (l_email, 'AUTH WAITING', l_passcode_hash, l_domain);
+                    INSERT INTO users (email, login_status, passcode, domain) 
+                    VALUES (l_email, 'AUTH WAITING', l_passcode_hash, l_domain)
+                    RETURNING id INTO l_user_id;
                 ELSE
                     UPDATE users SET login_status='AUTH WAITING', passcode=l_passcode_hash, domain=l_domain, updated_date=current_timestamp WHERE id=l_user_id;
                 END IF;
@@ -356,7 +361,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                AND r.name=pScope
                AND a.template_id=o.template_id
                AND INSTR(o.uri_template,'authenticate')=0
-             ORDER BY DECODE(o.label,'Publish Website',1,'Website Analytics',2,'Edit Content',3,'Edit Footer',4,'Edit Pages',5,6)
+             ORDER BY DECODE(o.label,'Publish Website',1,'Website Analytics',2,'Edit Content',3,'Edit Pages',4,5)
         )
         LOOP
             l_reports:=NULL;
@@ -589,6 +594,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_cld_cloud_name users.cld_cloud_name%type:=pCldCloudName;
         l_cld_upload_preset users.cld_upload_preset%type:=pCldUploadPreset;
     BEGIN
+        pck_core.log('Trying to issue token for ' || pEmail || ' - accessing website id '|| pWebsiteId);
         SELECT client_secret 
           INTO l_jwt_enc_key
           FROM user_ords_clients
