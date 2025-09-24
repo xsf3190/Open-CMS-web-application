@@ -285,15 +285,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         '<div class="topnav flex-items space-between">' ||
             '<span class="logo"></span>' ||
             '<nav aria-label="Main Navigation"'|| CASE WHEN l_nav_length>40 THEN ' class="can-shrink"' END || '>' ||
-                '<ul role="list" class="flex-items" style="--flex-gap:.5rem;--flex-wrap:nowrap">';
-        FOR i IN 1..g_nav_labels.COUNT LOOP
+                '<ul role="list" class="flex-items" style="--flex-wrap:wrap">';
+        IF (pEdit AND g_nav_labels.COUNT=1) THEN
             l_nav_labels:=l_nav_labels || 
-                '<li' || CASE WHEN g_nav_labels(i).article_id=l_article_id THEN ' class="active"' END || '><a href="/' || CASE WHEN i>1 THEN apex_string_util.get_slug(g_nav_labels(i).navigation_label) END || '"' ||
-                    CASE WHEN g_nav_labels(i).article_id=l_article_id THEN ' aria-current="page"' END  || 
-                    CASE WHEN g_nav_labels.COUNT=1 THEN ' class="visually-hidden"' END ||
-                    ' data-id="' || g_nav_labels(i).article_id || '" data-collection="' || g_nav_labels(i).collection_type || '">' || g_nav_labels(i).navigation_label || 
-                '</a></li>';
-        END LOOP;
+                '<li class="active"><a href="/" aria-current="page" data-id="' || pArticleid || '" data-collection="N/A">Home</a></li>';
+        ELSE
+            FOR i IN 1..g_nav_labels.COUNT LOOP
+                l_nav_labels:=l_nav_labels || 
+                    '<li' || CASE WHEN g_nav_labels(i).article_id=l_article_id THEN ' class="active"' END || '><a href="/' || CASE WHEN i>1 THEN apex_string_util.get_slug(g_nav_labels(i).navigation_label) END || '"' ||
+                        CASE WHEN g_nav_labels(i).article_id=l_article_id THEN ' aria-current="page"' END  || 
+                        CASE WHEN g_nav_labels.COUNT=1 THEN ' class="visually-hidden"' END ||
+                        ' data-id="' || g_nav_labels(i).article_id || '" data-collection="' || g_nav_labels(i).collection_type || '">' || g_nav_labels(i).navigation_label || 
+                    '</a></li>';
+            END LOOP;
+        END IF;
         l_nav_labels:=l_nav_labels || 
                 '</ul>' ||
             '</nav>';
@@ -507,19 +512,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         /* 
         ** Build website header 
         */
-        l_header:='<header id="header">';
+        
         FOR C IN (
             SELECT header_html 
               FROM website_article
              WHERE website_id=pWebsiteId
                AND article_id=pArticleId
         ) LOOP
-            l_header:=l_header || C.header_html;
+            l_header:='<header id="header"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
         END LOOP;
-        l_header:=l_header || '</header>';
 
         l_footer:=
-            '<footer id="footer" class="flex-items">' ||
+            '<footer id="footer" class="flex-items" nocontent></footer>';
+
+            /*
                 CASE WHEN pContactEmail IS NOT NULL THEN
                 '<a class="icon-with-text" href="mailto:' || pContactEmail || '">' ||
                     '<svg class="icon" aria-hidden="true" focusable="false"><use href="#email"></use></svg><span>' || pContactEmail || '</span>' ||
@@ -544,8 +550,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 '<a class="icon-with-text" href="https://www.instagram.com/' || pInstagramName || '">' ||
                     '<svg class="icon" aria-hidden="true" focusable="false"><use href="#instagram"></use></svg><span>Instagram</span>' ||
                 '</a>'
-                END ||
-            '</footer>';
+                END
+                */
+            
 
 
         /* 
@@ -559,7 +566,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         pHtml:=
             buildNavLabels(pWebsiteId,pArticleId) || 
             l_header || 
-            '<main id="main" class="ck-content flow">' || 
+            '<main id="main" class="ck-content flow"' || CASE WHEN pHtml IS NULL THEN ' nocontent' END || '>' || 
                 pPromotion ||
                 pHtml  || 
             '</main>' || 
