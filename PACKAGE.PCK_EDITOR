@@ -70,25 +70,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         ** Rebuild es-modules CDN if Admin user deploying their test site AND last source updated date is after last CDN updated_date
         */
         FOR C IN (
-            SELECT null
-              FROM website w, users u, apex_workspace_apex_users a
+            SELECT w.domain_name, LOWER(NVL(w.esm_library,'live')) esm_library, UPPER(NVL(a.is_admin,'NO')) is_admin
+              FROM website w, apex_workspace_apex_users a, users u
              WHERE w.id=pWebsiteId
                AND u.id=l_session_data.user_id
-               AND w.domain_name=REPLACE(SUBSTR(u.email,1,INSTR(u.email,'@')-1),'.','-')
-               AND u.email=a.email
-               AND a.is_admin='Yes'
+               AND u.email=a.email(+)
          ) 
          LOOP
-            l_esm_library:='test';
+            l_esm_library:=C.esm_library;
 
-            SELECT MAX(CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)), MAX(updated_test)
-              INTO l_src_last_updated, l_cdn_last_updated
-              FROM apex_application_static_files s, es_modules e
-             WHERE s.file_name=e.module_name
-               AND s.application_id=101;
+            /* ADMIN USER MAY UPDATES ES MODULES IF WEBSITE SUBSCRIBES TO "TEST" ES MODULES */
+            IF (C.is_admin='YES' AND C.esm_library='test') THEN
+                SELECT MAX(CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)), MAX(updated_test)
+                  INTO l_src_last_updated, l_cdn_last_updated
+                  FROM apex_application_static_files s, es_modules e
+                 WHERE s.file_name=e.module_name
+                   AND s.application_id=101;
 
-            IF (l_src_last_updated>l_cdn_last_updated) THEN
-                pck_deploy.buildESModules;
+                IF (l_src_last_updated>l_cdn_last_updated) THEN
+                    pck_deploy.buildESModules;
+                    /* Need to deploy subscribers to TEST es library else will fail on sha256 import map */
+                    FOR C1 IN (
+                        SELECT id, domain_name, netlify_site_id, esm_library FROM website WHERE id<>pWebsiteId AND esm_library='TEST'
+                    ) LOOP
+                        pck_core.log('Deploying ' || C1.domain_name || ' due to ES Module changes');
+                        pck_deploy.runDeployment(
+                            pWebsiteId=>C1.id, pUserId =>l_session_data.user_id, pEnv=>'TEST', pSiteId=>C1.netlify_site_id, pRestUrl=>pck_core.getRestURL, pEsmLibrary=>C1.esm_library);
+                    END LOOP;
+                END IF;
             END IF;
         END LOOP;
 
@@ -369,8 +378,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     l_arr(i).article_id:=C.article_id;
                 END LOOP;
                 IF (l_moved_article_id IS NULL) THEN
-                    INSERT INTO article (id, body_html, author_user_id) 
-                    VALUES (seq_article.nextval, '<h1>Click to edit</h1>', l_session_data.user_id);
+                    INSERT INTO article (id, author_user_id) 
+                    VALUES (seq_article.nextval, l_session_data.user_id);
                     INSERT INTO website_article (website_id, article_id, navigation_label, collection_type, user_id, display_order)
                     VALUES (pWebsiteId, seq_article.currval, l_arr(i).navigation_label, l_arr(i).collection_type, l_session_data.user_id, 1);
                     l_arr(i).article_id:=seq_article.currval;
