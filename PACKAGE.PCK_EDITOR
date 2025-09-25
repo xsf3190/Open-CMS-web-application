@@ -79,6 +79,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
          LOOP
             l_esm_library:=C.esm_library;
 
+            IF (INSTR(l_session_data.url,'netlify.app')>0 OR INSTR(l_session_data.url,'editor.' || C.domain_name)>0) THEN
+                l_env:='TEST';
+            ELSE
+                l_env:='LIVE';
+            END IF;
+
             /* ADMIN USER MAY UPDATES ES MODULES IF WEBSITE SUBSCRIBES TO "TEST" ES MODULES */
             IF (C.is_admin='YES' AND C.esm_library='test') THEN
                 SELECT MAX(CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)), MAX(updated_test)
@@ -100,8 +106,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 END IF;
             END IF;
         END LOOP;
-
-        l_env:=CASE WHEN INSTR(l_session_data.url,'netlify.app')>0 THEN 'TEST' ELSE 'LIVE' END;
 
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId RETURNING netlify_site_id, netlify_site_id_custom INTO l_site_id, l_site_id_custom;
         
@@ -426,25 +430,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  GET CONTENT FOR CKEDITOR
+    **  GET CONTENT FOR REVISITS TO EDITED PAGES
     */
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_body_html article.body_html%type;
+        l_header_html website_article.header_html%type; 
+        l_main_html article.body_html%type;
+        l_footer_html website_article.footer_html%type; 
         l_last_update VARCHAR2(20);
+        l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         SELECT body_html, apex_util.get_since(updated_date) last_update
-          INTO l_body_html, l_last_update
+          INTO l_main_html, l_last_update
           FROM article
          WHERE id=pArticleId;
 
-        apex_json.open_object;
-        apex_json.write('success', TRUE); 
-        apex_json.write('html', l_body_html);
-        apex_json.write('last_update', l_last_update);
-        apex_json.close_object;
+        SELECT header_html, footer_html
+          INTO l_header_html, l_footer_html
+          FROM website_article
+         WHERE website_id=pWebsiteId
+           AND article_id=pArticleid;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header_html);
+        l_json.put('main',l_main_html);
+        l_json.put('footer',l_footer_html);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
@@ -950,7 +964,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             SELECT background_color, REPLACE(content,'-','_') content FROM JSON_TABLE(pBodytext, '$' COLUMNS(background_color, content))
         ) LOOP
             l_ddl:='UPDATE website_article SET ' || C.content || '=:B1 WHERE website_id=:B2 AND article_id=:B3';
-            pck_core.log(l_ddl);
             EXECUTE IMMEDIATE l_ddl USING C.background_color, pWebsiteId, pArticleid;
         END LOOP;
 
