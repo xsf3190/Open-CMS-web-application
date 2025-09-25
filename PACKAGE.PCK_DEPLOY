@@ -27,9 +27,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     
     /*
     ** SERVE JS AND CSS MODULES FROM NETLIFY SITE
-    ** "TEST" - FOR TESTING BY ADMIN USERS OF ADMIN-oWNED WEBSITES
-    ** "LIVE" - ALL DEPLOYED WEBSITES LINK TO THESE
+    ** "TEST" - FOR TESTING BY ADMIN USERS AND WEBSITES SUBSCRIBING TO TEST ESM LIBRARY
+    ** "LIVE" - ALL DEPLOYED WEBSITES LOAD THESE
+    **
+    ** TO CREATE NEW ES MODULE:
+    **  insert into es_modules(module_name,host_name) values 
+    **     ('deploy_edited-content.min.js',
+    **      'https://es-modules.netlify.app/live/javascript/deploy_edited-content.min.js');
     */
+
+
 
     PROCEDURE buildESModules(pEsmLibrary IN VARCHAR2) IS 
         TYPE tt_files IS RECORD (
