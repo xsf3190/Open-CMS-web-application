@@ -14,6 +14,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
     FUNCTION getEditorDomain(pEmail IN users.email%type) RETURN VARCHAR2;
     --
+    PROCEDURE getNetlifyStatus(pIncludeFiles IN BOOLEAN DEFAULT FALSE);
+    --
     PROCEDURE linkDNS(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
     --
     FUNCTION urlExists(pUrl IN VARCHAR2) RETURN BOOLEAN;
@@ -496,9 +498,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     /*
     ** COPY NETLIFY STATUS TO DATABASE TABLES
     */
-    PROCEDURE getNetlifyStatus(pUrl IN VARCHAR2, pUserId IN website.user_id%type) IS
+    PROCEDURE getNetlifyStatus(pIncludeFiles IN BOOLEAN) IS
+        l_admin_userid users.id%type;
+        l_dns_zones CLOB;
+        l_sites CLOB;
+        l_files CLOB;
+        l_dns_records CLOB;
     BEGIN
-        pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'dns_zones', pMethod=>'GET', pData=>l_dns_zones);
+        SELECT u.id 
+          INTO l_admin_userid
+          FROM apex_workspace_apex_users w, users u 
+         WHERE w.email=u.email
+           AND w.is_admin='Yes'
+         FETCH FIRST ROW ONLY;
+
+        pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'dns_zones', pMethod=>'GET', pData=>l_dns_zones);
         DELETE netlify_dns_zone;
         INSERT INTO netlify_dns_zone (id, name, site_id, created_at, updated_at)
         SELECT id, name, site_id, TO_TIMESTAMP_TZ(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR'), TO_TIMESTAMP_TZ(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR') 
@@ -508,11 +522,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         INSERT INTO netlify_dns_zone_server (dns_zone_id, server)
         SELECT id, server FROM JSON_TABLE(l_dns_zones, '$[*]' COLUMNS (id, NESTED '$.dns_servers[*]' COLUMNS (server varchar2(50) path '$')));
 
-        pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pMethod=>'GET', pData=>l_sites);
+        pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'sites', pMethod=>'GET', pData=>l_sites);
         DELETE netlify_site;
         INSERT INTO netlify_site (id, name, custom_domain, url, created_at, updated_at)
         SELECT id, name, custom_domain, url, TO_TIMESTAMP_TZ(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR'), TO_TIMESTAMP_TZ(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR')
-          FROM JSON_TABLE(l_sites, '$[*]' COLUMNS(id, name, custom_domain, url, created_at, updated_at));
+          FROM JSON_TABLE(l_sites, '$[*]' COLUMNS(id, name, custom_domain, url,  created_at, updated_at));
+
+        DELETE netlify_dns_record;
+        FOR C IN (
+            SELECT id FROM netlify_dns_zone
+        ) LOOP
+            pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'dns_zones/' || C.id || '/dns_records', pMethod=>'GET', pData=>l_dns_records);
+            
+            INSERT INTO netlify_dns_record (id, hostname, type, value, ttl, dns_zone_id, site_id, managed)
+            SELECT id, hostname, type, value, ttl, dns_zone_id, site_id, managed
+              FROM JSON_TABLE(l_dns_records, '$[*]' COLUMNS(id, hostname, type, value, ttl, dns_zone_id, site_id, managed));
+        END LOOP;
+
+        IF (pIncludeFiles) THEN
+            DELETE netlify_file;
+            FOR C IN (
+                SELECT id FROM netlify_site
+            ) LOOP
+                pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'sites/' || C.id || '/files', pMethod=>'GET', pData=>l_files);
+                INSERT INTO netlify_file (site_id, path, sha, mime_type, size_bytes)
+                SELECT C.id, path, sha, mime_type, "size"
+                  FROM JSON_TABLE(l_files, '$[*]' COLUMNS(path, sha, mime_type, "size"));
+            END LOOP;
+        END IF;
+
     END;
 
 end;
