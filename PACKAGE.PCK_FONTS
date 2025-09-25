@@ -162,7 +162,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     **  CALL GOOGLE FONTS API.
     */
     PROCEDURE getFontface(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pFamily IN VARCHAR2, pApiParams IN VARCHAR2, pChars IN VARCHAR2) IS
-        l_fontface VARCHAR2(500);
+        l_fontface VARCHAR2(2000);
 
         l_font_family website_fontface.font_family%type;
         l_font_style website_fontface.font_style%type;
