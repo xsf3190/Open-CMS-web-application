@@ -13,7 +13,7 @@ const selectHandler = async (e) => {
         e.target.closest("li").classList.toggle("copied");
         const img = e.target.querySelector("img");
         try {
-            await navigator.clipboard.writeText(img.src);
+            await navigator.clipboard.writeText(img.dataset.max);
         } catch (error) {
             handleError(error);
         }
