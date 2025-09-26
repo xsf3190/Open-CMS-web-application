@@ -401,6 +401,14 @@ export const init = async (element) => {
                 console.error(id + "not supported");
         }
 
+        /* Remove deployed srcset attribute from all images */
+        const images = document.getElementsByTagName('img'); 
+        for (let i=0; i < images.length; i++) {
+            const  currentSrc=images[i].currentSrc;
+            images[i].removeAttribute("srcset");
+            images[i].src = currentSrc;
+        }
+
         InlineEditor.create(
             element,
             config
