@@ -212,18 +212,66 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT FIRST, ASSUMING ONLY FIRST IMAGE WILL BE IN VIEWPORT
     */
     PROCEDURE setImgSrcset(pArticleid IN article.id%type, pImgCount IN OUT PLS_INTEGER, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
-        l_img_regex varchar2(15):='<img(.+?)>';
+        l_img_regex varchar2(15):='<img[^>]+>';
         l_img_html VARCHAR2(2000);
+        l_img_alt VARCHAR2(500);
+        l_img_err VARCHAR2(100);
+        l_img_style VARCHAR2(100);
+        l_public_id asset.public_id%type;
+        l_loading VARCHAR2(50);
+        l_dimensions VARCHAR2(30);
+        l_srcset VARCHAR2(4000);
+        l_src VARCHAR2(200);
         n PLS_INTEGER;
     BEGIN
         n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
         FOR i IN 1..n LOOP
             l_img_html:=regexp_substr(pBodyHtml,l_img_regex,1,i);
+            /* Get alt text*/
+            l_img_alt:=regexp_substr(l_img_html,'alt="(.+?)"');
+            l_img_style:=regexp_substr(l_img_html,'style="(.+?)"');
+            -- IF (l_img_alt IS NULL) THEN
+            --     l_img_err:=' data-error="ALT TEXT HELPS PEOPLE WITH POOR VISION"';
+            -- ELSE
+            --     l_img_err:='';
+            -- END IF;
+
+            l_public_id:=SUBSTR(l_img_html,INSTR(l_img_html,'/',-1)+1);
+            l_public_id:=SUBSTR(l_public_id,1,INSTR(l_public_id,'"')-1);
+
+            /* 
+            ** Assume first image will be in viewport on page load. Can only be optimised with heuristics
+            */
             IF (i>1) THEN
-                l_img_html:=REPLACE(l_img_html,'<img','<img loading="lazy"');
+                l_loading:=' loading="lazy" sizes="auto"';
+            ELSE
+                l_loading:=' loading="eager" sizes="50%"';
             END IF;
-            dbms_output.put_line(l_img_html);
+
+            l_srcset:='';
+            l_src:='';
+            l_dimensions:='';
+            FOR C IN (
+                SELECT cld_cloud_name, breakpoints, height, width FROM asset WHERE article_id=pArticleid AND public_id=l_public_id
+            ) LOOP
+                l_dimensions:=' width="' || C.width || '" height="' || C.height || '"';
+                FOR C1 IN (
+                    SELECT breakpoint, ROW_NUMBER() OVER (ORDER BY breakpoint) rn FROM (SELECT TO_NUMBER(column_value) AS breakpoint FROM TABLE(apex_string.split(C.breakpoints,','))) ORDER BY 1 DESC
+                    ) LOOP
+                    l_srcset:=l_srcset || CASE WHEN l_srcset IS NULL THEN ' srcset="' END || 'https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || l_public_id || ' ' || C1.breakpoint || 'w,' || chr(10);
+                    IF (C1.rn=1) THEN
+                        l_src:=' src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || l_public_id || '"' || chr(10);
+                    END IF;
+                END LOOP;
+                IF (l_srcset IS NOT NULL) THEN
+                    l_srcset:=RTRIM(l_srcset,','||chr(10)) || '"';
+                END IF;
+            END LOOP;
+            
+            l_img_html:='<img' || l_loading || l_img_style || l_dimensions || l_srcset || l_src || l_img_alt || l_img_err || '>';
+            
             pBodyHtml:=regexp_replace(pBodyHtml,l_img_regex,l_img_html,1,i);
+            
         END LOOP;
         pImgCount:=n;
     END;
