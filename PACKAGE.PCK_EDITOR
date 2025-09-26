@@ -40,6 +40,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     TYPE t_labels IS TABLE OF tt_labels;
 
     /* 
+    **  DEPLOY WEBSITES SUBSCRIBING TO "TEST" ES_MODULE LIBRARY
+    **  DO THIS TO AVOID CSP FAILURE LOADING MODULES IN THE EDITOR  
+    */
+    PROCEDURE deployTestWebsites(pEsmLibrary IN VARCHAR2) IS
+    BEGIN
+        FOR C IN (
+            SELECT id, user_id, domain_name, netlify_site_id, esm_library FROM website WHERE esm_library=pEsmLibrary
+        ) LOOP
+            pck_core.log('Deploying ' || C.domain_name || ' due to ES Module changes');
+            pck_deploy.runDeployment(
+                pWebsiteId=>C.id, pUserId =>C.user_id, pEnv=>'TEST', pSiteId=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL, pEsmLibrary=>pEsmLibrary);
+        END LOOP;
+    END;
+
+    /* 
     **  DEPLOY WEBSITE
     */
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
@@ -51,16 +66,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_src_last_updated es_modules.updated_source%type;
         l_cdn_last_updated es_modules.updated_test%type;
         l_esm_library VARCHAR2(4):='live';
+        l_json JSON_OBJECT_T;
     BEGIN
         /* 
         ** Check no other session currently deploying - simultaneous deployments not allowed on Netlify free plan 
         */
         FOR C IN (SELECT job_name FROM user_scheduler_running_jobs WHERE job_name LIKE 'DEPLOY_%') LOOP
-            apex_json.open_object;
-            apex_json.write('content', '<h4>Someone else is deploying ... try again later</h4>');
-            apex_json.write('stop', TRUE);
-            apex_json.write('success', TRUE);
-            apex_json.close_object;
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('success',true);
+            l_json.put('content', '<h4>Someone else is deploying ... try again later</h4>');
+            l_json.put('stop', TRUE);
+            apex_util.prn(l_json.to_clob,false);
             RETURN;
         END LOOP;
 
@@ -85,7 +101,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_env:='LIVE';
             END IF;
 
-            /* ADMIN USER MAY UPDATES ES MODULES IF WEBSITE SUBSCRIBES TO "TEST" ES MODULES */
+            /* ADMIN USER REBUILDS "TEST" ES MODULES IF ANY SOURCE CODE CHANGE */
             IF (C.is_admin='YES' AND C.esm_library='test') THEN
                 SELECT MAX(CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)), MAX(updated_test)
                   INTO l_src_last_updated, l_cdn_last_updated
@@ -95,14 +111,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
                 IF (l_src_last_updated>l_cdn_last_updated) THEN
                     pck_deploy.buildESModules;
-                    /* Need to deploy subscribers to TEST es library else will fail on sha256 import map */
-                    FOR C1 IN (
-                        SELECT id, domain_name, netlify_site_id, esm_library FROM website WHERE id<>pWebsiteId AND esm_library='TEST'
-                    ) LOOP
-                        pck_core.log('Deploying ' || C1.domain_name || ' due to ES Module changes');
-                        pck_deploy.runDeployment(
-                            pWebsiteId=>C1.id, pUserId =>l_session_data.user_id, pEnv=>'TEST', pSiteId=>C1.netlify_site_id, pRestUrl=>pck_core.getRestURL, pEsmLibrary=>C1.esm_library);
-                    END LOOP;
                 END IF;
             END IF;
         END LOOP;
@@ -151,10 +159,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         );
         dbms_scheduler.enable(l_job_name);
 
-        apex_json.open_object; 
-        apex_json.write('success', TRUE);
-        apex_json.write('content', '<table role="presentation" style="font-family:monospace;background:#342a21;color:white"><tbody><tr><td>' || TO_CHAR(current_timestamp AT TIME ZONE l_session_data.timezone,'hh24:mi:ss') || '</td><td>Starting deployment</td></tr></tbody></table>');
-        apex_json.close_object;
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('content', '<table role="presentation" style="font-family:monospace;background:#342a21;color:white"><tbody><tr><td>' || TO_CHAR(current_timestamp AT TIME ZONE l_session_data.timezone,'hh24:mi:ss') || '</td><td>Starting deployment</td></tr></tbody></table>');
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
