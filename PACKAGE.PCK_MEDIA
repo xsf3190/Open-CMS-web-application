@@ -490,6 +490,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     FUNCTION getThumbnails(pWebsiteid IN website.id%type, pArticleId IN article.id%type, pRequest IN VARCHAR2, pNbImages IN OUT NUMBER) RETURN CLOB
     IS
         l_clob CLOB;
+        l_min_src VARCHAR2(500);
+        l_max_src VARCHAR2(500);
         n PLS_INTEGER:=0;
     BEGIN
         l_clob:='<ul role="list" class="carousel">';
@@ -501,7 +503,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 UNION ALL
                 SELECT id FROM article WHERE parent_id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A')
             )
-            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format
+            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints
               FROM asset a, articles w
              WHERE a.article_id=w.article_id
                AND NVL(a.format,'N/A')<>'clt'
@@ -509,10 +511,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
              ORDER BY a.created_date DESC )
         LOOP
             n:=n+1;
+            /* Get widest image if breakpoints - i.e. AVIF */
+            FOR C1 IN (
+                SELECT breakpoint, ROW_NUMBER() OVER (ORDER BY breakpoint) rn, COUNT(*) OVER () nb  FROM (SELECT TO_NUMBER(column_value) AS breakpoint FROM TABLE(apex_string.split(C.breakpoints,','))) ORDER BY 1 DESC
+                ) LOOP
+                IF (C1.rn=1) THEN
+                    l_min_src:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
+                ELSIF (C1.rn=C1.nb) THEN
+                    l_max_src:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
+                END IF;
+            END LOOP;
             l_clob:=l_clob ||
                 '<li>' ||
                     '<button type="button" class="button copy">' ||
-                        '<img draggable="false" style="pointer-events:none" src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" loading="' || CASE WHEN n<=4 THEN 'eager' ELSE 'lazy' END || '">' ||
+                        '<img draggable="false" style="pointer-events:none" src="' || l_min_src || '"' || 
+                        ' data-max="' || l_max_src || '"' ||
+                        '">' ||
                     '</button>' ||
                 '</li>';
             /*
