@@ -66,7 +66,7 @@ export const init = async (element) => {
             editor.ui.componentFactory.add( 'editPages', () => {
                 const button = new ButtonView();
                 button.set( {
-                    label: 'Edit Pages',
+                    label: 'Manage Pages',
                     class: "my-ck-button_with-text",
                     withText: true
                 } );
