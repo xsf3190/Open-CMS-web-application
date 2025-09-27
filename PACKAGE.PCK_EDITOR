@@ -336,7 +336,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '</fieldset>' ||
                 '<button type="button" class="button add-page">Add Page</button>' ||
                 '<button type="button" class="button delete-page">Delete Page</button>' ||
-                '<button type="button" class="button deploy">Deploy</button>' ||
+                '<button type="button" class="button deploy">Save Changes</button>' ||
                 '<span class="errors" style="color:red"></span>' ||
             '</fieldset>';
 
