@@ -227,6 +227,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
         FOR i IN 1..n LOOP
             l_img_html:=regexp_substr(pBodyHtml,l_img_regex,1,i);
+            l_public_id:=SUBSTR(l_img_html,INSTR(l_img_html,'/',-1)+1);
+            l_public_id:=SUBSTR(l_public_id,1,INSTR(l_public_id,'"')-1);
+
             /* Get alt text*/
             l_img_alt:=regexp_substr(l_img_html,'alt="(.+?)"');
             l_img_style:=regexp_substr(l_img_html,'style="(.+?)"');
@@ -236,8 +239,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             --     l_img_err:='';
             -- END IF;
 
-            l_public_id:=SUBSTR(l_img_html,INSTR(l_img_html,'/',-1)+1);
-            l_public_id:=SUBSTR(l_public_id,1,INSTR(l_public_id,'"')-1);
+            
 
             /* 
             ** Assume first image will be in viewport on page load. Can only be optimised with heuristics
@@ -265,6 +267,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END LOOP;
                 IF (l_srcset IS NOT NULL) THEN
                     l_srcset:=RTRIM(l_srcset,','||chr(10)) || '"';
+                ELSE
+                    l_src:=' src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || l_public_id || '"' || chr(10);
                 END IF;
             END LOOP;
             
@@ -750,7 +754,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             q'[ script-src 'strict-dynamic' ]' || l_script_sha256 || q'[;]' ||
             q'[ frame-src upload-widget.cloudinary.com  www.youtube.com;]' ||
             q'[ frame-ancestors 'none';]' ||
-            q'[ connect-src 'self' ]' || pRestUrl || ';' || chr(10) ||
+            q'[ connect-src 'self' cdn.ckeditor.com ]' || pRestUrl || ';' || chr(10) ||
             q'[X-Content-Type-Options: nosniff]' || chr(10) ||
             q'[X-Frame-Options: SAMEORIGIN]' || chr(10) ||
             q'[Referrer-Policy: no-referrer-when-downgrade]' || chr(10) ||
@@ -790,7 +794,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<link rel="preconnect" href="https://res.cloudinary.com">'
                     END ||
                     l_labels(i).font_preload ||
-                    '<link rel="stylesheet" href="css/styles.min.css">' ||
+                    '<link rel="stylesheet" href="/css/styles.min.css">' ||
                     '<script>' || l_script_src || '</script>' ||
                     '<link rel="icon" type="image/svg+xml" sizes="any" href="' || l_favicon_url || '">' ||
                 '</head>' ||
