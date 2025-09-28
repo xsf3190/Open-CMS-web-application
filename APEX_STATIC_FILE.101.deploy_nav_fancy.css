@@ -1,0 +1,28 @@
+nav > ul:before {
+  content:"";
+  position: absolute;
+  position-anchor: --li;
+  inset: auto anchor(right) anchor(bottom) anchor(left);
+  height: .2em;  
+  background: lightblue;
+  transition: .2s .2s;
+}
+
+nav > ul li {
+  background: 
+    conic-gradient(lightblue 0 0)
+    bottom/100% 0% no-repeat;
+  transition: .2s;
+}
+
+nav > ul li:is(:hover,.active) {
+  anchor-name: --li;
+  background-size: 100% 100%;
+  transition: .2s .4s;
+}
+
+nav > ul:has(li:hover) li.active:not(:hover) {
+  anchor-name: none;
+  background-size: 100% 0%;
+  transition: .2s;
+}
