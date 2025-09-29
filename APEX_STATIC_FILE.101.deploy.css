@@ -104,13 +104,14 @@ body>footer>a {
 
 
 /* NAVIGATION STYLES */
+
 .topnav {
   position: var(--nav-position);
   top: 0;
   color: black;
   background-color: white;
   --flex-wrap: nowrap;
-  --flex-gap: 0;
+  --flex-gap: 1rem;
 }
 
 nav {
@@ -119,10 +120,11 @@ nav {
 }
 
 nav a {
-  border-block-end: 3px solid var(--border-color, transparent);
+  --text-color: var(--nav-dark-color);
+  border-block-end: 0.2ex solid var(--border-color, transparent);
   color: var(--text-color);
   display: inline-block;
-  margin-block-end: 0.5rem; /* See note at the bottom of this chapter */
+  margin-block-end: 0.5rem;
   margin-inline-end: 0.5rem;
   padding: 0.1rem;
   text-decoration: none;
@@ -142,8 +144,8 @@ nav ul {
 }
 
 [aria-current="page"] {
-  --border-color: var(--color-highlight);
-  --text-color: var(--color-highlight);
+  --border-color: var(--nav-highlight-color);
+  --text-color: var(--nav-highlight-color);
 }
 
 /*
