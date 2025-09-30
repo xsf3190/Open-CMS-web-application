@@ -180,6 +180,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             l_root_css:=l_root_css || 
             '--max-width: ' || C.max_width || ';' || 
             '--img-border-radius: ' || C.img_border_radius || ';' ||
+            '--nav-dark-color: rgb(25, 25, 25);' ||
+	        '--nav-highlight-color: rgb(24, 54, 145);' ||
             '--header-background-color: ' || C.header_background_color || ';' || 
             '--main-background-color: ' || C.main_background_color || ';' || 
             '--footer-background-color: ' || C.footer_background_color || ';';
@@ -268,6 +270,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_nav_labels LONG;
         l_nav_length PLS_INTEGER:=0;
         l_article_id article.id%type;
+        l_logo website.logo%type;
+        l_viewbox VARCHAR2(50);
+        l_width PLS_INTEGER;
+        l_height PLS_INTEGER;
+        l_logo_styles VARCHAR2(100);
     BEGIN
         /* IF pArticleId is a child article set aria-current-page on owner */
         FOR i IN 1..g_nav_labels.COUNT LOOP
@@ -281,10 +288,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             SELECT parent_id INTO l_article_id FROM article WHERE id=pArticleId;
         END IF;
 
+        SELECT logo, regexp_substr(logo,'viewBox="(.+?)"',1,1,null,1) INTO l_logo, l_viewbox FROM website WHERE id=pWebsiteId;
+       
+        IF (l_logo IS NOT NULL) THEN
+            l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
+            l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
+            l_logo_styles:='style="margin-block-start:1rem;margin-inline-start:1rem;height:3rem;aspect-ratio:' || l_width || '/' || l_height || '"';
+        END IF;
+
         l_nav_labels:=
         '<div class="topnav flex-items space-between">' ||
-            '<span class="logo"></span>' ||
-            '<nav aria-label="Main Navigation"'|| CASE WHEN l_nav_length>40 THEN ' class="can-shrink"' END || '>' ||
+            '<span class="logo"' || l_logo_styles || '>' || l_logo || '</span>' ||
+            '<nav aria-label="Main"'|| CASE WHEN l_nav_length>40 THEN ' class="can-shrink"' END || '>' ||
                 '<ul role="list" class="flex-items" style="--flex-wrap:wrap">';
         IF (pEdit AND g_nav_labels.COUNT=1) THEN
             l_nav_labels:=l_nav_labels || 
