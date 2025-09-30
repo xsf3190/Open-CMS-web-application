@@ -776,7 +776,7 @@ summary {
 ** MENULIST
 */
 
-[id=menulist] > li:has(button) {
+[id=menulist] > li:has(.button) {
     padding-inline: 0.5rem;
 }
 
