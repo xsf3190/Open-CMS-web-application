@@ -94,12 +94,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
          ) 
          LOOP
             l_esm_library:=C.esm_library;
-
-            IF (INSTR(l_session_data.url,'netlify.app')>0 OR INSTR(l_session_data.url,'editor.' || C.domain_name)>0) THEN
-                l_env:='TEST';
-            ELSE
-                l_env:='LIVE';
-            END IF;
+            l_env:=pck_hosting.getEnvFromURL(l_session_data.url);
 
             /* ADMIN USER REBUILDS "TEST" ES MODULES IF ANY SOURCE CODE CHANGE */
             IF (C.is_admin='YES' AND C.esm_library='test') THEN
@@ -196,11 +191,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        IF (INSTR(l_session_data.url,'netlify.app')>0) THEN
-            l_env:='TEST';
-        ELSE
-            l_env:='LIVE';
-        END IF;
+        l_env:=pck_hosting.getEnvFromURL(l_session_data.url);
 
         SELECT netlify_deploy_id, CASE WHEN l_env='TEST' THEN netlify_site_id ELSE netlify_site_id_custom END
           INTO l_netlify_deploy_id, l_site_id
