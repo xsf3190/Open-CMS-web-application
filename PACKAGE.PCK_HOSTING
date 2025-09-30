@@ -10,6 +10,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
     PROCEDURE getChangeURL(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
+    FUNCTION getEnvFromURL(pUrl IN VARCHAR2) RETURN VARCHAR2;
+    --
     PROCEDURE getDNS(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     FUNCTION getEditorDomain(pEmail IN users.email%type) RETURN VARCHAR2;
@@ -28,6 +30,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
+
+    /*
+    ** DETERMINE ENVIRONMENT FROM URL
+    */
+    FUNCTION getEnvFromURL(pUrl IN VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        IF (INSTR(pUrl,'.netlify.app')>0) THEN
+            RETURN 'TEST';
+        ELSIF (INSTR(pUrl,'editor.')>0) THEN
+            RETURN 'TEST';
+        END IF;
+        RETURN 'LIVE';
+
+    END;
 
     /*
     ** POLL NETLIFY "deploys" API FOR STATUS="ready"
