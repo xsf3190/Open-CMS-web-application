@@ -51,6 +51,12 @@ export const init = async (element) => {
             Plugin, 
             SelectAll, 
             ShowBlocks, 
+            Table,
+			TableCaption,
+			TableCellProperties, 
+			TableColumnResize,
+			TableProperties, 
+			TableToolbar,
             Underline, 
             WordCount
             } = await import(CK_JS)
@@ -219,35 +225,9 @@ export const init = async (element) => {
         }
     }
 
-    /* Deploy website  plugin  */
-    class Deploy extends Plugin {
-        init() {
-            const editor = this.editor;
-            editor.ui.componentFactory.add( 'deploy', () => {
-                const button = new ButtonView();
-                button.set( {
-                    label: 'Deploy Website',
-                    class: "my-ck-button_with-text",
-                    withText: true
-                } );
-                button.on('execute', (_) => {
-                    import("deploy_publish-website")
-                    .then((module) => {
-                        module.init();
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        console.error("Failed to load module deploy_publish-website");
-                    });
-                });
-                return button;
-            } );
-        }
-    }
-
     const headerConfig = {
-        plugins: [ Essentials, Alignment, Autosave, Bold, ColorShape, Deploy, EditPages, FontSize, FontColor, Heading, HeadingButtonsUI, Italic, Paragraph, ParagraphButtonUI, SelectFonts, Underline ],
-        toolbar: [  'colorShape', 'heading1', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment', '|', 'editPages', '|', 'deploy' ],
+        plugins: [ Essentials, Alignment, Autosave, Bold, ColorShape, EditPages, FontSize, FontColor, Heading, HeadingButtonsUI, Italic, Paragraph, ParagraphButtonUI, SelectFonts, Underline ],
+        toolbar: [  'colorShape', 'heading1', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment', '|', 'editPages', ],
         // licenseKey: "GPL",
         alignment: {
             options: [
@@ -288,7 +268,7 @@ export const init = async (element) => {
 
     const mainConfig = {
         plugins: [ Essentials,  Alignment, Autosave, BlockQuote, Bold, Clipboard, Code, CodeBlock,  
-                    ColorShape, Deploy, 
+                    ColorShape,
                     FontSize, FontColor, FontBackgroundColor,
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
@@ -296,7 +276,7 @@ export const init = async (element) => {
                     SelectAll, SelectFonts, ShowBlocks, Underline, UploadImage, UploadImages, WordCount ],
         toolbar: [ 'colorShape', 'heading', '|', 'undo', 'redo',  '|', 'colorShape, ', 'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
-                    '|', 'uploadImage', 'uploadImages', 'listImages', 'insertImage', '|', 'deploy'],
+                    '|', 'uploadImage', 'uploadImages', 'listImages', 'insertImage', ],
         menuBar: {
             isVisible: true
         },
@@ -359,16 +339,15 @@ export const init = async (element) => {
     };
 
     const footerConfig = {
-        plugins: [ Essentials, ColorShape, Alignment, Deploy, Paragraph ],
-        toolbar: [ 'colorShape', 'paragraph', 'alignment', '|', 'deploy' ],
+        plugins: [ Essentials, Paragraph, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
+        toolbar: [ 'paragraph',  'insertTable' ],
         content: "footer",
-        alignment: {
-            options: [
-                {name:'left', className: 'align-left'},
-                {name:'right', className: 'align-right'},
-                {name:'center', className: 'align-center'}
-            ]
-        },
+        table: {
+            tableCaption: {
+                useCaptionElement: true
+            },
+            contentToolbar: [ 'toggleTableCaption', 'tableColumn', 'tableRow', 'mergeTableCells', 'TableProperties', 'TableCellProperties'],
+        }
     }
 
     const editors = [
