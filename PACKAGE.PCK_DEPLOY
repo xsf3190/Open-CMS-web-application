@@ -392,10 +392,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content:=pFileContent;
             l_files.put(pFilename, l_sha1);
-            IF (pEsmLibrary='test') THEN
-                l_deploy_files(l_sha1).md5:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_md5));
-                l_deploy_files(l_sha1).content_length:=dbms_lob.getlength(pFileContent);
-            END IF;
+            -- IF (pEsmLibrary='test') THEN
+            --     l_deploy_files(l_sha1).md5:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_md5));
+            --     l_deploy_files(l_sha1).content_length:=dbms_lob.getlength(pFileContent);
+            -- END IF;
         END;
 
         /* BLOB SIGNATURE */
@@ -405,10 +405,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content_b:=pFileContent;
             l_files.put(pFilename, l_sha1);
-            IF (pEsmLibrary='test') THEN
-                l_deploy_files(l_sha1).md5:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_md5));
-                l_deploy_files(l_sha1).content_length:=dbms_lob.getlength(pFileContent);
-            END IF;
+            -- IF (pEsmLibrary='test') THEN
+            --     l_deploy_files(l_sha1).md5:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_md5));
+            --     l_deploy_files(l_sha1).content_length:=dbms_lob.getlength(pFileContent);
+            -- END IF;
         END;
 
         PROCEDURE deleteFontface(pContext IN VARCHAR2, pDeployFilename IN VARCHAR2) IS
@@ -841,37 +841,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
         END LOOP;
 
-        /* UPDATE WEBSITE_FILES WITH THIS DEPLOYMENT */
-        l_current_timestamp:=current_timestamp;
-        l_sha1:=l_deploy_files.FIRST;
-        WHILE l_sha1 IS NOT NULL LOOP
-            n:=1;
-            BEGIN
-                SELECT sha1 
-                  INTO l_sha1_prev
-                  FROM website_files 
-                 WHERE website_id=pWebsiteId 
-                   AND file_name=l_deploy_files(l_sha1).file_name;
-                EXCEPTION WHEN NO_DATA_FOUND THEN
-                    INSERT INTO website_files(website_id, file_name, sha1, md5, content_length)
-                    VALUES (pWebsiteId, l_deploy_files(l_sha1).file_name, l_sha1, l_deploy_files(l_sha1).md5, l_deploy_files(l_sha1).content_length);
-                    n:=0;
-            END;
-
-            IF (n=1) THEN
-                IF (l_sha1<>l_sha1_prev) THEN
-                    UPDATE website_files
-                       SET sha1=l_sha1, 
-                           md5=l_deploy_files(l_sha1).md5,
-                           content_length=l_deploy_files(l_sha1).content_length,
-                           sha1_updated=l_current_timestamp
-                     WHERE website_id=pWebsiteId 
-                       AND file_name=l_deploy_files(l_sha1).file_name;
-                END IF;
-            END IF;
-
-            l_sha1:=l_deploy_files.NEXT(l_sha1);
-        END LOOP;
+        /* UPDATE WEBSITE_FILES WITH THIS SITE DEPLOYMENT */
+        pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'sites/' || pSiteId || '/files', pMethod=>'GET', pData=>l_clob);
+        
+        DELETE website_files WHERE website_id=pWebsiteId AND site_id=pSiteId;
+        
+        INSERT INTO website_files(website_id, site_id, file_name, path, sha1, mime_type, content_length)
+        SELECT pWebsiteId, site_id, path, path, sha, mime_type, "size"
+          FROM JSON_TABLE(l_clob, '$[*]' COLUMNS(site_id, path, sha, mime_type, "size"));
 
         /*
         **  DOGFACE DEPLOYMENT IF USER HAS DOGFACE API KEY AND ESMLIBRARY = 'TEST'
