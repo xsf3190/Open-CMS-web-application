@@ -151,14 +151,12 @@ const buttonHandler = async (e) => {
         await callAPI(endpoint,'POST', arr)
             .then((data) => {
                 console.log("data",data);
-                if (data.deleted>0) {
-                    window.history.replaceState({}, "", "index.html");
+                if (data.deploy) {
+                    dropdown.querySelector("button.publish-website").click();
                 }
             })
             .catch((error) => {
                 handleError(error);
             });
-
-        dropdown.querySelector("button.publish-website").click();
     }
 }
