@@ -208,6 +208,173 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         COMMIT;
     END; 
 
+        /*
+     **  Build Login Form
+     */
+    FUNCTION buildLoginForm RETURN VARCHAR2 IS
+    BEGIN
+        RETURN(
+            '<dialog class="login-email" style="--max-width:40rem">' ||
+                '<form>' ||
+                    '<input type="hidden" name="url" value="">' ||
+                    '<input type="hidden" name="request_type" value="">' ||
+                    '<input type="hidden" name="domain" value="">' ||
+                    '<header class="flex-items space-between">' ||
+                        '<h2>Log in</h2>' ||
+                        '<button type="button" class="button close no-focus" data-button-variant="round-icon">' ||
+                            '<svg class="icon" aria-hidden="true" focusable="false">' ||
+                                '<use href="#cross"></use>' ||
+                            '</svg>' ||
+                        '</button>' ||
+                    '</header>' ||
+                    '<article class="flow">' ||
+                        '<div>' ||
+                            '<label for="emailInput">Email</label>' ||
+                            '<input type="email" id="emailInput" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on">' ||
+                            '<output for="email" class="sendmail-result"></output>' ||
+                        '</div>' ||
+                        '<div class="visually-hidden">' ||
+                            '<label for="passcodeInput">Enter Passcode</label>' ||
+                            '<input type="text" id="passcodeInput" name="passcode" pattern="\d{6}" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
+                            '<output for="passcode" class="passcode-result"></output>' ||
+                        '</div>' ||
+                        '<div class="loader visually-hidden"></div>' ||
+                    '</article>' ||
+                    '<footer class="flex-items space-apart no-wrap">' ||
+                        '<button class="button sendmail-magic" type="button">Send Link</button>' ||
+                        '<div><hr><span>OR</span><hr></div>' ||
+                        '<button class="button sendmail-passcode" type="button">Send Code</button>' ||
+                        '<button class="button validate-passcode visually-hidden" type="button">Submit Passcode</button>' ||
+                    '</footer>' ||
+                '</form>' ||
+             '</dialog>');
+    END;
+
+    /*
+     **  Build Content Dialog - include pagination button
+     */
+    FUNCTION buildContentDialog RETURN VARCHAR2 IS
+    BEGIN
+        RETURN(
+            '<dialog class="output">' ||
+                '<form method="dialog">' ||
+                    '<header class="flex-items space-between no-wrap">' ||
+                        '<div></div>' ||
+                        '<button type="button" class="button close no-focus" data-button-variant="round-icon">' ||
+                            '<svg class="icon" aria-hidden="true" focusable="false">' ||
+                                '<use href="#cross"></use>' ||
+                            '</svg>' ||
+                        '</button>' ||
+                    '</header>' ||
+                    '<article class="flow"></article>' ||
+                    '<footer class="flex-items space-between">' ||
+                    '</footer>' ||
+                '</form>' ||
+             '</dialog>');
+    END;
+
+    /*
+    **  Build Dropdown Component with "Log In" button
+    */
+    FUNCTION buildDropdown(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
+        l_html LONG;
+        l_uri_template ords_endpoints.uri_template%type;
+    BEGIN
+        pck_sec.refreshOrdsEndpoints(pWebsiteId);
+        
+        FOR C IN (
+            SELECT o.uri_template
+              FROM api_endpoint a, role r, ords_endpoints o
+             WHERE a.website_id=pWebsiteId 
+               AND a.role_id=r.id 
+               AND r.name='visitor'
+               AND o.label='Log In'
+               AND a.template_id=o.template_id
+        ) LOOP
+            l_html:=
+            '<div>' ||
+                '<button type="button" popovertarget="metrics" id="metrics-btn" style="anchor-name:--metrics-btn" aria-label="Page loading details">' ||
+                '00KB' ||
+                '</button>' ||
+                '<div popover id="metrics" style="position-anchor:--metrics-btn">' ||
+                    '<table>' ||
+                        '<thead><tr><th>Resource</th><th>Start</th><th>End</th><th>Redirect</th><th>Cache</th><th>DNS</th><th>TCP</th><th>Request</th><th>Response</th><th>Duration</th><th>Transfer</th></tr></thead>' ||
+                        '<tbody></tbody>' ||
+                    '</table>' ||
+                '</div>' ||
+                '<button type="button" popovertarget="menulist" id="menulist-btn" style="anchor-name:--menulist-btn" aria-label="dropdown menu">' ||
+                    '<svg height="1rem" viewBox="0 0 32 32" preserveAspectRatio="none" aria-hidden="true" focusable="false">' ||
+                      '<rect class="top" x="0" y="0" width="32" height="6" fill="currentColor" />' ||
+                      '<rect class="middle" x="0" y="13" width="32" height="6" fill="currentColor" />' ||
+                      '<rect class="bottom" x="0" y="26" width="32" height="6" fill="currentColor" />' ||
+                    '</svg>' ||
+                '</button>' ||
+                '<ul popover id="menulist" class="dropdown scrollable" role="list"  style="position-anchor:--menulist-btn">' ||
+                    '<li class="align-center"><small class="email"></small></li>' ||
+                    '<li class="align-center">' ||
+                        '<table>' ||
+                            '<thead><tr><th>TTFB</th><th>FCP</th><th>LCP</th><th>CLS</th><th>INP</th><th>WGT</th></tr></thead>' || 
+                            '<tbody><tr><td class="TTFB"></td><td class="FCP"></td><td class="LCP"></td><td class="CLS"></td><td class="INP"></td><td class="page-weight"></td></tr></tbody>' ||
+                        '</table></li>' ||
+                    '<li><button type="button" class="button login-btn" data-endpoint="' || C.uri_template || '">Log In</button></li>' ||
+                '</ul>' ||
+            '</div>';
+        END LOOP;
+            
+        RETURN(l_html);
+    END;
+
+
+    FUNCTION buildLogo(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
+        l_logo website.logo%type;
+        l_viewbox VARCHAR2(50);
+        l_width PLS_INTEGER;
+        l_height PLS_INTEGER;
+        l_logo_styles VARCHAR2(100);
+    BEGIN
+        SELECT logo, regexp_substr(logo,'viewBox="(.+?)"',1,1,null,1) 
+          INTO l_logo, l_viewbox 
+          FROM website 
+         WHERE id=pWebsiteId;
+       
+        IF (l_logo IS NOT NULL) THEN
+            l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
+            l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
+            l_logo_styles:='style="margin-block-start:1rem;margin-inline-start:1rem;height:3rem;aspect-ratio:' || l_width || '/' || l_height || '"';
+        END IF;
+
+        RETURN ('<span class="logo"' || l_logo_styles || '>' || l_logo || '</span>');
+    END;
+
+    FUNCTION buildNav(pWebsiteId IN website.id%type, pEnv IN VARCHAR2) RETURN VARCHAR2 IS
+        l_nav VARCHAR2(4000);
+        l_nav_length PLS_INTEGER:=0;
+        l_article_id article.id%type;
+    BEGIN
+        l_nav:=
+        '<nav aria-label="Main">' ||
+            '<ul role="list" class="flex-items" style="--flex-wrap:wrap">';
+        FOR C IN (
+            SELECT navigation_label, collection_type, article_id, ROW_NUMBER() OVER (ORDER BY display_order) rn
+              FROM website_article 
+             WHERE website_id=pWebsiteId
+             ORDER BY display_order
+        ) LOOP
+            l_nav:=l_nav ||
+            '<li>' ||
+                '<a href="/' || CASE WHEN C.rn>1 THEN apex_string_util.get_slug(C.navigation_label) END || '"' ||
+                ' data-id="' || C.article_id || '" data-collection="' || C.collection_type || '">' ||
+                C.navigation_label || 
+                '</a>' ||
+            '</li>';
+        END LOOP;
+        l_nav:=l_nav || 
+            '<ul>' ||
+        '</nav>';
+
+        RETURN (l_nav);
+    END;
+
     /*
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT FIRST, ASSUMING ONLY FIRST IMAGE WILL BE IN VIEWPORT
     */
@@ -281,6 +448,74 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
+    **  <nav>
+    **  <header>
+    **  <main>
+    **  <footer>
+    */
+    PROCEDURE buildPageBody(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pLogo IN VARCHAR2, pNav IN VARCHAR2, pDropdown in VARCHAR2, pEnv IN VARCHAR2, pRestUrl IN VARCHAR2, pBody IN OUT NOCOPY CLOB) IS
+        l_nav VARCHAR2(4000);
+        l_header website_article.header_html%type;
+        l_main article.body_html%type;
+        l_footer website_article.footer_html%type;
+
+        l_nav_id VARCHAR2(20);
+        n PLS_INTEGER;
+    BEGIN
+        FOR C IN (
+            SELECT wa.header_html, a.body_html, wa.footer_html, NVL(a.parent_id,pArticleId) nav_id
+              FROM website_article wa, article a
+             WHERE wa.website_id=pWebsiteId
+               AND wa.article_id=NVL(a.parent_id,pArticleId)
+               AND a.id=pArticleId
+        ) LOOP
+            l_nav_id:='data-id="' || C.nav_id || '"';
+            n:=INSTR(pNav,l_nav_id);
+            l_nav:=SUBSTR(pNav,1,n) || 'aria-current="page" ' || SUBSTR(pNav,n+LENGTH(l_nav_id));
+
+            l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
+            l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
+            
+            pck_fonts.getCharsUsed(pWebsiteId,pArticleId);
+            
+            l_main:='<main id="main" class="ck-content"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
+            setImgSrcset(pArticleId, n, l_main);
+
+            pBody:=
+            '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '">' || 
+                '<div class="topnav flex-items space-between">' ||
+                    pLogo || l_nav || pDropdown || 
+                '</div>' ||    
+               l_header || l_main || l_footer ||
+            '</body>';
+        END LOOP;
+    END;
+
+    FUNCTION buildPageHead(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pScript IN VARCHAR2, pFavicon IN VARCHAR2) RETURN VARCHAR2 IS 
+        l_head VARCHAR2(4000);
+        l_title article_chars.first_heading%type;
+    BEGIN
+        SELECT first_heading INTO l_title FROM article_chars WHERE article_id=pArticleid AND context='heading';
+        l_head:=
+        '<head>' ||
+            '<meta charset="UTF-8">' ||
+            '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
+            '<title>' || l_title || '</title>' ||
+            '<meta name="author" content="restartnet.com">' ||
+            '<meta name="mobile-web-app-capable" content="yes">' ||
+            -- CASE WHEN l_labels(i).img_count>0 THEN
+            -- '<link rel="preconnect" href="https://res.cloudinary.com">'
+            -- END ||
+            --l_labels(i).font_preload ||
+            '<link rel="stylesheet" href="/css/styles.min.css">' ||
+            '<script>' || pScript || '</script>' ||
+            '<link rel="icon" type="image/svg+xml" sizes="any" href="' || pFavicon || '">' ||
+        '</head>';
+
+        RETURN (l_head);
+    END;
+
+    /*
     **  DEPLOY BY UPLOADING HTML FILE CONTENT DIRECTLY TO NETLIFY
     */
     PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2, pEsmLibrary IN VARCHAR2) IS
@@ -312,7 +547,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_sha1 website_files.sha1%type;
         l_sha1_prev website_files.sha1%type;
         l_sha1_updated website_files.sha1_updated%type;
-        l_current_timestamp website_files.created_date%type;
+        l_current_timestamp website_files.deployed_date%type;
         l_script_src VARCHAR2(500);
         
         
@@ -385,6 +620,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         l_headings_regex varchar2(30):='<h[1-4]>(.+?)<\/h[1-4]>';
 
+        /* START OF NEW */
+        TYPE tt_pages IS RECORD (
+            article_id website_article.article_id%type,
+            path VARCHAR2(200),
+            sha1 VARCHAR2(40),
+            build PLS_INTEGER,
+            body CLOB
+        );
+        TYPE t_pages IS TABLE OF tt_pages INDEX BY PLS_INTEGER;
+        l_pages t_pages;
+
+        l_nav VARCHAR2(4000);
+        l_logo website.logo%type;
+        l_dropdown VARCHAR2(4000);
+
+        /* END NEW */
+
         /* CLOB SIGNATURE */
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB) IS
         BEGIN
@@ -431,6 +683,76 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pck_sec.g_session_user_id:=pUserId;
         pck_sec.g_website_id:=pWebsiteId;
 
+        /*
+        ** WEBSITE SHOULD ALWAYS HAVE ENTRIES IN TABLE WEBSITE_FILES FOR LAST DEPLOYMENT
+        **
+        ** 1. submit all asset paths and their sha1 to hosting service
+        ** 2. receive array of assets to upload - i.e new path or sha1
+        ** 3. upload required assets
+        **
+        ** Processes that involve network calls:
+        **
+        ** 1. Download Google Fonts
+        ** 2. Uploading files to hosting service
+        ** 
+        */
+
+
+        /*
+        **  Website comprises following mime types:
+        **
+        **  1. text/html - website pages
+        **  2. font/woff2 - fonts
+        **  3. text/css - css stylesheets
+        **  4. application/javascript - page javascript
+        **  5. application/json - importmap for javascript modules 
+        **  6. text/plain - "_headers" file, includes strict Content Security Policy
+        **  7. application/xml - sitemap.xml
+        **
+        */
+
+        l_json:= new JSON_OBJECT_T;
+        l_files:= new JSON_OBJECT_T;
+        
+        WITH content AS
+        (
+            SELECT wa.article_id, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, GREATEST(w.nav_updated_date,a.updated_date,wa.updated_date) content_updated
+              FROM article a, website_article wa, website w
+             WHERE w.id=pWebsiteId
+               AND wa.website_id=w.id
+               AND a.id=wa.article_id
+            UNION ALL 
+            SELECT a.id, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) path, NVL(a.updated_date,a.created_date) last_updated 
+              FROM article a, website_article wa
+             WHERE a.parent_id=wa.article_id
+               AND wa.website_id=pWebsiteId
+        )
+        SELECT c.article_id, c.path, f.sha1, 
+            CASE WHEN f.deployed_date IS NULL OR c.content_updated > f.deployed_date THEN 1 ELSE 0 END deploy, EMPTY_CLOB()
+          BULK COLLECT INTO l_pages
+          FROM content c, website_files f
+         WHERE f.website_id(+)=pWebsiteId
+           AND f.path(+)=c.path;
+
+        n:=0;
+        FOR i IN 1..l_pages.COUNT LOOP
+            IF (l_pages(i).build=0) THEN
+                l_files.put(l_pages(i).path, l_pages(i).sha1);
+                CONTINUE;
+            END IF;
+            n:=n+1;
+            IF (n=1) THEN
+                l_nav:=buildNav(pWebsiteId, pEnv);
+                l_logo:=buildLogo(pWebsiteId);
+                l_dropdown:=buildDropdown(pWebsiteId);
+            END IF;
+            buildPageBody(pWebsiteId, l_pages(i).article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, l_pages(i).body);
+        END LOOP;
+
+
+
+        /* HOPE TO DELETE FROM HERE === >>>> */
+
         pck_codepen.g_nav_labels:=null;
 
         SELECT 'https://' || domain_name, contact_email, telephone_number, mobile_number, linkedin_name, instagram_name, SUBSTR(color_primary,2), favicon_asset_id
@@ -462,8 +784,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
           )
          ORDER BY display_order, lastmod DESC;
         
-        l_json:= new JSON_OBJECT_T;
-        l_files:= new JSON_OBJECT_T;
+        
         
         FOR i IN 1..l_labels.COUNT LOOP
             /*
@@ -567,7 +888,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         n:=0;
         FOR C IN (
             SELECT ff.context, ff.font_family, ff.font_style, ff.font_weight, ff.font_stretch, ff.src_url, ff.deploy_filename,
-                    ff.created_date, wf.sha1, NVL(wf.sha1_updated,wf.created_date) sha1_updated
+                    ff.created_date, wf.sha1, NVL(wf.sha1_updated,wf.deployed_date) sha1_updated
               FROM website_fontface ff, website_files wf
              WHERE ff.website_id=pWebsiteid
                AND ff.deploy_filename=wf.file_name(+)
@@ -620,7 +941,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
          WHERE application_id=101
            AND file_name='deploy.css';
 
-        SELECT MAX(NVL(sha1_updated,created_date)), MAX(sha1)
+        SELECT MAX(NVL(sha1_updated,deployed_date)), MAX(sha1)
           INTO l_css_prev_updated_date, l_sha1
           FROM website_files
          WHERE file_name='css/styles.min.css';
