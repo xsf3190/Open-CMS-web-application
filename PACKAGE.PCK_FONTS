@@ -64,6 +64,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_chars_bold_normal LONG;
         l_chars_bold_italic LONG;
 
+        l_first_heading VARCHAR2(160);
+
     BEGIN
         DELETE article_chars WHERE article_id=pArticleId;
 
@@ -76,9 +78,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         ) LOOP
             l_text :=C.body_html;
             FOR C1 IN (
-                SELECT header_html FROM website_article WHERE website_id=pWebsiteid AND article_id=pArticleId
+                SELECT header_html, footer_html FROM website_article WHERE website_id=pWebsiteid AND article_id=pArticleId
             ) LOOP
-                l_text:=l_text || C1.header_html;
+                l_text:=l_text || C1.header_html || C1.footer_html;
             END LOOP;
         END LOOP;
         
@@ -102,14 +104,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END LOOP;
 
             l_heading:=REGEXP_REPLACE(l_heading,l_italic_regex,null,1,0);
+            l_heading:=utl_i18n.unescape_reference(apex_escape.striphtml(l_heading));
 
-            l_headings:=l_headings || utl_i18n.unescape_reference(apex_escape.striphtml(l_heading));
+            l_headings:=l_headings || l_heading;
+
+            IF (i=1) THEN
+                l_first_heading:=SUBSTR(l_heading,1,160);
+            END IF;
         END LOOP;
         l_headings_italic:=distinct_chars(l_headings_italic);
         l_headings:=distinct_chars(l_headings);
 
-        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal)
-        VALUES (pArticleId, 'headings', l_headings_italic, l_headings);
+        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, first_heading)
+        VALUES (pArticleId, 'headings', l_headings_italic, l_headings, l_first_heading);
 
         g_chars_used('headings').chars_bold_normal:=distinct_chars(g_chars_used('headings').chars_bold_normal || l_headings);
         g_chars_used('headings').chars_bold_italic:=distinct_chars(g_chars_used('headings').chars_bold_italic || l_headings_italic);
