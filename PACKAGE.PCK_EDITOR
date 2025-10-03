@@ -364,9 +364,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_moved_article_id website_article.article_id%type;
         TYPE t_article_id IS TABLE OF website_article.article_id%type;
         l_article_id t_article_id;
+        l_old_nav VARCHAR2(4000);
+        l_new_nav VARCHAR2(4000);
+        l_do_deploy BOOLEAN;
         l_clob CLOB;
+        l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        SELECT LISTAGG(navigation_label) WITHIN GROUP (ORDER BY display_order) INTO l_old_nav FROM website_article WHERE website_id=pWebsiteid;
+
         SELECT display_order, article_id, navigation_label, collection_type
           BULK COLLECT INTO l_arr
           FROM JSON_TABLE(pBodyText, '$[*]' COLUMNS (display_order FOR ORDINALITY, article_id, navigation_label, collection_type));
@@ -417,10 +424,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         FORALL i IN l_article_id.FIRST .. l_article_id.LAST
             DELETE article WHERE id=l_article_id(i);
 
-        apex_json.open_object;
-        apex_json.write('success', TRUE);
-        apex_json.write('deleted',l_article_id.COUNT);
-        apex_json.close_object;
+        SELECT LISTAGG(navigation_label) WITHIN GROUP (ORDER BY display_order) INTO l_new_nav FROM website_article WHERE website_id=pWebsiteid;
+
+        l_do_deploy:=NVL(l_new_nav,'x') <> NVL(l_old_nav,'x');
+        
+        IF (l_do_deploy) tHEN
+            UPDATE website SET nav_updated_date = current_timestamp WHERE id=pWebsiteid;
+        END IF;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('deploy',l_do_deploy);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
