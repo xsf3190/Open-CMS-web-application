@@ -2,7 +2,7 @@ const bodydata = document.body.dataset;
 const dropdown = document.querySelector("#menulist");
 const login_btn = dropdown.querySelector(".login-btn");
 const email = dropdown.querySelector(".email");
-const dialog_header = document.querySelector("dialog.output header");
+const dialog_close = document.querySelectorAll("dialog .close");
 const vitalsQueue = new Set();
 const narrow_viewport = window.matchMedia("(width <= 600px)");
 
@@ -76,21 +76,27 @@ if (jwt) {
     email.textContent = parse.sub;
     aud = parse.aud;
     console.log("Refresh token exists. User is logged in as " + aud);
-    dialog_header.addEventListener("click", clickHandler);
 }
 
 /*
-** INJECT IMPORTMAP IF USER WANTS TO PERFORM AUTHENTICATED ACTION
+** INJECT IMPORTMAP IF USER SIGNALS INTENT TO EXECUTE ES MODULE
 */
 const importmap = async () => {
     console.log("Create importmap");
-    const response = await fetch("/javascript/importmap.json");
+    const response = await fetch("https://es-modules.netlify.app/test/json/importmap.1.json"); // CHANGE THIS
     const data = await response.json();
     const im = document.createElement('script');
     im.type = 'importmap';
     im.textContent = JSON.stringify(data);
     document.head.appendChild(im);
 }
+
+/*
+** CLICK HANDLER FOR DIALOG CLOSE BUTTON
+*/
+dialog_close.forEach((button) => {
+    button.addEventListener("click", clickHandler);
+})
 
 /*
 ** CLICK HANDLER FOR ALL BUTTONS IN DROPDOWN MENULIST
