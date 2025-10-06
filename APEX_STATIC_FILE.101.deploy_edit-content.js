@@ -65,31 +65,6 @@ export const init = async (element) => {
                 return;
             })
 
-    /* Add "Edit Pages" button to toolbar */
-    class EditPages extends Plugin {
-        init() {
-            const editor = this.editor;
-            editor.ui.componentFactory.add( 'editPages', () => {
-                const button = new ButtonView();
-                button.set( {
-                    label: 'Manage Pages',
-                    class: "my-ck-button_with-text",
-                    withText: true
-                } );
-                button.on('execute', (_) => {
-                    import("deploy_edit-pages")
-                    .then((module) => {
-                        module.init();
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        console.error("Failed to load EditPages plugin");
-                    });
-                });
-                return button;
-            } );
-        }
-    }
 
     /* Add "Upload Image" button to toolbar */
     class UploadImage extends Plugin {
@@ -199,35 +174,10 @@ export const init = async (element) => {
         }
     }
 
-    /* Background Color and shape plugin  */
-    class ColorShape extends Plugin {
-        init() {
-            const editor = this.editor;
-            editor.ui.componentFactory.add( 'colorShape', () => {
-                const button = new ButtonView();
-                button.set( {
-                    label: 'Background Color',
-                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" fill="purple" stroke="black" stroke-width="2"/>',
-                    tooltip: 'Background color',
-                    withText: false
-                } );
-                button.on('execute', (_) => {
-                    import("deploy_edit-color")
-                    .then((module) => {
-                        module.init(editor.config.get('content'));
-                    })
-                    .catch((error) => {
-                        handleError(error);
-                    });
-                });
-                return button;
-            } );
-        }
-    }
 
     const headerConfig = {
-        plugins: [ Essentials, Alignment, Autosave, Bold, ColorShape, EditPages, FontSize, FontColor, Heading, HeadingButtonsUI, Italic, Paragraph, ParagraphButtonUI, SelectFonts, Underline ],
-        toolbar: [  'colorShape', 'heading1', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment', '|', 'editPages', ],
+        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Heading, Italic, Paragraph, SelectFonts, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar, Underline ],
+        toolbar: [ 'heading', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment', '|', 'insertTable'],
         // licenseKey: "GPL",
         alignment: {
             options: [
@@ -247,12 +197,13 @@ export const init = async (element) => {
                     title: 'Title', 
                     class: 'ck-heading_heading1' 
                 },
-                { 
-                    model: 'paragraph', 
-                    title: 'Subtitle', 
-                    class: 'ck-heading_paragraph' 
-                }
             ]
+        },
+        table: {
+            tableCaption: {
+                useCaptionElement: true
+            },
+            contentToolbar: [ 'toggleTableCaption', 'tableColumn', 'tableRow', 'mergeTableCells', 'TableProperties', 'TableCellProperties'],
         },
         autosave: {
                 waitingTime: 2000,
