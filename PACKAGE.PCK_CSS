@@ -1,0 +1,206 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
+    --
+    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type);
+    --
+end;
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
+
+    TYPE fluid_type_rt IS RECORD(
+        property VARCHAR2(30),
+        value VARCHAR2(200)
+    );
+    
+    TYPE fluid_type_t IS TABLE OF fluid_type_rt;
+    
+    FUNCTION getFluidTypes(pMinFontSize IN NUMBER, pMinWidthPx IN NUMBER, pMinScale IN NUMBER, pMaxFontSize IN NUMBER, pMaxWidthPx IN NUMBER, pMaxScale IN NUMBER) RETURN fluid_type_t IS
+        l_fluid_type fluid_type_t:=fluid_type_t();
+        l_min_font NUMBER;
+        l_max_font NUMBER;
+        l_min_width NUMBER;
+        l_max_width NUMBER;
+        l_slope NUMBER;
+        l_intersect NUMBER;
+        l_clamp VARCHAR2(200);
+
+        TYPE tt_spaces IS RECORD(dimension VARCHAR2(3), multiplier NUMBER);
+        TYPE t_spaces IS TABLE OF tt_spaces INDEX BY PLS_INTEGER;
+        l_spaces t_spaces:=t_spaces(
+            1=>tt_spaces('3xs',0.25), 
+            2=>tt_spaces('2xs',0.5), 
+            3=>tt_spaces('xs',0.75), 
+            4=>tt_spaces('s',1), 
+            5=>tt_spaces('m',1.5), 
+            6=>tt_spaces('l',2), 
+            7=>tt_spaces('xl',3), 
+            8=>tt_spaces('2xl',4), 
+            9=>tt_spaces('3xl',6)
+        );
+
+        FUNCTION round4dp(pNumber IN NUMBER) RETURN VARCHAR2 IS
+            l_number NUMBER;
+        BEGIN
+            l_number:=ROUND(pNumber,4);
+            IF (MOD(l_number,1)=0) THEN /* integer */
+                RETURN (TO_CHAR(l_number));
+            ELSE
+                RETURN(LTRIM(RTRIM(TO_CHAR(ROUND(pNumber,4),'fm90.0000'),'0')));
+            END IF;
+        END;
+
+        PROCEDURE addFluidType(pProperty IN VARCHAR2) IS 
+        BEGIN
+            l_fluid_type.EXTEND;
+            l_fluid_type(l_fluid_type.LAST).property:=pProperty;
+            l_clamp:='clamp(' || round4dp(l_min_font) || 'rem,' || round4dp(l_intersect) || 'rem + ' || round4dp(l_slope * 100) || 'cqi,' || round4dp(l_max_font) || 'rem)';
+            l_fluid_type(l_fluid_type.LAST).value:=l_clamp;
+        END;
+
+    BEGIN
+        l_min_width:=pMinWidthPx/16; 
+        l_max_width:=pMaxWidthPx/16;
+        FOR i IN -2 .. 6 LOOP
+            IF (i<0) THEN
+                l_min_font:=pMinFontSize/(pMinScale**ABS(i));
+                l_max_font:=pMaxFontSize/(pMaxScale**ABS(i));
+            ELSE
+                l_min_font:=pMinFontSize*(pMinScale**i);
+                l_max_font:=pMaxFontSize*(pMaxScale**i);
+            END IF;
+            l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
+            l_intersect:= -l_min_width * l_slope + l_min_font;
+            addFluidType('--step-' || i);
+        END LOOP;
+
+        FOR i IN 1..l_spaces.COUNT LOOP
+            l_min_font:=pMinFontSize*l_spaces(i).multiplier;
+            l_max_font:=pMaxFontSize*l_spaces(i).multiplier;
+            l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
+            l_intersect:= -l_min_width * l_slope + l_min_font;
+            addFluidType('--space-' || l_spaces(i).dimension);
+        END LOOP;
+
+        RETURN l_fluid_type;
+    END;
+
+    /* 
+    ** Build page CSS root
+    */ 
+    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type) IS
+        l_fluid_types fluid_type_t;
+
+        TYPE t_rgb_arr IS VARRAY(3) OF PLS_INTEGER;
+        l_rgb_arr t_rgb_arr:=t_rgb_arr();
+
+        TYPE t_rgb_tint_arr IS VARRAY(3) OF VARCHAR2(6);
+        l_rgb_light VARCHAR2(6);
+        l_rgb_lighter VARCHAR2(6);
+        l_rgb_lightest VARCHAR2(6);
+        
+        l_fontfaces VARCHAR2(4000);
+        l_root_css VARCHAR2(4000);
+        l_css website.css%type;
+    BEGIN
+        /* 
+        ** BUIKD @FONT-FACE RULES 
+        */
+        FOR C IN (
+            SELECT fontface
+              FROM website_font
+             WHERE website_id=pWebsiteid
+        ) LOOP
+            l_fontfaces:=l_fontfaces || C.fontface;
+        END LOOP;
+
+        /* 
+        ** BUIKD :ROOT RULES 
+        */
+        FOR C IN (
+            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius,
+                     wa.header_background_color, wa.main_background_color, wa.footer_background_color
+              FROM website w, website_article wa
+             WHERE w.id=pWebsiteId
+               AND wa.website_id=w.id
+               AND wa.display_order=(SELECT MIN(display_order) FROM website_article wa2 WHERE wa2.website_id=wa.website_id )
+            )
+        LOOP
+            /* Build design tokens */
+
+            l_fluid_types:=getFluidTypes(C.min_font_size, C.min_width_px, C.min_scale, C.max_font_size, C.max_width_px, C.max_scale);
+
+            
+            l_root_css:=l_root_css ||
+            ':root {' ||
+                '-webkit-text-size-adjust: none;' ||
+                'text-size-adjust: none;';
+                
+            FOR i IN 1..l_fluid_types.COUNT LOOP
+                l_root_css:=l_root_css || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
+            END LOOP;
+            
+            l_root_css:=l_root_css || 
+                '--font-family-ui: system-ui;';
+            
+            FOR C1 IN (
+                SELECT wf.context, f.family
+                  FROM font f, website_font wf
+                 WHERE f.id=wf.font_id
+                   AND wf.website_id=pWebsiteId
+                 ORDER BY wf.context
+            ) LOOP
+                l_root_css:=l_root_css || 
+                '--font-family-' || C1.context || ':"' || C1.family || '",system-ui;';
+            END LOOP;
+            
+            l_root_css:=l_root_css || 
+            '--max-width: ' || C.max_width || ';' || 
+            '--img-border-radius: ' || C.img_border_radius || ';' ||
+            '--nav-dark-color: rgb(25, 25, 25);' ||
+	        '--nav-highlight-color: rgb(24, 54, 145);';
+            IF (C.header_background_color IS NOT NULL) THEN
+                l_root_css:=l_root_css || 
+                '--header-background-color: ' || C.header_background_color || ';';
+            END IF;
+            IF (C.main_background_color IS NOT NULL) THEN
+                l_root_css:=l_root_css || 
+                '--main-background-color: ' || C.main_background_color || ';';
+            END IF;
+            IF (C.footer_background_color IS NOT NULL) THEN
+                l_root_css:=l_root_css || 
+                '--footer-background-color: ' || C.footer_background_color || ';';
+            END IF;
+
+            /*
+            FOR i IN 1..3 LOOP
+                l_rgb_arr.EXTEND;
+                l_rgb_arr(l_rgb_arr.LAST):=TO_NUMBER(SUBSTR(SUBSTR(C.color_primary,2),i+(i-1),2),'xx');
+            END LOOP;
+
+            FOR i IN l_rgb_arr.FIRST .. l_rgb_arr.LAST LOOP
+                l_rgb_light:=l_rgb_light|| TO_CHAR(l_rgb_arr(i) + (0.25 * (255 - l_rgb_arr(i))),'fmxx');
+            END LOOP;
+            
+            FOR i IN l_rgb_arr.FIRST .. l_rgb_arr.LAST LOOP
+                l_rgb_lighter:=l_rgb_lighter|| TO_CHAR(l_rgb_arr(i) + (0.5 * (255 - l_rgb_arr(i))),'fmxx');
+            END LOOP;
+
+            FOR i IN l_rgb_arr.FIRST .. l_rgb_arr.LAST LOOP
+                l_rgb_lightest:=l_rgb_lightest|| TO_CHAR(l_rgb_arr(i) + (0.75 * (255 - l_rgb_arr(i))),'fmxx');
+            END LOOP;
+            */
+
+            l_root_css:=l_root_css || 
+            '}';
+        END LOOP;
+
+        l_css:=l_fontfaces || l_root_css;
+        UPDATE website 
+           SET css=l_css, 
+               css_updated_date=current_timestamp
+         WHERE id=pWebsiteid
+           AND (dbms_lob.compare(css,l_css)<>0 OR css IS NULL);
+
+    END;
+
+end;
+/
