@@ -218,14 +218,13 @@ export const init = async (element) => {
     const wordcount = document.querySelector(".wordcount");
 
     const mainConfig = {
-        plugins: [ Essentials,  Alignment, Autosave, BlockQuote, Bold, Clipboard, Code, CodeBlock,  
-                    ColorShape,
+        plugins: [ Essentials,  Alignment, Autosave, BlockQuote, Bold, Clipboard, Code, CodeBlock,
                     FontSize, FontColor, FontBackgroundColor,
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
                     Italic, Link, LinkImage, List, ListImages, Paragraph, 
                     SelectAll, SelectFonts, ShowBlocks, Underline, UploadImage, UploadImages, WordCount ],
-        toolbar: [ 'colorShape', 'heading', '|', 'undo', 'redo',  '|', 'colorShape, ', 'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
+        toolbar: [ 'heading', '|', 'undo', 'redo',  '|',  'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
                     '|', 'uploadImage', 'uploadImages', 'listImages', 'insertImage', ],
         menuBar: {
