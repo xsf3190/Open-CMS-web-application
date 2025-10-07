@@ -8,8 +8,8 @@ const narrow_viewport = window.matchMedia("(width <= 600px)");
 
 if (narrow_viewport.matches) {
     const nav = document.querySelector("nav");
-    if (nav.classList.contains("can-shrink")) {
-        const ul = nav.querySelector("ul");
+    const ul = nav.querySelector("ul");
+    if (ul.childElementCount>2) {
         menulist.prepend(nav);
         ul.style.flexDirection="column";
         ul.style.alignItems="start";
@@ -82,8 +82,9 @@ if (jwt) {
 ** INJECT IMPORTMAP IF USER SIGNALS INTENT TO EXECUTE ES MODULE
 */
 const importmap = async () => {
-    console.log("Create importmap");
-    const response = await fetch("https://es-modules.netlify.app/test/json/importmap.1.json"); // CHANGE THIS
+    console.log("Create importmap for " + bodydata.importmap);
+
+    const response = await fetch(bodydata.importmap);
     const data = await response.json();
     const im = document.createElement('script');
     im.type = 'importmap';
