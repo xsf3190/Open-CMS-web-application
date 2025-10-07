@@ -151,8 +151,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         INSERT INTO website (id, domain_name, netlify_site_id, created_date, user_id, contact_email, title, subtitle, header_effect, color_primary)
         VALUES (seq_website.nextval, l_domain, l_netlify_site_id, current_timestamp, pUserid, pEmail, l_domain, 'Welcome to your website', 'curve', '#0F121A');
 
-        INSERT INTO website_font (website_id, context, font_id, opsz, slnt, wdth, wght, font_size, color, underline, margin)
-        SELECT seq_website.currval, context, font_id, opsz, slnt, wdth, wght, font_size, color, 0, 0
+        INSERT INTO website_font (website_id, context, font_id, opsz, slnt, wdth, wght)
+        SELECT seq_website.currval, context, font_id, opsz, slnt, wdth, wght
           FROM website_font
          WHERE website_id=pWebsiteId;
 
