@@ -24,6 +24,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_sha256:=dbms_crypto.hash(src=>pContent, typ=>dbms_crypto.hash_sh256);
         RETURN ('sha256-' || utl_raw.cast_to_varchar2(utl_encode.base64_encode(l_sha256)));
     END;
+
+
+    
     
     /*
     ** SERVE JS AND CSS MODULES FROM NETLIFY SITE
@@ -39,18 +42,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
 
     PROCEDURE buildESModules(pEsmLibrary IN VARCHAR2) IS 
+        l_json JSON_OBJECT_T;
+        l_files JSON_OBJECT_T;
+        l_keys JSON_KEY_LIST;
+
         TYPE tt_files IS RECORD (
             file_name apex_application_static_files.file_name%type,
-            file_content CLOB,
-            file_content_b BLOB
+            file_content CLOB
         );
         TYPE t_files IS TABLE OF tt_files INDEX BY VARCHAR2(40);
         l_deploy_files t_files;
 
         l_headers CLOB;
-        l_files JSON_OBJECT_T;
-        l_json JSON_OBJECT_T;
-
+        
         l_sha1_test es_modules.sha1_test%type;
         l_sha256_test es_modules.sha256_test%type;
         
@@ -65,12 +69,57 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_job_name VARCHAR2(30);
         l_netlify_deploy_id website.netlify_deploy_id%type;
 
-        l_api_url VARCHAR2(600);
-        l_font_face LONG;
-        l_url_regex VARCHAR2(9):='\((.+?)\)';
-        l_font_url VARCHAR2(500);
-        l_font_download BLOB;
-        l_font_filename VARCHAR2(100);
+        l_file_content CLOB;
+        l_filename VARCHAR2(250);
+        l_sha1 VARCHAR2(40);
+        n PLS_INTEGER:=0;
+
+        PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB) IS
+            l_sha1 website_files.sha1%type;
+        BEGIN
+            dbms_output.put_line('Adding new or changed file to deployment - '|| pFilename);
+            l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
+            l_deploy_files(l_sha1).file_name:=pFilename;
+            l_deploy_files(l_sha1).file_content:=pFileContent;
+            l_files.put(pFilename, l_sha1);
+        END;
+
+        PROCEDURE buildImportmaps(pSslUrl IN VARCHAR2) IS
+            TYPE t_name_type IS VARRAY(2) OF VARCHAR2(4);
+            TYPE t_number_type IS VARRAY(2) OF pls_integer;
+            l_versions t_name_type:=t_name_type('test','live');
+            l_deploy_envs t_number_type:=t_number_type(1,3);
+            l_importmap CLOB;
+            l_sha256 es_modules_importmap.sha256%type;
+        BEGIN
+            DELETE es_modules_importmap;
+            FOR i IN 1..l_versions.COUNT LOOP
+                FOR j IN 1..l_deploy_envs.COUNT LOOP
+                    WITH data AS
+                    (
+                        SELECT 
+                            SUBSTR(module_name,1,INSTR(module_name,'.')-1) module_name, 
+                            pSslUrl || '/' || l_versions(i) || '/javascript/' || module_name host_name,
+                            CASE WHEN l_versions(i)='live' THEN sha256_live ELSE sha256_test END sha256
+                        FROM es_modules
+                        WHERE BITAND(deploy_envs,l_deploy_envs(j))=l_deploy_envs(j)
+                    )
+                    SELECT json_object(
+                        'imports' VALUE json_objectagg(module_name VALUE host_name),
+                        'integrity' VALUE json_objectagg(host_name VALUE sha256)
+                        returning clob) 
+                    INTO l_importmap 
+                    FROM data;
+                    l_sha256:=getSha256(l_importmap);
+
+                    INSERT INTO es_modules_importmap(version, deploy_env, sha256, content)
+                    VALUES (l_versions(i), l_deploy_envs(j), l_sha256, l_importmap);
+
+                    addDeploy(l_versions(i) || '/json/importmap.' || l_deploy_envs(j) || '.json', l_importmap);
+
+                END LOOP;
+            END LOOP;
+        END;
 
     BEGIN
         IF (pEsmLibrary NOT IN ('test','live')) THEN
@@ -87,53 +136,94 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_files:= new JSON_OBJECT_T;
 
         FOR C IN (
-            SELECT s.file_name, SUBSTR(s.mime_type,INSTR(s.mime_type,'/')+1) || '/' file_path, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_source, apex_util.blob_to_clob(s.file_content) file_content, e.sha1_test, e.sha1_live
-              FROM apex_application_static_files s, es_modules e
+            WITH last_deploy AS
+            (
+                SELECT file_name, deployed_date,  MAX(DECODE(env,'/test/',sha1)) sha1_test, MAX(DECODE(env,'/live/',sha1)) sha1_live
+                FROM
+                (
+                    SELECT deployed_date, 
+                            SUBSTR(path,1,INSTR(path,'/',1,2)) env,
+                            SUBSTR(path,INSTR(path,'/',-1)+1) file_name,
+                            sha1
+                    FROM website_files 
+                    WHERE website_id=l_website_id
+                    AND mime_type='application/javascript'
+                )
+                GROUP BY file_name, deployed_date
+            )
+            SELECT e.module_name, d.deployed_date, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_source, d.sha1_test, d.sha1_live, e.sha256_test, e.sha256_live,
+                    CASE WHEN CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE)>NVL(d.deployed_date,CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE)) THEN 1 ELSE 0 END build
+              FROM last_deploy d, apex_application_static_files s, es_modules e
              WHERE s.file_name=e.module_name
                AND s.application_id=101
-            )
-        LOOP
-            l_sha1_test:=LOWER(dbms_crypto.hash(src=>C.file_content, typ=>dbms_crypto.hash_sh1));
-            l_sha256_test:=getSha256(C.file_content);
-
-            IF(l_sha1_test<>C.sha1_test) THEN
-                UPDATE es_modules
-                   SET updated_source=C.updated_source,
-                       sha1_test=l_sha1_test, 
-                       sha256_test=l_sha256_test,
-                       updated_test=current_timestamp
-                 WHERE module_name=C.file_name;
-            END IF;
-            
-            l_deploy_files(l_sha1_test).file_name:=C.file_path || C.file_name;
-            l_deploy_files(l_sha1_test).file_content:=C.file_content;
-            l_files.put('test/' || C.file_path || C.file_name, l_sha1_test);
-
-            /*
-            ** UPDATE "live" HASH VALUES TO THE ALWAYS CALCULATED TEST VALUES WHEN PARAMETER PASSED
-            */
+               AND d.file_name(+)=LOWER(e.module_name)
+             ORDER BY 1
+        ) LOOP
             IF (pEsmLibrary='live') THEN
                 UPDATE es_modules
-                   SET sha1_live=l_sha1_test,
-                       sha256_live=l_sha256_test,
-                       live_change_ind=CASE WHEN sha1_live=l_sha1_test THEN 0 ELSE 1 END,
+                   SET sha1_live=C.sha1_test,
+                       sha256_live=C.sha256_test,
                        updated_live=current_timestamp
-                 WHERE module_name=C.file_name;
-                l_files.put('live/' || C.file_path || C.file_name, l_sha1_test);
-            ELSE
-            /*
-            ** ENSURE THAT ES_MODULES.NETLIFY.APP IS ALWAYS DEPLOYED INCLUDING "live" ESM FILES
-            */
-                l_files.put('live/' || C.file_path || C.file_name, NVL(C.sha1_live,l_sha1_test) );
+                 WHERE module_name=C.module_name;
+                l_files.put('test/javascript/' || C.module_name, C.sha1_test);
+                l_files.put('live/javascript/' || C.module_name, C.sha1_test);
+                CONTINUE;
             END IF;
+
+            IF (C.build=0) THEN
+                dbms_output.put_line('No change - ' || C.module_name);
+                l_files.put('test/javascript/' || C.module_name, C.sha1_test);
+                l_files.put('live/javascript/' || C.module_name, C.sha1_live);
+                CONTINUE;
+            END IF;
+
+            /*
+            **  SOURCE TIMESTAMP CHANGE IS MORE RECENT THAN LAST DEPLOYMENT
+            */
+            SELECT apex_util.blob_to_clob(file_content) 
+              INTO l_file_content 
+              FROM apex_application_static_files 
+             WHERE application_id=101 
+               AND file_name=C.module_name;
             
+            l_sha1_test:=LOWER(dbms_crypto.hash(src=>l_file_content, typ=>dbms_crypto.hash_sh1));
+
+            /* CHECK THERE REALLY WAS A CONTENT CHANGE */
+            IF (l_sha1_test=C.sha1_test) THEN
+                l_files.put('test/javascript/' || C.module_name, C.sha1_test);
+                l_files.put('live/javascript/' || C.module_name, C.sha1_live);
+                CONTINUE;
+            END IF;
+
+            /* CONTENT HAS MATERIALLY CHANGED. UPDATE TEST ONLY */
+            n:=n+1;
+            l_sha256_test:=getSha256(l_file_content);
+            
+            UPDATE es_modules
+               SET updated_source=C.updated_source,
+                   sha1_test=l_sha1_test, 
+                   sha256_test=l_sha256_test,
+                   updated_test=current_timestamp
+             WHERE module_name=C.module_name;
+
+            addDeploy('test/javascript/' || C.module_name, l_file_content);
+
+            l_files.put('live/javascript/' ||  C.module_name, C.sha1_live);
         END LOOP;
 
+        IF (n=0 AND pEsmLibrary='test') THEN
+            dbms_output.put_line('No source code changes since last deployment');
+            -- RETURN;
+        END IF;
+
+        /*
+        ** BUILD IMPORTMAPS FOR SUCCESSFUL DEPlOY
+        */
+        buildImportmaps(l_ssl_url);
+
         l_headers:='/*' || chr(10) || 'Access-Control-Allow-Origin: *' || chr(10) || 'Timing-Allow-Origin: *';
-        l_sha1_test:=LOWER(dbms_crypto.hash(src=>l_headers, typ=>dbms_crypto.hash_sh1));
-        l_deploy_files(l_sha1_test).file_name:='_headers';
-        l_deploy_files(l_sha1_test).file_content:=l_headers;
-        l_files.put('_headers', l_sha1_test);
+
+        addDeploy('_headers', l_headers);
 
         l_page:=
         '<!DOCTYPE HTML>' ||
@@ -143,13 +233,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             '<meta name="viewport" content="width=device-width, initial-scale=1.0">' ||
         '</head>' ||
         '<body>' ||
-        '<h1>ES Modules deployed at' || to_char(sysdate,'dd.mm.yyyy hh24:mi') || '</h1>' || 
+        '<h1>ES Module deployment status</h1>';
+
+        l_page:=l_page ||
+        '<table>' ||
+        '<tr><th>Module Name</th><th>Source updated</th><th>Test Library Updated</th><th>Live Library Updated</th></tr>';
+        FOR C IN (
+            SELECT module_name, updated_source, updated_test, updated_live
+              FROM es_modules
+             ORDER BY module_name    
+        ) LOOP
+            l_page:=l_page ||
+            '<tr><td>' || C.module_name || '</td><td>' || TO_CHAR(C.updated_source, 'dd.mm.yy hh24:mi') || '</td><td>' || TO_CHAR(C.updated_test, 'dd.mm.yy hh24:mi') ||  '</td><td>' || TO_CHAR(C.updated_live, 'dd.mm.yy hh24:mi') || '</td></tr>';
+        END LOOP;
+
+        l_page:=l_page ||
+        '<table>' ||
         '</body>' ||
         '</html>';
-        l_sha1_test:=LOWER(dbms_crypto.hash(src=>l_page, typ=>dbms_crypto.hash_sh1));
-        l_deploy_files(l_sha1_test).file_name:='index.html';
-        l_deploy_files(l_sha1_test).file_content:=l_page;
-        l_files.put('index.html', l_sha1_test);
+
+        addDeploy('index.html', l_page);
 
         l_json.put('files',l_files);
 
@@ -168,15 +271,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             pck_core.log('... uploading ESM ' || l_deploy_files(C.sha1).file_name);
 
             IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
-            ELSIF (l_deploy_files(C.sha1).file_content_b IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content_b,pData=>l_clob);
+                pck_api.callNetlifyAPI(pUserId=>l_user_id, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
             ELSE
-                RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content clob and blob both null');
+                RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content requested but is null');
             END IF;
         END LOOP;
 
         UPDATE website SET netlify_deploy_id=l_netlify_deploy_id WHERE id=l_website_id;
+
+        /* 
+        ** UPDATE WEBSITE_FILES WITH THIS SITE DEPLOYMENT 
+        */
+        DELETE website_files WHERE website_id=l_website_id AND site_id=l_netlify_site_id;
+        l_keys:=l_files.get_keys;
+        FOR i in 1..l_keys.COUNT LOOP
+            l_filename:=l_keys(i);
+            l_sha1:=l_files.get_string(l_keys(i));
+            INSERT INTO website_files(website_id, site_id, path, sha1)
+            VALUES (l_website_id, l_netlify_site_id, l_filename, l_sha1);
+        END LOOP;
 
         /*
         ** DELETE ANY MODULES FOR WHICH SOURCE NO LONGER EXISTS
@@ -194,6 +307,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         */
         pck_deploy.runDelete(pUserId=>l_user_id, pWebsiteId=>l_website_id, pSiteId=>l_netlify_site_id);
 
+        
+
         EXCEPTION
             WHEN OTHERS THEN
                 pck_core.log_error;
@@ -208,7 +323,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         COMMIT;
     END; 
 
-        /*
+    /*
      **  Build Login Form
      */
     FUNCTION buildLoginForm RETURN VARCHAR2 IS
@@ -453,15 +568,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     **  <main>
     **  <footer>
     */
-    PROCEDURE buildPageBody(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pLogo IN VARCHAR2, pNav IN VARCHAR2, pDropdown in VARCHAR2, pEnv IN VARCHAR2, pRestUrl IN VARCHAR2, pBody IN OUT NOCOPY CLOB) IS
+    PROCEDURE buildPageBody(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pLogo IN VARCHAR2, pNav IN VARCHAR2, pDropdown in VARCHAR2, pEnv IN VARCHAR2, pRestUrl IN VARCHAR2, pIntegrity IN VARCHAR2, pBody IN OUT NOCOPY CLOB) IS
+        l_title article_chars.first_heading%type;
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
         l_main article.body_html%type;
         l_footer website_article.footer_html%type;
+        l_clob CLOB;
 
         l_nav_id VARCHAR2(20);
+        
+        l_icon_id icon.id%type;
+        l_icons apex_t_varchar2:=apex_t_varchar2();
+
         n PLS_INTEGER;
     BEGIN
+        pBody:=null;
         FOR C IN (
             SELECT wa.header_html, a.body_html, wa.footer_html, NVL(a.parent_id,pArticleId) nav_id
               FROM website_article wa, article a
@@ -471,48 +593,76 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ) LOOP
             l_nav_id:='data-id="' || C.nav_id || '"';
             n:=INSTR(pNav,l_nav_id);
-            l_nav:=SUBSTR(pNav,1,n) || 'aria-current="page" ' || SUBSTR(pNav,n+LENGTH(l_nav_id));
+            l_nav:=SUBSTR(pNav,1,n-1) || 'aria-current="page" ' || SUBSTR(pNav,n+LENGTH(l_nav_id));
 
             l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
             l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
             
-            pck_fonts.getCharsUsed(pWebsiteId,pArticleId);
+            l_clob:=C.header_html || C.body_html || C.footer_html;
+            pck_fonts.getCharsUsed(pArticleId, l_clob);
             
-            l_main:='<main id="main" class="ck-content"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
+            l_main:='<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>' ||
+            CASE WHEN pEnv='TEST' THEN '<div style="opacity:0.5;text-align:center"><small class="wordcount"></small></div>' END;
+            
             setImgSrcset(pArticleId, n, l_main);
 
+            FOR C1 IN (
+                SELECT first_heading FROM article_chars WHERE article_id=pArticleid AND context='heading'
+            ) LOOP
+                l_title:=C1.first_heading;
+            END LOOP;
+
             pBody:=
-            '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '">' || 
-                '<div class="topnav flex-items space-between">' ||
-                    pLogo || l_nav || pDropdown || 
-                '</div>' ||    
-               l_header || l_main || l_footer ||
-            '</body>';
+            '<!DOCTYPE HTML>' ||
+            '<html lang="en">' ||
+                '<head>' ||
+                    '<meta charset="UTF-8">' ||
+                    '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
+                    '<title>' || l_title || '</title>' ||
+                    '<meta name="author" content="restartnet.com">' ||
+                    '<meta name="mobile-web-app-capable" content="yes">' ||
+
+                    '<link rel="stylesheet" href="/css/website-styles.min.css">'; /* TO CHANGE */
+                    FOR C1 IN (SELECT deploy_filename FROM css ORDER BY link_order) LOOP
+                        pBody:=pBody ||
+                        '<link rel="stylesheet" href="' || C1.deploy_filename || '">';
+                    END LOOP;
+
+                    pBody:=pBody ||
+                    
+                    '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
+                    '<link rel="icon" type="image/svg+xml" sizes="any" href="">' || /* TODO */
+                '</head>' ||
+                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '">' || 
+                    '<div class="topnav flex-items space-between">' ||
+                        pLogo || l_nav || pDropdown || 
+                    '</div>' ||    
+                   l_header || l_main || l_footer || buildLoginForm || buildContentDialog ||
+                '</body>' ||
+            '</html>';
         END LOOP;
-    END;
+        
+        /* 
+        ** Append any referenced svg as symbols 
+        */
+        n:=regexp_count(pBody,'<use href="#([^"]+)');
+        FOR i IN 1..n 
+        LOOP
+            l_icon_id:=REGEXP_SUBSTR(pBody,'<use href="#([^"]+)',1,i,null,1);
+            apex_string.push(l_icons,l_icon_id);
+        END LOOP;
 
-    FUNCTION buildPageHead(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pScript IN VARCHAR2, pFavicon IN VARCHAR2) RETURN VARCHAR2 IS 
-        l_head VARCHAR2(4000);
-        l_title article_chars.first_heading%type;
-    BEGIN
-        SELECT first_heading INTO l_title FROM article_chars WHERE article_id=pArticleid AND context='heading';
-        l_head:=
-        '<head>' ||
-            '<meta charset="UTF-8">' ||
-            '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
-            '<title>' || l_title || '</title>' ||
-            '<meta name="author" content="restartnet.com">' ||
-            '<meta name="mobile-web-app-capable" content="yes">' ||
-            -- CASE WHEN l_labels(i).img_count>0 THEN
-            -- '<link rel="preconnect" href="https://res.cloudinary.com">'
-            -- END ||
-            --l_labels(i).font_preload ||
-            '<link rel="stylesheet" href="/css/styles.min.css">' ||
-            '<script>' || pScript || '</script>' ||
-            '<link rel="icon" type="image/svg+xml" sizes="any" href="' || pFavicon || '">' ||
-        '</head>';
+        IF (n>0) THEN
+            pBody:=pBody || '<svg width="0" height="0">';
+            FOR C IN (SELECT id, title, viewbox, preserveaspectratio, svg FROM icon WHERE id IN (SELECT DISTINCT column_value FROM TABLE(l_icons)) ORDER BY id)
+            LOOP
+                pBody:=pBody || '<symbol id="' || C.id|| '" viewBox="' || C.viewbox|| '" preserveAspectRatio="' || C.preserveaspectratio || '">' || C.svg || '</symbol>';
+            END LOOP;
+            pBody:=pBody || '</svg>';
+        END IF;
 
-        RETURN (l_head);
+        /*  Include dummy form for CODEPEN if TEST env */
+        pBody:=pBody || '<form action="https://codepen.io/pen/define" method="POST" target="_blank"><input type="hidden" name="data" value=""></form>';
     END;
 
     /*
@@ -521,35 +671,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2, pEsmLibrary IN VARCHAR2) IS
         
         l_clob CLOB;
-        l_json JSON_OBJECT_T;
+        -- l_json JSON_OBJECT_T;
         l_files JSON_OBJECT_T;
-        l_head CLOB;
-        l_page CLOB;
-        
-        l_contact_email website.contact_email%type;
-        l_telephone_number website.telephone_number%type;
-        l_mobile_number website.mobile_number%type;
-        l_linkedin_name website.linkedin_name%type;
-        l_instagram_name website.instagram_name%type;
-        l_color_primary website.color_primary%type;
+        l_keys JSON_KEY_LIST;
+
         l_favicon_asset_id website.favicon_asset_id%type;
-        l_body_html article.body_html%type;
         l_favicon_url VARCHAR2(250);
         l_favicon_download BLOB;
-        l_content CLOB;
-        l_text VARCHAR2(4000);
-        l_char VARCHAR2(4);
-        l_css_updated_date website.updated_date%type;
-        l_css_prev_updated_date website.updated_date%type;
-        l_css_root website.css_root%type;
-        l_css_root_prev website.css_root%type;
-        l_file_name VARCHAR2(200);
-        l_sha1 website_files.sha1%type;
-        l_sha1_prev website_files.sha1%type;
-        l_sha1_updated website_files.sha1_updated%type;
-        l_current_timestamp website_files.deployed_date%type;
-        l_script_src VARCHAR2(500);
-        
         
         TYPE tt_files IS RECORD (
             file_name VARCHAR2(200),
@@ -589,27 +717,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_is_media BOOLEAN:=FALSE;
         l_is_blog BOOLEAN:=FALSE;
         l_is_product BOOLEAN:=FALSE;
-
-        l_deploy_env NUMBER;
-        l_importmap  CLOB;
-        l_importmap_integrity  CLOB;
-        l_importmap_sha256 es_modules.sha256_live%type;
-
-        l_message VARCHAR2(100);
-        l_main_module  VARCHAR2(1000);
         l_script_sha256 VARCHAR2(500);
-        l_css CLOB;
-        l_css_minified CLOB;
-        l_fontfaces LONG;
         l_font_download BLOB;
-        l_font_preload VARCHAR2(1000);
-        l_styles_edit CLOB;
-        
+
         l_sitemap CLOB;
         l_robots CLOB;
         l_headers CLOB;
         l_ssl_url VARCHAR2(200);
-        l_url VARCHAR2(200);
+        -- l_url VARCHAR2(200);
         n PLS_INTEGER;
 
         l_dogface_requested CLOB;
@@ -618,18 +733,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_dogface_empty_clob CLOB:=EMPTY_CLOB();
         l_dogface_empty_blob BLOB:=EMPTY_BLOB();
 
-        l_headings_regex varchar2(30):='<h[1-4]>(.+?)<\/h[1-4]>';
-
         /* START OF NEW */
-        TYPE tt_pages IS RECORD (
-            article_id website_article.article_id%type,
-            path VARCHAR2(200),
-            sha1 VARCHAR2(40),
-            build PLS_INTEGER,
-            body CLOB
-        );
-        TYPE t_pages IS TABLE OF tt_pages INDEX BY PLS_INTEGER;
-        l_pages t_pages;
 
         l_nav VARCHAR2(4000);
         l_logo website.logo%type;
@@ -639,7 +743,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         /* CLOB SIGNATURE */
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB) IS
+            l_sha1 website_files.sha1%type;
         BEGIN
+            dbms_output.put_line('new version : '||pFilename);
             l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content:=pFileContent;
@@ -652,7 +758,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         /* BLOB SIGNATURE */
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY BLOB) IS
+            l_sha1 website_files.sha1%type;
         BEGIN
+            dbms_output.put_line('new version: '||pFilename);
             l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content_b:=pFileContent;
@@ -663,19 +771,48 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             -- END IF;
         END;
 
-        PROCEDURE deleteFontface(pContext IN VARCHAR2, pDeployFilename IN VARCHAR2) IS
-        n pls_integer;
+        /* 
+        ** SEND TO NETLIFY LIST OF SHA1 OF EACH FILE IN THE DEPLOYMENT 
+        */
+        PROCEDURE sendNetlifyDeploy IS
+            l_json JSON_OBJECT_T;
+            l_keys JSON_KEY_LIST;
+            l_filename VARCHAR2(200);
+            l_sha1 VARCHAR2(40);
+            l_clob CLOB;
         BEGIN
-            DELETE website_fontface 
-             WHERE website_id=pWebsiteid 
-               AND context=pContext
-               AND deploy_filename=pDeployFilename;
-            n:=sql%rowcount;
-            pck_core.log('DELETE website_fontface:'||pContext||':'|| pDeployFilename||':'||n);
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('files',l_files);
 
-            DELETE website_files 
-             WHERE website_id=pWebsiteid
-               AND file_name=pDeployFilename;
+            pck_api.callNetlifyAPI(pUserId=>pUserid, pEndpoint=>'sites/' || pSiteId || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+
+            /* NEED THIS FOR ASYNC DEPLOYMENT STATUS MONITORING */
+            UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=pWebsiteId;
+            COMMIT;
+
+            FOR C IN (SELECT id, sha1 FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) WHERE sha1 IS NOT NULL) LOOP
+                dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
+                logDeployment(pWebsiteId, pSiteId, 'Uploading ' || l_deploy_files(C.sha1).file_name);
+                IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
+                    pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
+                ELSIF (l_deploy_files(C.sha1).file_content_b IS NOT NULL) THEN
+                    pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content_b,pData=>l_clob);
+                ELSE
+                    RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content clob and blob both null');
+                END IF;
+            END LOOP;
+
+            /* 
+            ** UPDATE WEBSITE_FILES WITH THIS SITE DEPLOYMENT 
+            */
+            DELETE website_files WHERE website_id=pWebsiteId AND site_id=pSiteId;
+            l_keys:=l_files.get_keys;
+            FOR i in 1..l_keys.COUNT LOOP
+                l_filename:=l_keys(i);
+                l_sha1:=l_files.get_string(l_keys(i));
+                INSERT INTO website_files(website_id, site_id, path, sha1, mime_type)
+                VALUES (pWebsiteId, pSiteId, l_filename, l_sha1, SUBSTR(l_filename,INSTR(l_filename,'.',-1)+1));
+            END LOOP;
         END;
 
     BEGIN
@@ -684,60 +821,83 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pck_sec.g_website_id:=pWebsiteId;
 
         /*
-        ** WEBSITE SHOULD ALWAYS HAVE ENTRIES IN TABLE WEBSITE_FILES FOR LAST DEPLOYMENT
+        ** WEBSITE SHOULD ALWAYS HAVE ENTRIES IN TABLE WEBSITE_FILES FROM PREVIOUS DEPLOYMENT
         **
         ** 1. submit all asset paths and their sha1 to hosting service
         ** 2. receive array of assets to upload - i.e new path or sha1
         ** 3. upload required assets
         **
-        ** Processes that involve network calls:
-        **
-        ** 1. Download Google Fonts
-        ** 2. Uploading files to hosting service
-        ** 
-        */
-
-
-        /*
-        **  Website comprises following mime types:
+        **  Website comprises following asset types:
         **
         **  1. text/html - website pages
         **  2. font/woff2 - fonts
         **  3. text/css - css stylesheets
         **  4. application/javascript - page javascript
-        **  5. application/json - importmap for javascript modules 
+        **  5. application/json - importmap for running javascript modules 
         **  6. text/plain - "_headers" file, includes strict Content Security Policy
         **  7. application/xml - sitemap.xml
         **
         */
 
-        l_json:= new JSON_OBJECT_T;
+        -- l_json:= new JSON_OBJECT_T;
         l_files:= new JSON_OBJECT_T;
-        
-        WITH content AS
-        (
-            SELECT wa.article_id, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, GREATEST(w.nav_updated_date,a.updated_date,wa.updated_date) content_updated
-              FROM article a, website_article wa, website w
-             WHERE w.id=pWebsiteId
-               AND wa.website_id=w.id
-               AND a.id=wa.article_id
-            UNION ALL 
-            SELECT a.id, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) path, NVL(a.updated_date,a.created_date) last_updated 
-              FROM article a, website_article wa
-             WHERE a.parent_id=wa.article_id
-               AND wa.website_id=pWebsiteId
-        )
-        SELECT c.article_id, c.path, f.sha1, 
-            CASE WHEN f.deployed_date IS NULL OR c.content_updated > f.deployed_date THEN 1 ELSE 0 END deploy, EMPTY_CLOB()
-          BULK COLLECT INTO l_pages
-          FROM content c, website_files f
-         WHERE f.website_id(+)=pWebsiteId
-           AND f.path(+)=c.path;
 
+        /*
+        **  0. Build JAVASCRIPT FILES FIRST TO GET SHA256 INTEGRITY VALUE OF THE STARTER SCRIPT WHICH WE INCLUDE IN HEAD OF  HTML FILES
+        */
+        FOR C IN (
+            WITH source AS
+            (
+             SELECT '/javascript/' || file_name AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+               FROM apex_application_static_files 
+              WHERE application_id=101
+                AND file_name IN ('deploy_start.min.js', 'deploy_main.min.js', 'deploy_web_vitals5.min.js')
+            )
+            SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
+                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=s.deploy_filename
+        ) LOOP
+            IF (INSTR(C.deploy_filename,'deploy_start.min.js')>0) THEN
+                l_script_sha256:=getSha256(C.file_content);
+            END IF;
+            IF (C.build=0) THEN
+                l_files.put(C.deploy_filename, C.sha1);
+                CONTINUE;
+            END IF;
+
+            logDeployment(pWebsiteId, pSiteId, 'Download JAVASCRIPT - '|| C.deploy_filename);
+            addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
+        END LOOP;
+        
+        /*
+        **  1. Build HTML files
+        */
         n:=0;
-        FOR i IN 1..l_pages.COUNT LOOP
-            IF (l_pages(i).build=0) THEN
-                l_files.put(l_pages(i).path, l_pages(i).sha1);
+        FOR C IN (
+            WITH content AS
+            (
+                SELECT wa.article_id, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, GREATEST(w.nav_updated_date,a.updated_date,wa.updated_date) content_updated
+                  FROM article a, website_article wa, website w
+                 WHERE w.id=pWebsiteId
+                   AND wa.website_id=w.id
+                   AND a.id=wa.article_id
+                UNION ALL 
+                SELECT a.id, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) path, NVL(a.updated_date,a.created_date) last_updated 
+                  FROM article a, website_article wa
+                 WHERE a.parent_id=wa.article_id
+                   AND wa.website_id=pWebsiteId
+            )
+            SELECT c.article_id, c.path, f.sha1, 
+                CASE WHEN f.deployed_date IS NULL OR c.content_updated > f.deployed_date THEN 1 ELSE 0 END build
+              FROM content c, website_files f
+             WHERE f.website_id(+)=pWebsiteId
+               AND f.path(+)=c.path
+               AND f.mime_type(+)='html'
+        ) LOOP
+            IF (C.build=0) THEN
+                l_files.put(C.path, C.sha1);
                 CONTINUE;
             END IF;
             n:=n+1;
@@ -746,254 +906,101 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_logo:=buildLogo(pWebsiteId);
                 l_dropdown:=buildDropdown(pWebsiteId);
             END IF;
-            buildPageBody(pWebsiteId, l_pages(i).article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, l_pages(i).body);
-        END LOOP;
-
-
-
-        /* HOPE TO DELETE FROM HERE === >>>> */
-
-        pck_codepen.g_nav_labels:=null;
-
-        SELECT 'https://' || domain_name, contact_email, telephone_number, mobile_number, linkedin_name, instagram_name, SUBSTR(color_primary,2), favicon_asset_id
-          INTO l_ssl_url, l_contact_email, l_telephone_number, l_mobile_number, l_linkedin_name, l_instagram_name, l_color_primary, l_favicon_asset_id
-          FROM website
-         WHERE id=pWebsiteId;
-
-        /*
-        ** Get all website content into collection
-        */
-        SELECT parent_article_id, article_id, path_name, collection_type, page_title, page_description, lastmod, word_count, header_effect, hero_asset_id, contact_email, telephone_number, mobile_number, linkedin_name, instagram_name, promotion, 0, NULL, body_html
-          BULK COLLECT INTO l_labels
-          FROM
-          (
-        SELECT wa.article_id parent_article_id, wa.article_id, apex_string_util.get_slug(wa.navigation_label) path_name, wa.collection_type, wa.page_title, wa.page_description, 
-            wa.display_order, NVL(a.updated_date,a.created_date) lastmod, a.word_count, w.header_effect, w.hero_asset_id, w.contact_email, w.telephone_number, w.mobile_number, w.linkedin_name, w.instagram_name, w.promotion, a.body_html body_html
-          FROM website w, website_article wa, article a
-         WHERE w.id=pWebsiteId
-           AND wa.website_id=w.id 
-           AND wa.article_id=a.id
-         UNION ALL
-        SELECT wa.article_id, a.id, apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(a.body_html,l_headings_regex,1,1)))),  NULL, NULL, NULL, 
-            wa.display_order+NVL(a.display_order/100,0.001),  NVL(a.updated_date,a.created_date) lastmod, a.word_count, w.header_effect, w.hero_asset_id, w.contact_email, w.telephone_number, w.mobile_number, w.linkedin_name, w.instagram_name, w.promotion, a.body_html
-          FROM website w, website_article wa, article a 
-         WHERE w.id=pWebsiteId
-           AND wa.website_id=w.id 
-           AND a.parent_id=wa.article_id 
-           AND wa.collection_type IN ('BLOG','MEDIA')
-          )
-         ORDER BY display_order, lastmod DESC;
-        
-        
-        
-        FOR i IN 1..l_labels.COUNT LOOP
-            /*
-            ** EXTRACT CHARACTERS USED IN ARTICLE TO OPTIMIZE FONTS
-            */
-            pck_fonts.getCharsUsed(pWebsiteId,l_labels(i).article_id);
-
-            /*
-            ** PRELOAD FONTS USED IN PAGE
-            */
-            /*
-            FOR C IN (
-                SELECT a.context, a.chars_normal, a.chars_bold_normal, a.chars_italic, a.chars_bold_italic, f.italic
-                  FROM article_chars a, website_font wf, font f
-                 WHERE a.article_id=l_labels(i).article_id
-                   AND wf.context=a.context
-                   AND wf.website_id=pWebsiteid
-                   AND f.id=wf.font_id
-            ) LOOP
-                IF (C.chars_italic IS NOT NULL AND C.italic=1) THEN
-                    l_labels(i).font_preload:=l_labels(i).font_preload || 
-                    '<link rel="prefetch" href="fonts/' || C.context || '.italic.woff2" AS="font" type="font/woff2">';
-                END IF;
-                IF (C.chars_bold_italic IS NOT NULL AND C.italic=1) THEN
-                    l_labels(i).font_preload:=l_labels(i).font_preload || 
-                    '<link rel="prefetch" href="fonts/' || C.context || '.italic.bold.woff2" AS="font" type="font/woff2">';
-                END IF;
-                IF (C.chars_normal IS NOT NULL) THEN
-                    l_labels(i).font_preload:=l_labels(i).font_preload || 
-                    '<link rel="prefetch" href="fonts/' || C.context || '.normal.woff2" AS="font" type="font/woff2">';
-                END IF;
-                IF (C.chars_bold_normal IS NOT NULL) THEN
-                    l_labels(i).font_preload:=l_labels(i).font_preload || 
-                    '<link rel="prefetch" href="fonts/' || C.context || '.normal.bold.woff2" AS="font" type="font/woff2">';
-                END IF;
-            END LOOP;
-            */
-            /*
-            ** SET IMAGE SRCSET FOR ANY IMAGES INCLUDED IN BODY_HTML
-            */
-            setImgSrcset(l_labels(i).article_id, l_labels(i).img_count, l_labels(i).body_html);
-
-            IF (l_labels(i).collection_type='BLOG') THEN
-                l_is_blog:=TRUE;
-                l_is_media:=FALSE;
-            ELSIF (l_labels(i).collection_type='MEDIA') THEN
-                l_is_media:=TRUE;
-                l_is_blog:=FALSE;
-            END IF;
-
-            pck_codepen.buildBodyHtml(
-                pUserId, 
-                pWebsiteId, 
-                pEnv,
-                pRestUrl,
-                l_labels(i).article_id, 
-                l_labels(i).collection_type, 
-                l_is_media, 
-                l_labels(i).header_effect,
-                l_labels(i).hero_asset_id,
-                l_labels(i).contact_email,
-                l_labels(i).telephone_number,
-                l_labels(i).mobile_number,
-                l_labels(i).linkedin_name,
-                l_labels(i).instagram_name,
-                l_labels(i).promotion,
-                l_labels(i).body_html
-            );
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, l_script_sha256, l_clob);
+            addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
         /*
-        ** GET GOOGLE FONT FILES - UPDATES WEBSITE_FONTFACE TABLE
+        **  2. Build FONT files
         */
         logDeployment(pWebsiteId, pSiteId, 'Optimizing FONTS');
-        pck_fonts.getFontFiles(pWebsiteid, pSiteId);
 
-        /*
-        ** DELETE ANY UNUSED WEBSITE_FONTFACE
-        */
-        FOR C IN (
-            SELECT context FROM website_font WHERE website_id=pWebsiteid
-        ) LOOP
-            IF (pck_fonts.g_chars_used(C.context).chars_normal IS NULL) THEN
-                deleteFontface(C.context,'fonts/' || C.context || '.normal.woff2');
-            END IF;
-
-            IF (pck_fonts.g_chars_used(C.context).chars_bold_normal IS NULL) THEN
-                deleteFontface(C.context,'fonts/' || C.context || '.normal.bold.woff2');
-            END IF;
-
-            IF (pck_fonts.g_chars_used(C.context).chars_italic IS NULL) THEN
-                deleteFontface(C.context,'fonts/' || C.context || '.italic.woff2');
-            END IF;
-
-            IF (pck_fonts.g_chars_used(C.context).chars_bold_italic IS NULL) THEN
-                deleteFontface(C.context,'fonts/' || C.context || '.italic.bold.woff2');
-            END IF;
-        END LOOP;
+        pck_fonts.getFontFiles(pWebsiteid, pSiteId);  /* Sets website_fontfaces.created_date */
         
-        /* DOWNLOAD FONT FILES FROM GOOGLE AND UPLOAD IF ANY CHANGE */
-        n:=0;
         FOR C IN (
-            SELECT ff.context, ff.font_family, ff.font_style, ff.font_weight, ff.font_stretch, ff.src_url, ff.deploy_filename,
-                    ff.created_date, wf.sha1, NVL(wf.sha1_updated,wf.deployed_date) sha1_updated
+            SELECT ff.deploy_filename, ff.src_url, wf.sha1,
+                    CASE WHEN wf.deployed_date IS NULL OR ff.created_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM website_fontface ff, website_files wf
              WHERE ff.website_id=pWebsiteid
-               AND ff.deploy_filename=wf.file_name(+)
+               AND wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=ff.deploy_filename
+               AND wf.mime_type(+)='woff2'
         ) LOOP
-            l_fontfaces:=l_fontfaces ||
-            '@font-face {' ||
-                'font-family:' || C.font_family || ';' ||
-                'font-style:' || C.font_style || ';' ||
-                'font-weight:' || C.font_weight || ';' ||
-                CASE WHEN C.font_stretch IS NOT NULL THEN
-                'font-stretch:' || C.font_stretch || ';' 
-                END
-                ||
-                'font-display:swap;' ||
-                'src: url("/' || C.deploy_filename || '") format("woff2");' ||
-            '}';
+            IF (C.build=0) THEN
+                l_files.put(C.deploy_filename, C.sha1);
+                CONTINUE;
+            END IF;
 
             /* 
-            **  DEPLOY FONT FILE IF WAS DOWNLOADED FROM GOOGLE AFTER PREVIOUS DEPLOYMENT
+            **  DEPLOY FONT FILE FROM GOOGLE
             */
-            IF (C.created_date>C.sha1_updated OR C.sha1_updated IS NULL) THEN
-                logDeployment(pWebsiteId, pSiteId, 'Download Google - '|| C.deploy_filename);
-                l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
-                addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_font_download);
-                n:=n+1;
-            ELSE
-                l_files.put(C.deploy_filename,C.sha1);
-            END IF;
+            logDeployment(pWebsiteId, pSiteId, 'Download Google - '|| C.deploy_filename);
+            l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
+            addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_font_download);
         
         END LOOP;
         
+        /*
+        **  3. Build CSS files
+        */
+        FOR C IN (
+            WITH source AS
+            (
+                SELECT deploy_filename, content_minified, updated_date
+                  FROM css
+                 UNION ALL
+                SELECT '/css/website-styles.min.css', css, css_updated_date
+                  FROM website
+                 WHERE id=pWebsiteid
+            )
+            SELECT s.deploy_filename, s.content_minified, s.updated_date, wf.sha1,
+                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=s.deploy_filename
+               AND wf.mime_type(+)='css'
+        ) LOOP
+            IF (C.build=0) THEN
+                l_files.put(C.deploy_filename, C.sha1);
+                CONTINUE;
+            END IF;
+
+            logDeployment(pWebsiteId, pSiteId, 'Download CSS - '|| C.deploy_filename);
+            addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.content_minified);
+        END LOOP;
 
         /*
-        ** Assemble complete css file from
-        ** 1. deploy.css in Apex editor
-        ** 2. font face rules
-        ** 3. root css
-        ** 
-        ** Nb. Font-face rules will not exist if website using system-ui
-        ** Nb. toptal minifier only accepts form-url-encoded which forces us to restrict content size to <32K
-        ** ==> NEED TO OPTIMISE THIS PROCESS
+        **  4. BUILD _headers INCLUDING CONTENT SECURITY POLICY
         */
-        
-        /* GET CKEDITOR CONTENT STYLES IF THIS IS A FIRST DEPLOYMENT */
-        
-        /* DETERMINE IF MAIN CSS FILE CHANGED SINCE LAST DEPLOYMENT */
-        SELECT CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)
-          INTO l_css_updated_date
-          FROM apex_application_static_files
-         WHERE application_id=101
-           AND file_name='deploy.css';
-
-        SELECT MAX(NVL(sha1_updated,deployed_date)), MAX(sha1)
-          INTO l_css_prev_updated_date, l_sha1
-          FROM website_files
-         WHERE file_name='css/styles.min.css';
-
-        IF (l_css_updated_date>l_css_prev_updated_date OR l_css_prev_updated_date IS NULL) THEN
-            n:=n+1;
-        END IF;
-
-        /* DETERMINE IF ROOT CSS CHANGED SINCE LAST DEPLOYMENT */
-        SELECT css_root 
-          INTO l_css_root_prev
-          FROM website
-         WHERE id=pWebsiteid;
-
-        l_css_root:=pck_codepen.buildCssRoot(pWebsiteid);
-
-        IF (l_css_root_prev<>l_css_root OR l_css_root_prev IS NULL) THEN
-            n:=n+1;
-            UPDATE website SET css_root=l_css_root WHERE id=pWebsiteid;
-        END IF;
-
-        /* n>0 MEANS DEPLOY CSS */
-        IF (n>0) THEN
-            logDeployment(pWebsiteId, pSiteId, 'Creating CSS');
-            FOR C IN (
-                SELECT apex_util.blob_to_clob(file_content) file_content 
-                  FROM apex_application_static_files
-                 WHERE application_id=101
-                   AND file_name='deploy.css'
-            ) LOOP
-                dbms_lob.createtemporary(l_css,true);
-                IF (l_fontfaces IS NOT NULL) THEN
-                    pck_api.callMinifyCss(l_fontfaces, l_css_minified);
-                    dbms_lob.append(l_css,l_css_minified);
+        l_script_sha256:='''' || l_script_sha256 || '''';
+        FOR C IN (
+            WITH source AS
+            (
+             SELECT '/' || REPLACE(file_name,'.txt') AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+               FROM apex_application_static_files 
+              WHERE application_id=101
+                AND file_name IN ('_headers.txt')
+            )
+            SELECT s.deploy_filename, REPLACE(REPLACE(s.file_content,'#RESTURL#',pRestURL),'#SHA256#',l_script_sha256) file_content, s.updated_date, wf.sha1,
+                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=s.deploy_filename
+        ) LOOP
+            IF (C.build=0) THEN
+                IF (getSha256(C.file_content)=C.sha1) THEN
+                    l_files.put(C.deploy_filename, C.sha1);
+                    CONTINUE;
                 END IF;
+            END IF;
 
-                pck_api.callMinifyCss(l_css_root, l_css_minified);
-                dbms_lob.append(l_css,l_css_minified);
-                
-                pck_api.callMinifyCss(C.file_content, l_css_minified);
-                dbms_lob.append(l_css,l_css_minified);
-
-                pck_api.callCKEditor(l_styles_edit);
-                dbms_lob.append(l_css,l_styles_edit);
-
-                addDeploy('css/styles.min.css', l_css);
-                dbms_lob.freetemporary(l_css);
-            END LOOP;
-        ELSE
-            /* NO CHANGE, USE LAST SHA1 */
-            l_files.put('css/styles.min.css',l_sha1);
-        END IF;
+            logDeployment(pWebsiteId, pSiteId, 'Download CONTENT SECURITY HEADERS - '|| C.deploy_filename);
+            addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
+        END LOOP;
+            
+        -- dbms_output.put_line(l_files.to_string);
+        sendNetlifyDeploy;
+        RETURN;
 
         /* 
         ** The site favicon is an SVG format image file uploaded through the CMS to the Asset table.
@@ -1011,76 +1018,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END IF;
 
         l_robots:='User-agent: *' || chr(10) || 'Allow: /' || chr(10) || chr(10) || 'Sitemap: ' || l_ssl_url || '/sitemap.xml';
-
-        l_deploy_env:=CASE WHEN pEnv='TEST' THEN 1 WHEN pEnv='LIVE' THEN 3 END;
-        WITH data AS
-        (
-            SELECT 
-                SUBSTR(module_name,1,INSTR(module_name,'.')-1) module_name, 
-                CASE WHEN pEsmLibrary='live' THEN host_name ELSE REPLACE(host_name,'/live/','/test/') END host_name,
-                CASE WHEN pEsmLibrary='live' THEN sha256_live ELSE sha256_test END sha256
-            FROM es_modules
-            WHERE BITAND(deploy_envs,l_deploy_env)=l_deploy_env
-        )
-        SELECT json_object(
-            'imports' VALUE json_objectagg(module_name VALUE host_name),
-            'integrity' VALUE json_objectagg(host_name VALUE sha256)
-            returning clob) 
-        INTO l_importmap 
-        FROM data;
-
-        addDeploy('javascript/importmap.json', l_importmap);
-
-        l_importmap_sha256:=getSha256(l_importmap);
-        l_script_sha256:=l_script_sha256 || ' ''' || l_importmap_sha256 || '''';
-
-        /*
-        **  ALL PAGES INCLUDE SELF-HOSTED WEB VITALS AND MAIN JAVASCRIPT MODULES
-        **  MAIN JAVASCRIPT MODULE IS DOWNLOADED/EXECUTED ON EVENT "DOMContentLoaded"
-        */
-        FOR C IN (
-            SELECT file_name, apex_util.blob_to_clob(file_content) file_content 
-              FROM apex_application_static_files 
-             WHERE application_id=101
-               AND file_name IN ('deploy_main.min.js', 'deploy_web_vitals5.min.js')
-        ) LOOP
-            addDeploy('javascript/' || C.file_name, C.file_content);
-            l_script_sha256:=l_script_sha256 || ' ''' || getSha256(C.file_content) || '''';
-        END LOOP;
-        l_script_src:=
-        'document.addEventListener(''DOMContentLoaded'',()=>{' || 
-            'const script = document.createElement(''script'');' ||
-            'script.src = "/javascript/deploy_main.min.js";' ||
-            'script.type = "module";' ||
-            'document.body.appendChild(script);' ||
-        '})';
-        l_script_sha256:=l_script_sha256 || ' ''' || getSha256(l_script_src) || '''';
-
-        /*
-        **  script-src 'strict-dynamic' - allows modules to dynamically create scripts, eg. cloudinary upload widget, CKEditor
-        */
-        l_headers:=
-        '/*' || chr(10) || 
-            q'[Content-Security-Policy: default-src 'none';]' ||
-            q'[ base-uri 'none';]' ||
-            q'[ object-src 'none';]' ||
-            CASE WHEN INSTR(l_favicon_url,'cloudinary')>0 THEN
-            q'[ img-src 'self' res.cloudinary.com;]'
-            ELSE
-            q'[ img-src 'self' res.cloudinary.com data:;]'
-            END ||
-            q'[ media-src res.cloudinary.com;]' ||
-            q'[ font-src 'self' es-modules.netlify.app fonts.gstatic.com;]' ||
-            q'[ style-src 'self' 'unsafe-inline' cdn.ckeditor.com;]' ||
-            q'[ script-src 'strict-dynamic' ]' || l_script_sha256 || q'[;]' ||
-            q'[ frame-src upload-widget.cloudinary.com  www.youtube.com;]' ||
-            q'[ frame-ancestors 'none';]' ||
-            q'[ connect-src 'self' cdn.ckeditor.com ]' || pRestUrl || ';' || chr(10) ||
-            q'[X-Content-Type-Options: nosniff]' || chr(10) ||
-            q'[X-Frame-Options: SAMEORIGIN]' || chr(10) ||
-            q'[Referrer-Policy: no-referrer-when-downgrade]' || chr(10) ||
-            q'[Access-Control-Allow-Origin: *]' || chr(10) ||
-            q'[Permissions-Policy: microphone=(), geolocation=()]';
 
         /* 
         ** Build individual website pages
@@ -1101,30 +1038,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 '</urlset>';
             END IF;
 
-            l_page:=
-                '<!DOCTYPE HTML>' ||
-                '<html lang="en">' ||
-                '<head>' ||
-                    '<meta charset="UTF-8">' ||
-                    '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
-                    '<title>' || l_labels(i).page_title || '</title>' ||
-                    '<meta name="description" content="' || l_labels(i).page_description || '">' ||
-                    '<meta name="author" content="restartnet.com">' ||
-                    '<meta name="mobile-web-app-capable" content="yes">' ||
-                    CASE WHEN l_labels(i).img_count>0 THEN
-                    '<link rel="preconnect" href="https://res.cloudinary.com">'
-                    END ||
-                    l_labels(i).font_preload ||
-                    '<link rel="stylesheet" href="/css/styles.min.css">' ||
-                    '<script>' || l_script_src || '</script>' ||
-                    '<link rel="icon" type="image/svg+xml" sizes="any" href="' || l_favicon_url || '">' ||
-                '</head>' ||
-                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || l_labels(i).article_id || '" data-resturl="' || pRestUrl || '">' || 
-                    l_labels(i).body_html || 
-                '</body>' ||
-            '</html>';
-
-            addDeploy(CASE WHEN i=1 THEN 'index.html' ELSE l_labels(i).path_name || '.html' END, l_page);
 
         END LOOP;
 
@@ -1133,47 +1046,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         logDeployment(pWebsiteId, pSiteId, 'Building sitemap.xml');
         addDeploy('sitemap.xml', l_sitemap);
         addDeploy('robots.txt', l_robots);
-
-        logDeployment(pWebsiteId, pSiteId, 'Building Content Security Policy');
-        addDeploy('_headers', l_headers);
-
-        /*
-        ** DEPLOYMENT TO NETLIFY
-        ** 1) SEND SHA1 OF ALL FILES IN WEBSITE
-        ** 2) NETLIFY RESPONSE INCLUDES ARRAY OF SHA1 REQUIRED TO BE UPLOADED
-        ** 3) UPLOAD THE REQUIRED FILES
-        */
-        l_json.put('files',l_files);
-
-        pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'sites/' || pSiteId || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
-
-        /* NEED THIS FOR ASYNC DEPLOYMENT STATUS MONITORING */
-        UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=pWebsiteId;
-        COMMIT;
-
-        FOR C IN (SELECT id, sha1 FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) WHERE sha1 IS NOT NULL) LOOP
-            logDeployment(pWebsiteId, pSiteId, 'Uploading ' || l_deploy_files(C.sha1).file_name);
-            IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
-            ELSIF (l_deploy_files(C.sha1).file_content_b IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content_b,pData=>l_clob);
-            ELSE
-                RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content clob and blob both null');
-            END IF;
-        END LOOP;
-
-        /* UPDATE WEBSITE_FILES WITH THIS SITE DEPLOYMENT */
-        pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'sites/' || pSiteId || '/files', pMethod=>'GET', pData=>l_clob);
-        
-        DELETE website_files WHERE website_id=pWebsiteId AND site_id=pSiteId;
-        
-        INSERT INTO website_files(website_id, site_id, file_name, path, sha1, mime_type, content_length)
-        SELECT pWebsiteId, site_id, path, path, sha, mime_type, "size"
-          FROM JSON_TABLE(l_clob, '$[*]' COLUMNS(site_id, path, sha, mime_type, "size"));
-
         /*
         **  DOGFACE DEPLOYMENT IF USER HAS DOGFACE API KEY AND ESMLIBRARY = 'TEST'
         */
+        /*
         SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM users WHERE id=pUserid AND dogface_api_key IS NOT NULL);
         n:=0;
         IF (n=1 AND pEsmLibrary='test') THEN
@@ -1204,14 +1080,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 --END IF;
             END LOOP;
         END IF;
-
-        -- DELETE website_files WHERE website_id=pWebsiteId AND (sha1_updated<l_current_timestamp OR sha1_reused<l_current_timestamp);
+        */
 
         EXCEPTION
             WHEN OTHERS THEN
-                IF (dbms_lob.istemporary(l_css)=1) THEN
-                    dbms_lob.freetemporary(l_css);
-                END IF;
                 logDeployment(pWebsiteId, pSiteId, SUBSTR(SQLERRM,1,100),'NOK');
                 pck_core.log_error;
     END;
