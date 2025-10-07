@@ -9,7 +9,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     TYPE t_chars_used IS TABLE OF tt_chars_used INDEX BY VARCHAR2(40);
     g_chars_used t_chars_used:=t_chars_used( 'headings' => tt_chars_used(null,null,null,null), 'text' => tt_chars_used(null,null,null,null));
     --
-    PROCEDURE getCharsUsed(pWebsiteid website.id%type, pArticleId IN article.id%type);
+    PROCEDURE getCharsUsed(pArticleId IN article.id%type, pContent IN OUT NOCOPY CLOB);
     --
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pSiteid IN website.netlify_site_id%type);
     --
@@ -27,10 +27,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     ** Return distict characters sorted 
     */
     FUNCTION distinct_chars(pCharacters IN VARCHAR2) RETURN VARCHAR2 IS
-        l_chars website_font.chars_normal%type;
+        l_chars article_chars.chars_normal%type;
     BEGIN
-        SELECT LISTAGG(DISTINCT SUBSTR(pCharacters, LEVEL, 1), NULL) WITHIN GROUP (
-                  ORDER BY SUBSTR(pCharacters, LEVEL, 1))
+        SELECT LISTAGG(DISTINCT SUBSTR(pCharacters, LEVEL, 1), NULL) WITHIN GROUP (ORDER BY SUBSTR(pCharacters, LEVEL, 1))
         INTO l_chars
         FROM dual
         CONNECT BY LEVEL <= LENGTH(pCharacters);
@@ -40,9 +39,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
     **  COLLECT DISTINCT CHARACTERS USED IN AN ARTICLE - SAVE IN TABLE ARTICLE_CHARS AS WELL AS GLOBAL VARIABLES FOR REFERENCE IN DEPLOYMENT
     */
-    PROCEDURE getCharsUsed(pWebsiteid in website.id%type, pArticleId IN article.id%type) IS
+    PROCEDURE getCharsUsed(pArticleId IN article.id%type, pContent IN OUT NOCOPY CLOB) IS
 
-        l_text CLOB;
+        l_text CLOB:=pContent;
 
         hd pls_integer;
         it pls_integer;
@@ -68,21 +67,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
     BEGIN
         DELETE article_chars WHERE article_id=pArticleId;
-
-        /* 
-        ** article content should exist for pArticleId in all cases although may be null 
-        ** if article is top level web page there may also be content in website.article.header_html
-        */ 
-        FOR C IN (
-            SELECT body_html FROM article WHERE id=pArticleId
-        ) LOOP
-            l_text :=C.body_html;
-            FOR C1 IN (
-                SELECT header_html, footer_html FROM website_article WHERE website_id=pWebsiteid AND article_id=pArticleId
-            ) LOOP
-                l_text:=l_text || C1.header_html || C1.footer_html;
-            END LOOP;
-        END LOOP;
         
         /* 
         ** REMOVE <code></code>  AND <p>&nbsp;</p>
@@ -118,12 +102,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, first_heading)
         VALUES (pArticleId, 'headings', l_headings_italic, l_headings, l_first_heading);
 
-        g_chars_used('headings').chars_bold_normal:=distinct_chars(g_chars_used('headings').chars_bold_normal || l_headings);
-        g_chars_used('headings').chars_bold_italic:=distinct_chars(g_chars_used('headings').chars_bold_italic || l_headings_italic);
-
-        -- IF (hd>0) THEN
-            l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
-        -- END IF;
+        l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
 
         /*
         **  NOW PROCESS REST OF THE TEXT
@@ -154,15 +133,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_chars_italic:=distinct_chars(l_chars_italic);
         l_chars_bold_italic:=distinct_chars(l_chars_bold_italic);
 
-
         INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
-        VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);
-
-        g_chars_used('text').chars_normal:=distinct_chars(g_chars_used('text').chars_normal || l_chars_normal);
-        g_chars_used('text').chars_bold_normal:=distinct_chars(g_chars_used('text').chars_bold_normal || l_chars_bold_normal);
-        g_chars_used('text').chars_italic:=distinct_chars(g_chars_used('text').chars_italic || l_chars_italic);
-        g_chars_used('text').chars_bold_italic:=distinct_chars(g_chars_used('text').chars_bold_italic || l_chars_bold_italic);
-
+        VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);   
     END;
 
     /* 
@@ -207,7 +179,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_font_stretch:=getValue('font-stretch');
             l_src_url:=getValue('src: url');
             l_src_url:=SUBSTR(l_src_url,INSTR(l_src_url,'(')+1,INSTR(l_src_url,')')-INSTR(l_src_url,'(')-1);
-            l_deploy_filename:='fonts/' || pContext || '.' || l_font_style || CASE WHEN l_font_weight>400 THEN '.bold' END || '.woff2';
+            l_deploy_filename:='/fonts/' || pContext || '.' || l_font_style || CASE WHEN l_font_weight>400 THEN '.bold' END || '.woff2';
 
             DELETE website_fontface WHERE website_id=pWebsiteId AND deploy_filename=l_deploy_filename;
 
@@ -317,13 +289,36 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
     END;
 
+    PROCEDURE deleteFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pDeployFilename IN VARCHAR2) IS
+    BEGIN
+        DELETE website_fontface 
+         WHERE website_id=pWebsiteid 
+           AND context=pContext
+           AND deploy_filename=pDeployFilename;
+    END;
+
     /* 
     **  CALL GOOGLE FONTS API TO GET URL OF EACH FONT USED IN THE WEBSITE - CALLED BY DEPLOYMENT
     */
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pSiteid IN website.netlify_site_id%type) IS
-        l_api_url LONG;
+        l_fontfaces VARCHAR2(4000);
     BEGIN
-        -- DELETE website_fontface WHERE website_id=pWebsiteId;
+        /* Get distinct set of characters for each font style / weight for each context */
+        FOR C IN (
+            SELECT context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic 
+              FROM article_chars 
+             WHERE article_id IN (
+                SELECT COALESCE(a.id,wa.article_id)
+                FROM website_article wa, article a
+                WHERE wa.website_id=pWebsiteId
+                AND a.parent_id(+)=wa.article_id
+            )
+        ) LOOP
+            g_chars_used(C.context).chars_bold_italic:=distinct_chars(g_chars_used(C.context).chars_bold_italic || C.chars_bold_italic);
+            g_chars_used(C.context).chars_bold_normal:=distinct_chars(g_chars_used(C.context).chars_bold_normal || C.chars_bold_normal);
+            g_chars_used(C.context).chars_italic:=distinct_chars(g_chars_used(C.context).chars_italic || C.chars_italic);
+            g_chars_used(C.context).chars_normal:=distinct_chars(g_chars_used(C.context).chars_normal || C.chars_normal);
+        END LOOP;
 
         FOR C IN (
             SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, 
@@ -346,6 +341,65 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             prepareAPICall(pWebsiteid, C.font_id, C.family, C.context, C.italic, C.bold, C.ital_axis, C.ital_value,
                 g_chars_used(C.context).chars_bold_italic, g_chars_used(C.context).chars_bold_normal, g_chars_used(C.context).chars_italic, g_chars_used(C.context).chars_normal);
         END LOOP;
+
+        /*
+        ** DELETE ANY UNUSED FONT-FACES
+        */
+        FOR C IN (
+            SELECT ff.context
+              FROM website_fontface ff
+             WHERE ff.website_id=pWebsiteid
+        ) LOOP
+            IF (g_chars_used(C.context).chars_normal IS NULL) THEN
+                deleteFontface(pWebsiteId, C.context, 'fonts/' || C.context || '.normal.woff2');
+            END IF;
+
+            IF (g_chars_used(C.context).chars_bold_normal IS NULL) THEN
+                deleteFontface(pWebsiteId, C.context,'fonts/' || C.context || '.normal.bold.woff2');
+            END IF;
+
+            IF (g_chars_used(C.context).chars_italic IS NULL) THEN
+                deleteFontface(pWebsiteId, C.context,'fonts/' || C.context || '.italic.woff2');
+            END IF;
+
+            IF (g_chars_used(C.context).chars_bold_italic IS NULL) THEN
+                deleteFontface(pWebsiteId, C.context,'fonts/' || C.context || '.italic.bold.woff2');
+            END IF;
+        END LOOP;
+
+        /* 
+        ** Update CSS font-face rules for the website 
+        */
+        FOR C IN (
+            SELECT ff.context, ff.font_family, ff.font_style, ff.font_weight, ff.font_stretch, ff.deploy_filename,
+                    ROW_NUMBER() OVER (PARTITION BY context ORDER BY null) rn, COUNT(*) OVER (PARTITION BY context) nb
+              FROM website_fontface ff
+             WHERE ff.website_id=pWebsiteid
+        ) LOOP
+            l_fontfaces:=l_fontfaces ||
+                '@font-face {' ||
+                    'font-family:' || C.font_family || ';' ||
+                    'font-style:' || C.font_style || ';' ||
+                    'font-weight:' || C.font_weight || ';' ||
+                    CASE WHEN C.font_stretch IS NOT NULL THEN
+                    'font-stretch:' || C.font_stretch || ';' 
+                    END
+                    ||
+                    'font-display:swap;' ||
+                    'src: url("' || C.deploy_filename || '") format("woff2");' ||
+                '}';
+            IF (C.rn=C.nb) THEN
+                UPDATE website_font 
+                   SET fontface=l_fontfaces, updated_date=current_timestamp
+                 WHERE website_id=pWebsiteid AND context=C.context;
+                l_fontfaces:=null;
+            END IF;
+        END LOOP;
+
+        /*
+        ** FINALLY, REBUILD WEBSITE CSS RULES FOR FONTFACE AND ROOT
+        */
+        pck_css.buildWebsiteCss(pWebsiteid);
     END;
 
 
@@ -595,7 +649,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
          WHERE EXISTS (SELECT null FROM font WHERE id=l_font_id AND category='system-ui');
         
         IF (l_system_ui=0) THEN
-            getCharsUsed(pWebsiteId,pArticleId);
+            -- getCharsUsed(pArticleId);
             getFontFiles(pWebsiteId, pContext=>l_context, pArticleId=>pArticleId);
         END IF;
 
