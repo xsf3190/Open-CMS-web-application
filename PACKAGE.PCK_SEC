@@ -329,7 +329,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_test_site BOOLEAN:=FALSE;
         l_domain_name website.domain_name%type;
         l_netlify_site_id_custom website.netlify_site_id_custom%type;
-        l_can_publish VARCHAR2(3);
         n PLS_INTEGER;
 
         FUNCTION addButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2) RETURN VARCHAR2 IS
@@ -348,8 +347,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
         
 
-        SELECT domain_name, netlify_site_id_custom, CASE WHEN netlify_site_id_custom IS NOT NULL AND NVL(netlify_last_published_custom,created_date) < netlify_last_published THEN 'OK'  ELSE 'NOK' END 
-          INTO l_domain_name, l_netlify_site_id_custom, l_can_publish
+        SELECT domain_name, netlify_site_id_custom
+          INTO l_domain_name, l_netlify_site_id_custom
           FROM website
          WHERE id=pWebsiteId;
 
@@ -377,11 +376,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             IF (l_test_site) THEN
                 l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label);
             ELSIF (C.priority=1) THEN
-                IF (INSTR(C.uri_template,'publish-website')>0 AND l_can_publish='NOK') THEN
-                    CONTINUE;
-                ELSE
-                   l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label);
-                END IF;
+                l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label);
             END IF;
         END LOOP;
 
