@@ -34,9 +34,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     ** "LIVE" - ALL DEPLOYED WEBSITES LOAD THESE
     **
     ** TO CREATE NEW ES MODULE:
-    **  insert into es_modules(module_name,host_name) values 
-    **     ('deploy_edited-content.min.js',
-    **      'https://es-modules.netlify.app/live/javascript/deploy_edited-content.min.js');
+    **  insert into es_modules(module_name) 
+    **    values ('deploy_edited-content.min.js');
     */
 
 
@@ -56,7 +55,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_headers CLOB;
         
         l_sha1_test es_modules.sha1_test%type;
-        l_sha256_test es_modules.sha256_test%type;
         
         l_page CLOB;
         l_table CLOB;
@@ -85,12 +83,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END;
 
         PROCEDURE buildImportmaps(pSslUrl IN VARCHAR2) IS
-            TYPE t_name_type IS VARRAY(2) OF VARCHAR2(4);
+            TYPE t_name_type IS VARRAY(2) OF VARCHAR2(6);
             TYPE t_number_type IS VARRAY(2) OF pls_integer;
             l_versions t_name_type:=t_name_type('test','live');
             l_deploy_envs t_number_type:=t_number_type(1,3);
             l_importmap CLOB;
-            l_sha256 es_modules_importmap.sha256%type;
+            l_sha1 VARCHAR2(40);
         BEGIN
             DELETE es_modules_importmap;
             FOR i IN 1..l_versions.COUNT LOOP
@@ -99,25 +97,80 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     (
                         SELECT 
                             SUBSTR(module_name,1,INSTR(module_name,'.')-1) module_name, 
-                            pSslUrl || '/' || l_versions(i) || '/javascript/' || module_name host_name,
-                            CASE WHEN l_versions(i)='live' THEN sha256_live ELSE sha256_test END sha256
+                            pSslUrl || '/' || l_versions(i) || '/javascript/' || module_name host_name
                         FROM es_modules
                         WHERE BITAND(deploy_envs,l_deploy_envs(j))=l_deploy_envs(j)
                     )
                     SELECT json_object(
-                        'imports' VALUE json_objectagg(module_name VALUE host_name),
-                        'integrity' VALUE json_objectagg(host_name VALUE sha256)
+                        'imports' VALUE json_objectagg(module_name VALUE host_name)
                         returning clob) 
                     INTO l_importmap 
                     FROM data;
-                    l_sha256:=getSha256(l_importmap);
 
-                    INSERT INTO es_modules_importmap(version, deploy_env, sha256, content)
-                    VALUES (l_versions(i), l_deploy_envs(j), l_sha256, l_importmap);
-
-                    addDeploy(l_versions(i) || '/json/importmap.' || l_deploy_envs(j) || '.json', l_importmap);
+                    INSERT INTO es_modules_importmap(version, deploy_env, content)
+                    VALUES (l_versions(i), DECODE(l_deploy_envs(j),1,'editor','custom'), l_importmap);
 
                 END LOOP;
+            END LOOP;
+
+            FOR C IN (
+                WITH source AS
+                (
+                 SELECT version || '/importmap.' || deploy_env || '.json' AS deploy_file, content 
+                   FROM es_modules_importmap
+                )
+                SELECT s.deploy_file, s.content, f.sha1
+                  FROM source s, website_files f
+                 WHERE f.website_id(+)=l_website_id
+                   AND f.path(+)=s.deploy_file
+            ) LOOP
+                l_sha1:=dbms_crypto.hash(src => C.content, typ => dbms_crypto.hash_sh1);
+                IF (C.sha1 IS NULL OR C.sha1<>l_sha1) THEN
+                    addDeploy(C.deploy_file, C.content);
+                ELSE
+                    l_files.put(C.deploy_file,C.sha1);
+                END IF;
+            END LOOP;
+        END;
+
+        /* 
+        ** SEND TO NETLIFY LIST OF SHA1 OF EACH FILE IN THE DEPLOYMENT 
+        */
+        PROCEDURE sendNetlifyDeploy IS
+            l_json JSON_OBJECT_T;
+            l_keys JSON_KEY_LIST;
+            l_filename VARCHAR2(200);
+            l_sha1 VARCHAR2(40);
+            l_clob CLOB;
+        BEGIN
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('files',l_files);
+
+            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || l_netlify_site_id || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+
+            /* NEED THIS FOR ASYNC DEPLOYMENT STATUS MONITORING */
+            UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=l_website_id;
+            COMMIT;
+
+            FOR C IN (SELECT id, sha1 FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) WHERE sha1 IS NOT NULL) LOOP
+                dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
+                IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
+                    pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
+                ELSE
+                    RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content clob and blob both null');
+                END IF;
+            END LOOP;
+
+            /* 
+            ** UPDATE WEBSITE_FILES WITH THIS SITE DEPLOYMENT 
+            */
+            DELETE website_files WHERE website_id=l_website_id AND site_id=l_netlify_site_id;
+            l_keys:=l_files.get_keys;
+            FOR i in 1..l_keys.COUNT LOOP
+                l_filename:=l_keys(i);
+                l_sha1:=l_files.get_string(l_keys(i));
+                INSERT INTO website_files(website_id, site_id, path, sha1, mime_type)
+                VALUES (l_website_id, l_netlify_site_id, l_filename, l_sha1, SUBSTR(l_filename,INSTR(l_filename,'.',-1)+1));
             END LOOP;
         END;
 
@@ -127,53 +180,52 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             RETURN;
         END IF;
 
-        SELECT id, netlify_site_id, user_id INTO l_website_id, l_netlify_site_id, l_user_id FROM website WHERE domain_name='es-modules';
+        -- SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM es_modules WHERE sha1_test IS NULL);
+                -- IF (n>0) THEN
 
-        pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || l_netlify_site_id, pMethod=>'GET', pData=>l_clob);
-        SELECT ssl_url INTO l_ssl_url FROM JSON_TABLE(l_clob, '$' COLUMNS(ssl_url));
+        SELECT id, netlify_site_id, user_id INTO l_website_id, l_netlify_site_id, l_user_id 
+          FROM website
+         WHERE domain_name='es-modules';
 
-        l_json:= new JSON_OBJECT_T;
+        l_ssl_url:='https://es-modules.netlify.app';
+
         l_files:= new JSON_OBJECT_T;
 
         FOR C IN (
-            WITH last_deploy AS
+            WITH source AS
             (
-                SELECT file_name, deployed_date,  MAX(DECODE(env,'/test/',sha1)) sha1_test, MAX(DECODE(env,'/live/',sha1)) sha1_live
-                FROM
-                (
-                    SELECT deployed_date, 
-                            SUBSTR(path,1,INSTR(path,'/',1,2)) env,
-                            SUBSTR(path,INSTR(path,'/',-1)+1) file_name,
-                            sha1
-                    FROM website_files 
-                    WHERE website_id=l_website_id
-                    AND mime_type='application/javascript'
-                )
-                GROUP BY file_name, deployed_date
+                SELECT e.module_name, 'test/javascript/' || e.module_name AS deploy_filename, e.sha1_test, e.sha1_live, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+                  FROM es_modules e, apex_application_static_files s
+                 WHERE s.file_name=e.module_name
+                   AND s.application_id=101
             )
-            SELECT e.module_name, d.deployed_date, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_source, d.sha1_test, d.sha1_live, e.sha256_test, e.sha256_live,
-                    CASE WHEN CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE)>NVL(d.deployed_date,CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE)) THEN 1 ELSE 0 END build
-              FROM last_deploy d, apex_application_static_files s, es_modules e
-             WHERE s.file_name=e.module_name
-               AND s.application_id=101
-               AND d.file_name(+)=LOWER(e.module_name)
-             ORDER BY 1
+            SELECT s.deploy_filename, s.module_name, s.sha1_test, s.sha1_live, s.updated_date,
+                    CASE WHEN f.deployed_date IS NULL OR s.updated_date>f.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files f
+             WHERE f.website_id(+)=8906
+               AND f.path(+)=s.deploy_filename
         ) LOOP
             IF (pEsmLibrary='live') THEN
                 UPDATE es_modules
                    SET sha1_live=C.sha1_test,
-                       sha256_live=C.sha256_test,
                        updated_live=current_timestamp
                  WHERE module_name=C.module_name;
-                l_files.put('test/javascript/' || C.module_name, C.sha1_test);
-                l_files.put('live/javascript/' || C.module_name, C.sha1_test);
+                l_files.put(C.deploy_filename, C.sha1_test);
+                l_files.put(REPLACE(C.deploy_filename,'test','live'), C.sha1_test);
                 CONTINUE;
+            END IF;
+
+            /*
+            ** UPDATING "test" LIBRARY. 
+            ** ALWAYS RE-DEPLOY THE CURRENT "live" MODULE IF PREVIOUSLY DEPLOYED
+            */
+            IF (C.sha1_live IS NOT NULL) THEN
+                l_files.put('live/javascript/' || C.module_name, C.sha1_live);
             END IF;
 
             IF (C.build=0) THEN
                 dbms_output.put_line('No change - ' || C.module_name);
-                l_files.put('test/javascript/' || C.module_name, C.sha1_test);
-                l_files.put('live/javascript/' || C.module_name, C.sha1_live);
+                l_files.put(C.deploy_filename, C.sha1_test);
                 CONTINUE;
             END IF;
 
@@ -188,114 +240,49 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             
             l_sha1_test:=LOWER(dbms_crypto.hash(src=>l_file_content, typ=>dbms_crypto.hash_sh1));
 
-            /* CHECK THERE REALLY WAS A CONTENT CHANGE */
+            /* CHECK THERE ACTUALLY WAS A CONTENT CHANGE */
             IF (l_sha1_test=C.sha1_test) THEN
-                l_files.put('test/javascript/' || C.module_name, C.sha1_test);
-                l_files.put('live/javascript/' || C.module_name, C.sha1_live);
+                l_files.put(C.deploy_filename, C.sha1_test);
                 CONTINUE;
             END IF;
-
-            /* CONTENT HAS MATERIALLY CHANGED. UPDATE TEST ONLY */
-            n:=n+1;
-            l_sha256_test:=getSha256(l_file_content);
             
             UPDATE es_modules
-               SET updated_source=C.updated_source,
+               SET updated_source=C.updated_date,
                    sha1_test=l_sha1_test, 
-                   sha256_test=l_sha256_test,
+                   --sha256_test=l_sha256_test,
                    updated_test=current_timestamp
              WHERE module_name=C.module_name;
-
-            addDeploy('test/javascript/' || C.module_name, l_file_content);
-
-            l_files.put('live/javascript/' ||  C.module_name, C.sha1_live);
+            addDeploy(C.deploy_filename, l_file_content);
         END LOOP;
-
-        IF (n=0 AND pEsmLibrary='test') THEN
-            dbms_output.put_line('No source code changes since last deployment');
-            -- RETURN;
-        END IF;
 
         /*
         ** BUILD IMPORTMAPS FOR SUCCESSFUL DEPlOY
         */
         buildImportmaps(l_ssl_url);
 
-        l_headers:='/*' || chr(10) || 'Access-Control-Allow-Origin: *' || chr(10) || 'Timing-Allow-Origin: *';
-
-        addDeploy('_headers', l_headers);
-
-        l_page:=
-        '<!DOCTYPE HTML>' ||
-        '<html lang="en">' ||
-        '<head>' ||
-            '<meta charset="UTF-8">' ||
-            '<meta name="viewport" content="width=device-width, initial-scale=1.0">' ||
-        '</head>' ||
-        '<body>' ||
-        '<h1>ES Module deployment status</h1>';
-
-        l_page:=l_page ||
-        '<table>' ||
-        '<tr><th>Module Name</th><th>Source updated</th><th>Test Library Updated</th><th>Live Library Updated</th></tr>';
         FOR C IN (
-            SELECT module_name, updated_source, updated_test, updated_live
-              FROM es_modules
-             ORDER BY module_name    
+            WITH source AS
+            (
+                SELECT '_headers' AS deploy_filename, '/*' || chr(10) || 'Access-Control-Allow-Origin: *' || chr(10) || 'Timing-Allow-Origin: *' AS content
+                  FROM dual
+            )
+            SELECT s.deploy_filename, s.content, f.sha1
+              FROM source s, website_files f
+             WHERE f.website_id(+)=l_website_id
+               AND f.path(+)=s.deploy_filename
         ) LOOP
-            l_page:=l_page ||
-            '<tr><td>' || C.module_name || '</td><td>' || TO_CHAR(C.updated_source, 'dd.mm.yy hh24:mi') || '</td><td>' || TO_CHAR(C.updated_test, 'dd.mm.yy hh24:mi') ||  '</td><td>' || TO_CHAR(C.updated_live, 'dd.mm.yy hh24:mi') || '</td></tr>';
-        END LOOP;
-
-        l_page:=l_page ||
-        '<table>' ||
-        '</body>' ||
-        '</html>';
-
-        addDeploy('index.html', l_page);
-
-        l_json.put('files',l_files);
-
-        /*
-        ** POST ALL FILE NAMES AND THEIR SHA1 VALUES TO THE NETLIFY DEPLOYS ENDPOINT
-        ** - RETURNS ARRAY OF SHA1 TO BE UPLOADED 
-        */
-
-        pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || l_netlify_site_id || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
-        
-        /*
-        ** UPLOAD TO NETLIFY ALL FILES WITH UNIQUE CONTENT
-        */
-        FOR C IN (SELECT id, sha1 FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) WHERE sha1 IS NOT NULL) LOOP
-            l_netlify_deploy_id:=C.id;
-            pck_core.log('... uploading ESM ' || l_deploy_files(C.sha1).file_name);
-
-            IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>l_user_id, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
+            l_sha1:=dbms_crypto.hash(src => TO_CLOB(C.content), typ => dbms_crypto.hash_sh1);
+            IF (C.sha1 IS NULL OR l_sha1<>C.sha1) THEN
+                addDeploy(C.deploy_filename, C.content);
             ELSE
-                RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content requested but is null');
+                l_files.put(C.deploy_filename, C.sha1);
             END IF;
         END LOOP;
 
-        UPDATE website SET netlify_deploy_id=l_netlify_deploy_id WHERE id=l_website_id;
+        -- dbms_output.put_line(l_files.to_string);
+        -- RETURN;
 
-        /* 
-        ** UPDATE WEBSITE_FILES WITH THIS SITE DEPLOYMENT 
-        */
-        DELETE website_files WHERE website_id=l_website_id AND site_id=l_netlify_site_id;
-        l_keys:=l_files.get_keys;
-        FOR i in 1..l_keys.COUNT LOOP
-            l_filename:=l_keys(i);
-            l_sha1:=l_files.get_string(l_keys(i));
-            INSERT INTO website_files(website_id, site_id, path, sha1)
-            VALUES (l_website_id, l_netlify_site_id, l_filename, l_sha1);
-        END LOOP;
-
-        /*
-        ** DELETE ANY MODULES FOR WHICH SOURCE NO LONGER EXISTS
-        */
-        DELETE es_modules WHERE module_name NOT IN (SELECT file_name FROM apex_application_static_files WHERE application_id=101);
-        COMMIT;
+        sendNetlifyDeploy;
 
         /*
         ** WAIT FOR DEPLOYMENT OF ES-MODULES TO COMPLETE
@@ -568,7 +555,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     **  <main>
     **  <footer>
     */
-    PROCEDURE buildPageBody(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pLogo IN VARCHAR2, pNav IN VARCHAR2, pDropdown in VARCHAR2, pEnv IN VARCHAR2, pRestUrl IN VARCHAR2, pIntegrity IN VARCHAR2, pBody IN OUT NOCOPY CLOB) IS
+    PROCEDURE buildPageBody(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pLogo IN VARCHAR2, pNav IN VARCHAR2, pDropdown in VARCHAR2, pEnv IN VARCHAR2, pRestUrl IN VARCHAR2, pEsmLibrary IN VARCHAR2, pIntegrity IN VARCHAR2, pBody IN OUT NOCOPY CLOB) IS
         l_title article_chars.first_heading%type;
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
@@ -577,6 +564,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_clob CLOB;
 
         l_nav_id VARCHAR2(20);
+        l_importmap VARCHAR2(200):='https://es-modules.netlify.app/' || pEsmLibrary || '/importmap.' || CASE WHEN pEnv='TEST' THEN 'editor' ELSE 'custom' END || '.json';
         
         l_icon_id icon.id%type;
         l_icons apex_t_varchar2:=apex_t_varchar2();
@@ -633,7 +621,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                     '<link rel="icon" type="image/svg+xml" sizes="any" href="">' || /* TODO */
                 '</head>' ||
-                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '">' || 
+                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '" data-importmap="' || l_importmap || '">' || 
                     '<div class="topnav flex-items space-between">' ||
                         pLogo || l_nav || pDropdown || 
                     '</div>' ||    
@@ -843,7 +831,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_files:= new JSON_OBJECT_T;
 
         /*
-        **  0. Build JAVASCRIPT FILES FIRST TO GET SHA256 INTEGRITY VALUE OF THE STARTER SCRIPT WHICH WE INCLUDE IN HEAD OF  HTML FILES
+        **  0. Build JAVASCRIPT FILES FIRST TO GET SHA256 INTEGRITY VALUE OF THE STARTER SCRIPT WHICH WE INCLUDE IN HEAD OF HTML FILES
         */
         FOR C IN (
             WITH source AS
@@ -906,7 +894,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_logo:=buildLogo(pWebsiteId);
                 l_dropdown:=buildDropdown(pWebsiteId);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, l_script_sha256, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, pEsmLibrary, l_script_sha256, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
