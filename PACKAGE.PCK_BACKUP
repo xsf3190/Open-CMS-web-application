@@ -378,7 +378,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         ) LOOP
             n:=n+1;
             IF (n=1) THEN
-                l_url:='https://' || C.domain_name || '.netlify.app/';
+                l_url:='https://' || REPLACE(C.domain_name,'.','-') || '.netlify.app';
                 l_zip_filename:=C.domain_name || '.zip';
                 pck_core.log('Processing download request for ' || l_url);
             END IF;
