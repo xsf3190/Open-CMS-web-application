@@ -57,6 +57,7 @@ export const init = async (element) => {
 			TableColumnResize,
 			TableProperties, 
 			TableToolbar,
+            Title,
             Underline, 
             WordCount
             } = await import(CK_JS)
@@ -175,28 +176,23 @@ export const init = async (element) => {
     }
 
 
+    function CustomTitleExtension(editor) {
+        editor.model.schema.addAttributeCheck((context, attributeName) => {
+            if (context.endsWith('title-content $text') && ['italic','fontSize','fontColor','underline'].includes(attributeName)) {
+                return true;
+            }
+        })
+    }
+
     const headerConfig = {
-        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Heading, Italic, Paragraph, SelectFonts, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar, Underline ],
-        toolbar: [ 'heading', 'paragraph', 'italic', 'bold', 'underline','|', 'selectFonts', 'fontSize', 'fontColor', '|', 'alignment', '|', 'insertTable'],
+        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Italic, Paragraph, Underline, Title, CustomTitleExtension ],
+        toolbar: [ 'italic', 'bold', 'underline','|', 'fontSize', 'fontColor', '|', 'alignment', ],
         // licenseKey: "GPL",
         alignment: {
             options: [
                 {name:'left', className: 'align-left'},
                 {name:'right', className: 'align-right'},
                 {name:'center', className: 'align-center'}
-            ]
-        },
-        heading: {
-            options: [
-                { 
-                    model: 'heading1', 
-                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><text x="6" y="18" fill="red" font-size="20" font-weight="700" font-family="system-ui">T</text>',
-                    view: {
-                        name: 'h1'
-                    },
-                    title: 'Title', 
-                    class: 'ck-heading_heading1' 
-                },
             ]
         },
         table: {
