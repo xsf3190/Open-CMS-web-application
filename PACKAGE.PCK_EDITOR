@@ -59,8 +59,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_env VARCHAR2(4);
         l_site_id website.netlify_site_id%type;
         l_site_id_custom website.netlify_site_id_custom%type;
-        l_src_last_updated es_modules.updated_source%type;
-        l_cdn_last_updated es_modules.updated_test%type;
         l_esm_library VARCHAR2(4):='live';
         l_json JSON_OBJECT_T;
     BEGIN
@@ -78,11 +76,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        /* 
-        ** Rebuild es-modules CDN if Admin user deploying their test site AND last source updated date is after last CDN updated_date
-        */
         FOR C IN (
-            SELECT w.domain_name, LOWER(NVL(w.esm_library,'live')) esm_library, UPPER(NVL(a.is_admin,'NO')) is_admin
+            SELECT w.domain_name, LOWER(NVL(w.esm_library,'live')) esm_library
               FROM website w, apex_workspace_apex_users a, users u
              WHERE w.id=pWebsiteId
                AND u.id=l_session_data.user_id
@@ -91,19 +86,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
          LOOP
             l_esm_library:=C.esm_library;
             l_env:=pck_hosting.getEnvFromURL(l_session_data.url);
-
-            /* ADMIN USER REBUILDS "TEST" ES MODULES IF ANY SOURCE CODE CHANGE */
-            IF (C.is_admin='YES' AND C.esm_library='test') THEN
-                SELECT MAX(CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE)), MAX(updated_test)
-                  INTO l_src_last_updated, l_cdn_last_updated
-                  FROM apex_application_static_files s, es_modules e
-                 WHERE s.file_name=e.module_name
-                   AND s.application_id=101;
-
-                IF (l_src_last_updated>l_cdn_last_updated) THEN
-                    pck_deploy.buildESModules;
-                END IF;
-            END IF;
         END LOOP;
 
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId RETURNING netlify_site_id, netlify_site_id_custom INTO l_site_id, l_site_id_custom;
