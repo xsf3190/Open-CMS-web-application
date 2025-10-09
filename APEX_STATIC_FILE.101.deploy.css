@@ -264,7 +264,7 @@ main a:hover {
 .card {
   --card-radius: 0.5em;
   container-type: inline-size;
-  background: var(--color-primary);
+  background: rebeccapurple;
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -329,6 +329,8 @@ main a:hover {
 /* SIMPLE GRID  - DEFAULT IS 2 EQUAL-SIZED COLUMNS WITH NO GAP */
 
 .grid {
+  max-width: var(--max-width);
+  margin-inline: auto;
   --grid-gap: var(--space-s);
   display: grid;
   grid-template-columns: var(--grid-template-columns, 1fr 1fr);
