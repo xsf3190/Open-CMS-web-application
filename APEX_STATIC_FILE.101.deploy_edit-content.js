@@ -39,7 +39,7 @@ export const init = async (element) => {
             FontSize, 
             FontColor, 
             FontBackgroundColor,
-            Heading, HeadingButtonsUI, 
+            Heading,
             HorizontalLine,
             Image, ImageCaption, ImageResize, ImageStyle, ImageToolbar, ImageInsert, ImageInsertViaUrl,
             Italic, 
@@ -47,7 +47,7 @@ export const init = async (element) => {
             LinkImage,
             List, 
             MenuBarMenuListItemButtonView, 
-            Paragraph, ParagraphButtonUI, 
+            Paragraph,
             Plugin, 
             SelectAll, 
             ShowBlocks, 
@@ -57,7 +57,6 @@ export const init = async (element) => {
 			TableColumnResize,
 			TableProperties, 
 			TableToolbar,
-            Title,
             Underline, 
             WordCount
             } = await import(CK_JS)
@@ -175,7 +174,7 @@ export const init = async (element) => {
         }
     }
 
-
+    /*
     function CustomTitleExtension(editor) {
         editor.model.schema.addAttributeCheck((context, attributeName) => {
             if (context.endsWith('title-content $text') && ['italic','fontSize','fontColor','underline'].includes(attributeName)) {
@@ -183,10 +182,11 @@ export const init = async (element) => {
             }
         })
     }
+    */
 
     const headerConfig = {
-        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Italic, Paragraph, Underline, Title, CustomTitleExtension ],
-        toolbar: [ 'italic', 'bold', 'underline','|', 'fontSize', 'fontColor', '|', 'alignment', ],
+        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Italic, Paragraph, Underline, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
+        toolbar: [ 'heading', '|', 'undo', 'redo',  '|', 'italic', 'bold', 'underline','|', 'fontSize', 'fontColor', '|', 'alignment', '|', 'insertTable'],
         // licenseKey: "GPL",
         alignment: {
             options: [
@@ -219,10 +219,13 @@ export const init = async (element) => {
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
                     Italic, Link, LinkImage, List, ListImages, Paragraph, 
-                    SelectAll, SelectFonts, ShowBlocks, Underline, UploadImage, UploadImages, WordCount ],
+                    SelectAll, SelectFonts, ShowBlocks, 
+                    Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar,
+                    Underline, UploadImage, UploadImages, WordCount ],
         toolbar: [ 'heading', '|', 'undo', 'redo',  '|',  'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
-                    '|', 'uploadImage', 'uploadImages', 'listImages', 'insertImage', ],
+                    '|', 'uploadImage', 'uploadImages', 'listImages', 'insertImage', 
+                    '|', 'insertTable' ],
         menuBar: {
             isVisible: true
         },
@@ -276,6 +279,12 @@ export const init = async (element) => {
                 reversed: true
             }
         },
+        table: {
+            tableCaption: {
+                useCaptionElement: true
+            },
+            contentToolbar: [ 'toggleTableCaption', 'tableColumn', 'tableRow', 'mergeTableCells', 'TableProperties', 'TableCellProperties'],
+        },
         wordCount: {
             onUpdate: stats => {
                 wordcount.textContent = `Word count: ${ stats.words }`;
@@ -285,15 +294,21 @@ export const init = async (element) => {
     };
 
     const footerConfig = {
-        plugins: [ Essentials, Paragraph, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
-        toolbar: [ 'paragraph',  'insertTable' ],
-        content: "footer",
+        plugins: [ Essentials, Autosave, Paragraph, Heading, List, FontSize, FontColor, FontBackgroundColor, Bold, Italic, Link, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
+        toolbar: [ 'heading', '|', 'undo', 'redo',  '|', 'bold', 'italic', '|', 'fontSize', 'fontColor', 'fontBackgroundColor','|', 'insertTable', '|', 'link' ],
         table: {
             tableCaption: {
                 useCaptionElement: true
             },
             contentToolbar: [ 'toggleTableCaption', 'tableColumn', 'tableRow', 'mergeTableCells', 'TableProperties', 'TableCellProperties'],
-        }
+        },
+        autosave: {
+            waitingTime: 2000,
+            save( editor ) {
+                return saveData( editor.getData(), endpoint, 'footer' );
+            }
+        },
+        content: "footer",
     }
 
     const editors = [
