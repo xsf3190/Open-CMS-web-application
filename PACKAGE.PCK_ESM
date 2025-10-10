@@ -54,7 +54,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         /*
         **  BUILD "test" LIBRARY IMPORTMAPS WHEN NEW MODULE ADDED OR MODULE NAME CHANGED
         */
-        PROCEDURE buildImportmaps(pSslUrl IN VARCHAR2) IS
+        PROCEDURE buildImportmaps IS
             l_importmap CLOB;
             l_sha1 VARCHAR2(40);
             TYPE t_number_type IS VARRAY(2) OF pls_integer;
@@ -65,38 +65,38 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
                 FOR C IN (
                     WITH data AS
                     (
-                        SELECT 
-                            SUBSTR(module_name,1,INSTR(module_name,'.')-1) module_name, 
-                            pSslUrl || '/test/javascript/' || module_name host_name
-                        FROM es_modules
-                        WHERE BITAND(deploy_envs,l_deploy_envs(i))=l_deploy_envs(i)
+                        SELECT SUBSTR(module_name,1,INSTR(module_name,'.')-1) module_name, 
+                                l_ssl_url || '/test/javascript/' || module_name host_name
+                          FROM es_modules
+                         WHERE BITAND(deploy_envs,l_deploy_envs(i))=l_deploy_envs(i)
                     ),
                     json AS
                     (
                         SELECT json_object(
-                            'imports' VALUE json_objectagg(module_name VALUE host_name)
-                            returning clob) AS content
-                      FROM data
+                                 'imports' VALUE json_objectagg(module_name VALUE host_name)
+                                 returning clob) AS content
+                          FROM data
                     ),
                     source AS
                     (
-                        SELECT 'test/importmap.' || i.deploy_env_name || '.json' AS deploy_filename
+                        SELECT 'test/importmap.' || i.deploy_env_name || '.json' AS deploy_filename, sha1_live
                           FROM es_modules_importmap i
                          WHERE i.deploy_envs=l_deploy_envs(i)
                     )
-                    SELECT s.deploy_filename, j.content, f.sha1
+                    SELECT s.deploy_filename, s.sha1_live, j.content, f.sha1
                       FROM source s, json j, website_files f
                      WHERE f.website_id(+)=l_website_id
                        AND f.path(+)=s.deploy_filename
                 ) LOOP
                     l_sha1:=LOWER(dbms_crypto.hash(src => C.content, typ => dbms_crypto.hash_sh1));
-                    dbms_output.put_line('l_sha1:'||l_sha1);
-                    dbms_output.put_line('C.sha1:'||C.sha1);
                     IF (C.sha1 IS NULL OR C.sha1<>l_sha1) THEN
                         UPDATE es_modules_importmap SET sha1_test=l_sha1 WHERE deploy_envs=l_deploy_envs(i);
                         addDeploy(C.deploy_filename, C.content);
                     ELSE
                         l_files.put(C.deploy_filename, C.sha1);
+                    END IF;
+                    IF (C.sha1_live IS NOT NULL) THEN
+                        l_files.put(REPLACE(C.deploy_filename,'test','live'), C.sha1_live);
                     END IF;
                 END LOOP;
             END LOOP;
@@ -224,7 +224,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
             addDeploy(C.deploy_filename, l_file_content);
         END LOOP;
         
-        buildImportmaps(l_ssl_url);
+        buildImportmaps;
 
         FOR C IN (
             WITH source AS
