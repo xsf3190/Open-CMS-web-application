@@ -2,6 +2,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
     PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type);
     --
+    PROCEDURE deploy_core_css;
+    --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
@@ -116,12 +118,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ** BUIKD :ROOT RULES 
         */
         FOR C IN (
-            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius,
-                     wa.header_background_color, wa.main_background_color, wa.footer_background_color
-              FROM website w, website_article wa
+            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius
+              FROM website w
              WHERE w.id=pWebsiteId
-               AND wa.website_id=w.id
-               AND wa.display_order=(SELECT MIN(display_order) FROM website_article wa2 WHERE wa2.website_id=wa.website_id )
             )
         LOOP
             /* Build design tokens */
@@ -157,6 +156,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             '--img-border-radius: ' || C.img_border_radius || ';' ||
             '--nav-dark-color: rgb(25, 25, 25);' ||
 	        '--nav-highlight-color: rgb(24, 54, 145);';
+            /*
             IF (C.header_background_color IS NOT NULL) THEN
                 l_root_css:=l_root_css || 
                 '--header-background-color: ' || C.header_background_color || ';';
@@ -169,6 +169,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 l_root_css:=l_root_css || 
                 '--footer-background-color: ' || C.footer_background_color || ';';
             END IF;
+            */
 
             /*
             FOR i IN 1..3 LOOP
@@ -200,6 +201,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
          WHERE id=pWebsiteid
            AND (dbms_lob.compare(css,l_css)<>0 OR css IS NULL);
 
+    END;
+
+    PROCEDURE deploy_core_css IS
+    BEGIN
+        FOR C IN (
+            SELECT CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date, apex_util.blob_to_clob(file_content) file_content
+              FROM apex_application_static_files s
+                 WHERE s.file_name='deploy.min.css'
+                   AND s.application_id=101
+        ) LOOP
+            UPDATE css SET content_minified=C.file_content, updated_date=C.updated_date
+              WHERE name='core-styles';
+        END LOOP;
     END;
 
 end;
