@@ -200,6 +200,36 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
+    ** GET THE header_html FOR THE FIRST PAGE IN WEBSITE FOR USE ON THOSE PAGES NOT HAVING THEIR OWN HEADER
+    */
+    FUNCTION buildCommonHeader(pWebsiteId IN website.id%type) RETURN website_article.header_html%type IS
+        l_header_html website_article.header_html%type;
+    BEGIN
+        SELECT header_html 
+          INTO l_header_html 
+          FROM website_article 
+         WHERE website_id=pWebsiteId
+           AND display_order=(SELECT MIN(display_order) FROM website_article WHERE website_id=pWebsiteId);
+
+        RETURN (l_header_html);
+    END;
+
+    /*
+    ** GET THE footer_html FOR THE FIRST PAGE IN WEBSITE FOR USE ON THOSE PAGES NOT HAVING THEIR OWN FOOTER
+    */
+    FUNCTION buildCommonFooter(pWebsiteId IN website.id%type) RETURN website_article.footer_html%type IS
+        l_footer_html website_article.footer_html%type;
+    BEGIN
+        SELECT footer_html 
+          INTO l_footer_html 
+          FROM website_article 
+         WHERE website_id=pWebsiteId
+           AND display_order=(SELECT MIN(display_order) FROM website_article WHERE website_id=pWebsiteId);
+
+        RETURN (l_footer_html);
+    END;
+
+    /*
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT FIRST, ASSUMING ONLY FIRST IMAGE WILL BE IN VIEWPORT
     */
     PROCEDURE setImgSrcset(pArticleid IN article.id%type, pImgCount IN OUT PLS_INTEGER, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
@@ -271,18 +301,71 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pImgCount:=n;
     END;
 
+    PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB) IS
+    BEGIN
+        pHtml:='<ol class="grid grid__auto_fit" role="list">';
+        FOR C IN (SELECT COUNT(*) OVER () nb, ROW_NUMBER() OVER (ORDER BY null) rn,
+                            apex_string_util.get_slug(wa.navigation_label) path, wa.collection_date_format, art.body_html, art.title, art.excerpt, art.updated_date, art.word_count, art.cover_icon_id, ass.cld_cloud_name, ass.resource_type, ass.public_id, ass.format, ass.width, ass.height, ass.alt_text
+                    FROM website_article wa, article art, asset ass
+                   WHERE wa.article_id=pArticleId
+                     AND art.parent_id=wa.article_id
+                     AND ass.id(+)=art.cover_asset_id
+                   ORDER BY art.updated_date DESC ) 
+        LOOP
+            pHtml:=pHtml || 
+            '<li class="card">';
+            IF (C.cld_cloud_name IS NOT NULL) THEN
+                pHtml:=pHtml || 
+                '<img loading="' || CASE WHEN C.rn=1 THEN 'eager' ELSE 'lazy' END || '" src="' || pck_media.getCloudinaryUrl(C.cld_cloud_name, C.resource_type, C.public_id, C.format, C.width) || '" width="'|| C.width || '" height="' || C.height || '" alt="' || C.alt_text || '">';
+            ELSIF (C.cover_icon_id IS NOT NULL) THEN
+                pHtml:=pHtml || 
+                '<svg class="icon" aria-hidden="true" focusable="false"><use href="#' || C.cover_icon_id || '"></use></svg>';
+            END IF;
+            pHtml:=pHtml || 
+                '<div class="flow">' ||
+                    '<h2>' ||
+                        '<a href="/' || C.path || '/' || apex_string_util.get_slug(C.title) || '">' || C.title || '</a>' ||
+                    '</h2>' ||
+                    '<p>' || CASE WHEN LENGTH(C.excerpt)<160 THEN C.excerpt ELSE SUBSTR(C.excerpt,1,INSTR(C.excerpt,' ',-1)) || '...' END  || '</p>' ||
+                '</div>' ||
+                '<small>' ||
+                    CASE WHEN NVL(C.collection_date_format,'NONE')<>'NONE' THEN
+                    '<span>' || TO_CHAR(NVL(C.updated_date,current_timestamp),'fm'||C.collection_date_format) || '</span>'
+                    END ||
+                    '<span>' || C.word_count || ' words</span>' ||
+                '</small>' ||
+            '</li>';
+        END LOOP;
+        pHtml:=pHtml || '</ol>';
+    END;
+
     /*
     **  <nav>
     **  <header>
     **  <main>
     **  <footer>
     */
-    PROCEDURE buildPageBody(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pLogo IN VARCHAR2, pNav IN VARCHAR2, pDropdown in VARCHAR2, pEnv IN VARCHAR2, pRestUrl IN VARCHAR2, pEsmLibrary IN VARCHAR2, pIntegrity IN VARCHAR2, pBody IN OUT NOCOPY CLOB) IS
+    PROCEDURE buildPageBody(
+            pWebsiteId IN website.id%type, 
+            pArticleid IN article.id%type, 
+            pLogo IN VARCHAR2, 
+            pNav IN VARCHAR2, 
+            pDropdown in VARCHAR2, 
+            pEnv IN VARCHAR2, 
+            pRestUrl IN VARCHAR2, 
+            pEsmLibrary IN VARCHAR2, 
+            pIntegrity IN VARCHAR2, 
+            pCollectionType IN website_article.collection_type%type, 
+            pCommonHeader IN website_article.header_html%type, 
+            pCommonFooter IN website_article.footer_html%type, 
+            pBody IN OUT NOCOPY CLOB
+        ) IS
         l_title article_chars.first_heading%type;
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
         l_main article.body_html%type;
         l_footer website_article.footer_html%type;
+        l_collection CLOB;
         l_clob CLOB;
 
         l_nav_id VARCHAR2(20);
@@ -295,7 +378,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         pBody:=null;
         FOR C IN (
-            SELECT wa.header_html, a.body_html, wa.footer_html, NVL(a.parent_id,pArticleId) nav_id
+            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, NVL(a.parent_id,pArticleId) nav_id
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteId
                AND wa.article_id=NVL(a.parent_id,pArticleId)
@@ -322,6 +405,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_title:=C1.first_heading;
             END LOOP;
 
+            IF (pCollectionType='BLOG') THEN
+                buildPageCollection(pCollectionType, pArticleid, l_collection);
+            END IF;
+
             pBody:=
             '<!DOCTYPE HTML>' ||
             '<html lang="en">' ||
@@ -347,7 +434,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<div class="topnav flex-items space-between">' ||
                         pLogo || l_nav || pDropdown || 
                     '</div>' ||    
-                   l_header || l_main || l_footer || buildLoginForm || buildContentDialog ||
+                    l_header || l_main || l_collection || l_footer || buildLoginForm || buildContentDialog ||
                 '</body>' ||
             '</html>';
         END LOOP;
@@ -448,6 +535,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_nav VARCHAR2(4000);
         l_logo website.logo%type;
         l_dropdown VARCHAR2(4000);
+        l_common_header website_article.header_html%type;
+        l_common_footer website_article.footer_html%type;
 
         /* END NEW */
 
@@ -535,18 +624,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         **
         ** 1. submit all asset paths and their sha1 to hosting service
         ** 2. receive array of assets to upload - i.e new path or sha1
-        ** 3. upload required assets
+        ** 3. upload assets set in Netlify "required" array
         **
-        **  Website comprises following asset types:
+        **  Each website page comprises following assets:
         **
-        **  1. text/html - website pages
-        **  2. font/woff2 - fonts
-        **  3. text/css - css stylesheets
-        **  4. application/javascript - page javascript
-        **  5. application/json - importmap for running javascript modules 
-        **  6. text/plain - "_headers" file, includes strict Content Security Policy
-        **  7. application/xml - sitemap.xml
-        **
+        **  1. html
+        **  2. fonts
+        **  3. css stylesheets
+        **  4. javascript starter and modules
+        **  5. _headers file including strict Content Security Policy
+        **  6. robots.txt, sitemap.xml
         */
 
         -- l_json:= new JSON_OBJECT_T;
@@ -588,19 +675,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH content AS
             (
-                SELECT wa.article_id, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, GREATEST(w.nav_updated_date,a.updated_date,wa.updated_date) content_updated
+                SELECT wa.article_id, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) content_updated
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
                    AND a.id=wa.article_id
                 UNION ALL 
-                SELECT a.id, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) path, NVL(a.updated_date,a.created_date) last_updated 
+                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, NVL(a.updated_date,a.created_date) last_updated 
                   FROM article a, website_article wa
                  WHERE a.parent_id=wa.article_id
                    AND wa.website_id=pWebsiteId
             )
-            SELECT c.article_id, c.path, f.sha1, 
-                CASE WHEN f.deployed_date IS NULL OR c.content_updated > f.deployed_date THEN 1 ELSE 0 END build
+            SELECT c.article_id, c.path, C.collection_type, f.sha1, 
+                    CASE WHEN f.deployed_date IS NULL OR c.content_updated > f.deployed_date THEN 1 ELSE 0 END build
               FROM content c, website_files f
              WHERE f.website_id(+)=pWebsiteId
                AND f.path(+)=c.path
@@ -615,8 +702,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_nav:=buildNav(pWebsiteId, pEnv);
                 l_logo:=buildLogo(pWebsiteId);
                 l_dropdown:=buildDropdown(pWebsiteId);
+                l_common_header:=buildCommonHeader(pWebsiteid);
+                l_common_footer:=buildCommonFooter(pWebsiteid);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, pEsmLibrary, l_script_sha256, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, pEsmLibrary, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
@@ -653,6 +742,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         /*
         **  3. Build CSS files
         */
+        pck_css.deploy_core_css;   /* TEMPORARY FIX */
+        
         FOR C IN (
             WITH source AS
             (
