@@ -1,58 +1,58 @@
-09-OCT-25 00:01:46.960: Starting "EXAMPLE"."EXPORT_SCHEMA_24100":  
-09-OCT-25 00:01:51.490: Processing object type SCHEMA_EXPORT/TABLE/TABLE_DATA
-09-OCT-25 00:01:51.784: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_BODY
-09-OCT-25 00:01:52.698: Processing object type SCHEMA_EXPORT/PRE_SCHEMA/PROCACT_SCHEMA/LOGREP
-09-OCT-25 00:01:53.771: Processing object type SCHEMA_EXPORT/SEQUENCE/SEQUENCE
-09-OCT-25 00:02:03.641: Processing object type SCHEMA_EXPORT/TABLE/TABLE
-09-OCT-25 00:02:16.949: Processing object type SCHEMA_EXPORT/TABLE/COMMENT
-09-OCT-25 00:02:17.251: Processing object type SCHEMA_EXPORT/TABLE/IDENTITY_COLUMN
-09-OCT-25 00:02:17.912: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_SPEC
-09-OCT-25 00:02:18.842: Processing object type SCHEMA_EXPORT/PACKAGE/COMPILE_PACKAGE/PACKAGE_SPEC/ALTER_PACKAGE_SPEC
-09-OCT-25 00:02:21.933: Processing object type SCHEMA_EXPORT/VIEW/VIEW
-09-OCT-25 00:02:22.906: Processing object type SCHEMA_EXPORT/TABLE/INDEX/INDEX
-09-OCT-25 00:02:28.833: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
-09-OCT-25 00:02:30.822: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/REF_CONSTRAINT
-09-OCT-25 00:02:33.048: Processing object type SCHEMA_EXPORT/POST_SCHEMA/PROCACT_SCHEMA/LBAC_EXP
-09-OCT-25 00:02:33.391: . . exported "EXAMPLE"."WEBSITE"                          19.4 KB      23 rows
-09-OCT-25 00:02:33.439: . . exported "EXAMPLE"."CSS"                              23.8 KB       2 rows
-09-OCT-25 00:02:33.538: . . exported "EXAMPLE"."PAGE_HIT"                        544.3 KB   12174 rows
-09-OCT-25 00:02:33.642: . . exported "EXAMPLE"."ASSET"                             483 KB   21661 rows
-09-OCT-25 00:02:33.786: . . exported "EXAMPLE"."ARTICLE"                         679.6 KB     744 rows
-09-OCT-25 00:02:33.834: . . exported "EXAMPLE"."LOG"                              15.8 KB     215 rows
-09-OCT-25 00:02:33.881: . . exported "EXAMPLE"."ICON"                             13.5 KB      24 rows
-09-OCT-25 00:02:33.927: . . exported "EXAMPLE"."ES_MODULES_IMPORTMAP"              5.5 KB       2 rows
-09-OCT-25 00:02:34.000: . . exported "EXAMPLE"."REFRESH_TOKEN"                     302 KB    4757 rows
-09-OCT-25 00:02:34.055: . . exported "EXAMPLE"."WEBSITE_ARTICLE"                   8.9 KB      52 rows
-09-OCT-25 00:02:34.120: . . exported "EXAMPLE"."IP_LOOKUP"                       175.7 KB    8900 rows
-09-OCT-25 00:02:34.176: . . exported "EXAMPLE"."WEBSITE_ARTICLE_CWV"              35.8 KB    1272 rows
-09-OCT-25 00:02:34.228: . . exported "EXAMPLE"."USAGE"                            73.1 KB    2336 rows
-09-OCT-25 00:02:34.279: . . exported "EXAMPLE"."FONT"                             37.4 KB    1900 rows
-09-OCT-25 00:02:34.330: . . exported "EXAMPLE"."GOOGLE_FONT"                      39.2 KB    1899 rows
-09-OCT-25 00:02:34.386: . . exported "EXAMPLE"."BROWSER_LOOKUP"                     24 KB     799 rows
-09-OCT-25 00:02:34.469: . . exported "EXAMPLE"."NETLIFY_FILE"                     24.8 KB     519 rows
-09-OCT-25 00:02:34.517: . . exported "EXAMPLE"."WEBSITE_DEPLOY"                   19.4 KB     640 rows
-09-OCT-25 00:02:34.569: . . exported "EXAMPLE"."USERS"                              11 KB      49 rows
-09-OCT-25 00:02:34.615: . . exported "EXAMPLE"."FONT_STATIC_WGHT"                 11.7 KB    2306 rows
-09-OCT-25 00:02:34.660: . . exported "EXAMPLE"."GOOGLE_FONT_METADATA"             10.7 KB     627 rows
-09-OCT-25 00:02:34.706: . . exported "EXAMPLE"."WEBSITE_FILES"                    11.8 KB     147 rows
-09-OCT-25 00:02:34.754: . . exported "EXAMPLE"."ARTICLE_CHARS"                    10.2 KB     248 rows
-09-OCT-25 00:02:34.803: . . exported "EXAMPLE"."WEBSITE_FONTFACE"                  8.6 KB      24 rows
-09-OCT-25 00:02:34.850: . . exported "EXAMPLE"."NETLIFY_DNS_RECORD"                6.5 KB      36 rows
-09-OCT-25 00:02:34.895: . . exported "EXAMPLE"."API_ENDPOINT"                      6.2 KB     528 rows
-09-OCT-25 00:02:34.939: . . exported "EXAMPLE"."JWKS_KEY_CACHE"                      7 KB       6 rows
-09-OCT-25 00:02:34.983: . . exported "EXAMPLE"."NETLIFY_SITE"                        7 KB      34 rows
-09-OCT-25 00:02:35.031: . . exported "EXAMPLE"."WEBSITE_FONT"                        6 KB      38 rows
-09-OCT-25 00:02:35.076: . . exported "EXAMPLE"."ES_MODULES"                        6.3 KB      22 rows
-09-OCT-25 00:02:35.123: . . exported "EXAMPLE"."ARTICLE_MESSAGE"                   5.7 KB      23 rows
-09-OCT-25 00:02:35.167: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE"                  5.4 KB      11 rows
-09-OCT-25 00:02:35.211: . . exported "EXAMPLE"."FINGERPRINT"                       5.7 KB      25 rows
-09-OCT-25 00:02:35.257: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE_SERVER"           4.9 KB      44 rows
-09-OCT-25 00:02:35.300: . . exported "EXAMPLE"."WEBSITE_ROLE"                      4.8 KB      69 rows
-09-OCT-25 00:02:35.342: . . exported "EXAMPLE"."ROLE"                              4.6 KB       3 rows
-09-OCT-25 00:02:35.348: . . exported "EXAMPLE"."DBTOOLS$EXECUTION_HISTORY"           0 KB       0 rows
-09-OCT-25 00:02:35.355: . . exported "EXAMPLE"."ES_MODULES_FONTS"                    0 KB       0 rows
-09-OCT-25 00:02:37.255: Master table "EXAMPLE"."EXPORT_SCHEMA_24100" successfully loaded/unloaded
-09-OCT-25 00:02:37.394: ******************************************************************************
-09-OCT-25 00:02:37.395: Dump file set for EXAMPLE.EXPORT_SCHEMA_24100 is:
-09-OCT-25 00:02:37.395:   /u03/dbfs/1E20BEEAF2C0BC4DE063ED5D000AE048/data/dpdump/EXPORT_SCHEMA.EXAMPLE.dmp
-09-OCT-25 00:02:37.405: Job "EXAMPLE"."EXPORT_SCHEMA_24100" successfully completed at Thu Oct 9 00:02:37 2025 elapsed 0 00:00:56
+10-OCT-25 00:01:59.782: Starting "EXAMPLE"."EXPORT_SCHEMA_24180":  
+10-OCT-25 00:02:04.207: Processing object type SCHEMA_EXPORT/TABLE/TABLE_DATA
+10-OCT-25 00:02:04.493: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_BODY
+10-OCT-25 00:02:05.391: Processing object type SCHEMA_EXPORT/PRE_SCHEMA/PROCACT_SCHEMA/LOGREP
+10-OCT-25 00:02:06.437: Processing object type SCHEMA_EXPORT/SEQUENCE/SEQUENCE
+10-OCT-25 00:02:16.166: Processing object type SCHEMA_EXPORT/TABLE/TABLE
+10-OCT-25 00:02:29.554: Processing object type SCHEMA_EXPORT/TABLE/COMMENT
+10-OCT-25 00:02:29.849: Processing object type SCHEMA_EXPORT/TABLE/IDENTITY_COLUMN
+10-OCT-25 00:02:30.472: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_SPEC
+10-OCT-25 00:02:31.371: Processing object type SCHEMA_EXPORT/PACKAGE/COMPILE_PACKAGE/PACKAGE_SPEC/ALTER_PACKAGE_SPEC
+10-OCT-25 00:02:34.419: Processing object type SCHEMA_EXPORT/VIEW/VIEW
+10-OCT-25 00:02:35.379: Processing object type SCHEMA_EXPORT/TABLE/INDEX/INDEX
+10-OCT-25 00:02:41.282: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
+10-OCT-25 00:02:43.267: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/REF_CONSTRAINT
+10-OCT-25 00:02:45.519: Processing object type SCHEMA_EXPORT/POST_SCHEMA/PROCACT_SCHEMA/LBAC_EXP
+10-OCT-25 00:02:45.870: . . exported "EXAMPLE"."WEBSITE"                          19.8 KB      23 rows
+10-OCT-25 00:02:45.925: . . exported "EXAMPLE"."CSS"                              23.8 KB       2 rows
+10-OCT-25 00:02:45.981: . . exported "EXAMPLE"."LOG"                              34.5 KB     668 rows
+10-OCT-25 00:02:46.028: . . exported "EXAMPLE"."ES_MODULES_IMPORTMAP"              5.5 KB       2 rows
+10-OCT-25 00:02:46.140: . . exported "EXAMPLE"."PAGE_HIT"                        550.7 KB   12271 rows
+10-OCT-25 00:02:46.238: . . exported "EXAMPLE"."ASSET"                             483 KB   21661 rows
+10-OCT-25 00:02:46.379: . . exported "EXAMPLE"."ARTICLE"                         681.2 KB     744 rows
+10-OCT-25 00:02:46.428: . . exported "EXAMPLE"."ICON"                             13.5 KB      24 rows
+10-OCT-25 00:02:46.506: . . exported "EXAMPLE"."REFRESH_TOKEN"                     306 KB    4812 rows
+10-OCT-25 00:02:46.554: . . exported "EXAMPLE"."WEBSITE_ARTICLE"                   9.9 KB      52 rows
+10-OCT-25 00:02:46.614: . . exported "EXAMPLE"."IP_LOOKUP"                       176.4 KB    8933 rows
+10-OCT-25 00:02:46.664: . . exported "EXAMPLE"."WEBSITE_ARTICLE_CWV"              35.8 KB    1280 rows
+10-OCT-25 00:02:46.713: . . exported "EXAMPLE"."USAGE"                            73.1 KB    2336 rows
+10-OCT-25 00:02:46.758: . . exported "EXAMPLE"."FONT"                             37.4 KB    1900 rows
+10-OCT-25 00:02:46.806: . . exported "EXAMPLE"."GOOGLE_FONT"                      39.1 KB    1899 rows
+10-OCT-25 00:02:46.850: . . exported "EXAMPLE"."BROWSER_LOOKUP"                     24 KB     800 rows
+10-OCT-25 00:02:46.894: . . exported "EXAMPLE"."WEBSITE_DEPLOY"                   21.2 KB     705 rows
+10-OCT-25 00:02:46.939: . . exported "EXAMPLE"."NETLIFY_FILE"                     24.8 KB     519 rows
+10-OCT-25 00:02:46.982: . . exported "EXAMPLE"."WEBSITE_FILES"                    17.9 KB     316 rows
+10-OCT-25 00:02:47.028: . . exported "EXAMPLE"."ARTICLE_CHARS"                    13.4 KB     248 rows
+10-OCT-25 00:02:47.081: . . exported "EXAMPLE"."USERS"                              11 KB      49 rows
+10-OCT-25 00:02:47.124: . . exported "EXAMPLE"."FONT_STATIC_WGHT"                 11.7 KB    2306 rows
+10-OCT-25 00:02:47.167: . . exported "EXAMPLE"."GOOGLE_FONT_METADATA"             10.7 KB     627 rows
+10-OCT-25 00:02:47.209: . . exported "EXAMPLE"."WEBSITE_FONTFACE"                  8.7 KB      25 rows
+10-OCT-25 00:02:47.251: . . exported "EXAMPLE"."NETLIFY_DNS_RECORD"                6.5 KB      36 rows
+10-OCT-25 00:02:47.293: . . exported "EXAMPLE"."API_ENDPOINT"                      6.2 KB     528 rows
+10-OCT-25 00:02:47.340: . . exported "EXAMPLE"."WEBSITE_FONT"                      6.1 KB      38 rows
+10-OCT-25 00:02:47.402: . . exported "EXAMPLE"."JWKS_KEY_CACHE"                      7 KB       6 rows
+10-OCT-25 00:02:47.447: . . exported "EXAMPLE"."NETLIFY_SITE"                        7 KB      34 rows
+10-OCT-25 00:02:47.490: . . exported "EXAMPLE"."ES_MODULES"                        6.4 KB      22 rows
+10-OCT-25 00:02:47.532: . . exported "EXAMPLE"."ARTICLE_MESSAGE"                   5.7 KB      23 rows
+10-OCT-25 00:02:47.574: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE"                  5.4 KB      11 rows
+10-OCT-25 00:02:47.615: . . exported "EXAMPLE"."FINGERPRINT"                       5.7 KB      25 rows
+10-OCT-25 00:02:47.656: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE_SERVER"           4.9 KB      44 rows
+10-OCT-25 00:02:47.698: . . exported "EXAMPLE"."WEBSITE_ROLE"                      4.8 KB      69 rows
+10-OCT-25 00:02:47.739: . . exported "EXAMPLE"."ROLE"                              4.6 KB       3 rows
+10-OCT-25 00:02:47.744: . . exported "EXAMPLE"."DBTOOLS$EXECUTION_HISTORY"           0 KB       0 rows
+10-OCT-25 00:02:47.750: . . exported "EXAMPLE"."ES_MODULES_FONTS"                    0 KB       0 rows
+10-OCT-25 00:02:49.565: Master table "EXAMPLE"."EXPORT_SCHEMA_24180" successfully loaded/unloaded
+10-OCT-25 00:02:49.691: ******************************************************************************
+10-OCT-25 00:02:49.692: Dump file set for EXAMPLE.EXPORT_SCHEMA_24180 is:
+10-OCT-25 00:02:49.693:   /u03/dbfs/1E20BEEAF2C0BC4DE063ED5D000AE048/data/dpdump/EXPORT_SCHEMA.EXAMPLE.dmp
+10-OCT-25 00:02:49.703: Job "EXAMPLE"."EXPORT_SCHEMA_24180" successfully completed at Fri Oct 10 00:02:49 2025 elapsed 0 00:00:55
