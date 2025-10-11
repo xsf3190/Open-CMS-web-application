@@ -465,7 +465,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
 
     /* 
-    **  UPDATE CONTENT RECEIVED FROM CKEDITOR
+    **  UPDATE CONTENT RECEIVED FROM CKEDITOR. SET FLAG ON WEBSITE IF HOME PAGE HEADER / FOOTER UPDATED
     */
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -473,6 +473,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_html CLOB;
         l_id VARCHAR2(6);
         l_json JSON_OBJECT_T;
+
+        PROCEDURE setWebsiteUpdatedDate IS
+        BEGIN
+            UPDATE website 
+               SET nav_updated_date=current_timestamp
+             WHERE EXISTS (
+                SELECT null 
+                  FROM website_article
+                 WHERE website_id=pWebsiteId 
+                   AND article_id=pArticleid 
+                   AND display_order=(
+                        SELECT MAX(display_order) 
+                          FROM website_article
+                         WHERE website_id=pWebsiteId 
+                           AND article_id=pArticleid 
+                        )
+                );
+        END;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -488,6 +506,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
 
+                setWebsiteUpdatedDate;
+
             WHEN 'main' THEN
                 UPDATE article 
                    SET word_count=l_word_count, 
@@ -501,6 +521,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        updated_date = current_timestamp
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
+
+                setWebsiteUpdatedDate;
         END CASE;
 
         l_json:= new JSON_OBJECT_T;
