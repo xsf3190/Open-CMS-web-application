@@ -386,7 +386,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     END
                     ||
                     'font-display:swap;' ||
-                    'src: url("/' || C.deploy_filename || '") format("woff2");' ||
+                    'src: url("' || C.deploy_filename || '") format("woff2");' ||
                 '}';
             IF (C.rn=C.nb) THEN
                 UPDATE website_font 
