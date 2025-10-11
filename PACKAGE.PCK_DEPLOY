@@ -230,6 +230,40 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
+    ** GET TWEBSITE FAVICON. DEFAULTS TO FIRST LETTER OF DOMAIN
+    */
+    FUNCTION buildFavicon(pWebsiteId IN website.id%type) RETURN website.favicon%type IS
+        l_favicon website.favicon%type;
+    BEGIN
+        FOR C IN (
+            SELECT favicon, SUBSTR(domain_name,1,1) first_letter_domain FROM website WHERE id=pWebsiteid
+        ) LOOP
+            IF (C.favicon IS NOT NULL) THEN
+                IF (C.favicon LIKE '&%;') THEN /* EMOJI */
+                    l_favicon:='<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>' || C.favicon|| '</text></svg>';
+                ELSE
+                    l_favicon:=REPLACE(REPLACE(C.favicon,'"','%22'),'#','%23');
+                END IF;
+            ELSE
+                l_favicon:='<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>' || C.first_letter_domain|| '</text></svg>';
+            END IF;
+        END LOOP;
+
+        l_favicon:='data:image/svg+xml,' || l_favicon;
+
+        RETURN (l_favicon);
+    END;
+            
+    FUNCTION buildSitemap(pWebsiteid IN website.id%type) RETURN VARCHAR2 IS
+        l_sitemap LONG;
+    BEGIN
+        l_sitemap:=
+        '<?xml version="1.0" encoding="UTF-8"?>' || 
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+
+    END;
+
+    /*
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT FIRST, ASSUMING ONLY FIRST IMAGE WILL BE IN VIEWPORT
     */
     PROCEDURE setImgSrcset(pArticleid IN article.id%type, pImgCount IN OUT PLS_INTEGER, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
@@ -346,20 +380,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     **  <footer>
     */
     PROCEDURE buildPageBody(
-            pWebsiteId IN website.id%type, 
-            pArticleid IN article.id%type, 
-            pLogo IN VARCHAR2, 
-            pNav IN VARCHAR2, 
-            pDropdown in VARCHAR2, 
-            pEnv IN VARCHAR2, 
-            pRestUrl IN VARCHAR2, 
-            pEsmLibrary IN VARCHAR2, 
-            pIntegrity IN VARCHAR2, 
-            pCollectionType IN website_article.collection_type%type, 
-            pCommonHeader IN website_article.header_html%type, 
-            pCommonFooter IN website_article.footer_html%type, 
-            pBody IN OUT NOCOPY CLOB
-        ) IS
+        pWebsiteId IN website.id%type, 
+        pArticleid IN article.id%type, 
+        pLogo IN VARCHAR2, 
+        pNav IN VARCHAR2, 
+        pDropdown in VARCHAR2, 
+        pEnv IN VARCHAR2, 
+        pRestUrl IN VARCHAR2, 
+        pEsmLibrary IN VARCHAR2, 
+        pIntegrity IN VARCHAR2, 
+        pCollectionType IN website_article.collection_type%type, 
+        pCommonHeader IN website_article.header_html%type, 
+        pCommonFooter IN website_article.footer_html%type,
+        pFavicon IN website.favicon%type,
+        pBody IN OUT NOCOPY CLOB
+    ) IS
         l_title article_chars.first_heading%type;
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
@@ -409,6 +444,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 buildPageCollection(pCollectionType, pArticleid, l_collection);
             END IF;
 
+            /*
+            ** FAVICON SVG MUST BE PURE XML WITH ESCAPED " AND #
+            */
             pBody:=
             '<!DOCTYPE HTML>' ||
             '<html lang="en">' ||
@@ -426,9 +464,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     END LOOP;
 
                     pBody:=pBody ||
-                    
+                    '<link rel="icon" href="' || pFavicon || '">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
-                    '<link rel="icon" type="image/svg+xml" sizes="any" href="">' || /* TODO */
+                    
                 '</head>' ||
                 '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '" data-importmap="' || l_importmap || '">' || 
                     '<div class="topnav flex-items space-between">' ||
@@ -468,13 +506,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2, pEsmLibrary IN VARCHAR2) IS
         
         l_clob CLOB;
-        -- l_json JSON_OBJECT_T;
         l_files JSON_OBJECT_T;
         l_keys JSON_KEY_LIST;
 
-        l_favicon_asset_id website.favicon_asset_id%type;
-        l_favicon_url VARCHAR2(250);
-        l_favicon_download BLOB;
         
         TYPE tt_files IS RECORD (
             file_name VARCHAR2(200),
@@ -486,34 +520,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         TYPE t_files IS TABLE OF tt_files INDEX BY VARCHAR2(40);
         l_deploy_files t_files;
 
-        TYPE tt_labels IS RECORD (
-            parent_article_id website_article.article_id%type,
-            article_id website_article.article_id%type,
-            --navigation_label article.title%type,  -- largest that can fit here
-            path_name VARCHAR2(200),
-            collection_type website_article.collection_type%type,
-            page_title website_article.page_title%type,
-            page_description website_article.page_description%type,
-            lastmod article.updated_date%type,
-            word_count article.word_count%type, 
-            header_effect website.header_effect%type,
-            hero_asset_id website.hero_asset_id%type,
-            contact_email website.contact_email%type,
-            telephone_number website.telephone_number%type,
-            mobile_number website.mobile_number%type,
-            linkedin_name website.linkedin_name%type,
-            instagram_name website.instagram_name%type,
-            promotion website.promotion%type,
-            img_count PLS_INTEGER,
-            font_preload VARCHAR2(1000),
-            body_html article.body_html%type
-        );
-        TYPE t_labels IS TABLE OF tt_labels INDEX BY PLS_INTEGER;
-        l_labels t_labels;
-
-        l_is_media BOOLEAN:=FALSE;
-        l_is_blog BOOLEAN:=FALSE;
-        l_is_product BOOLEAN:=FALSE;
         l_script_sha256 VARCHAR2(500);
         l_font_download BLOB;
 
@@ -521,7 +527,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_robots CLOB;
         l_headers CLOB;
         l_ssl_url VARCHAR2(200);
-        -- l_url VARCHAR2(200);
+        l_sha1 VARCHAR2(40);
         n PLS_INTEGER;
 
         l_dogface_requested CLOB;
@@ -534,6 +540,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         l_nav VARCHAR2(4000);
         l_logo website.logo%type;
+        l_favicon website.favicon%type;
         l_dropdown VARCHAR2(4000);
         l_common_header website_article.header_html%type;
         l_common_footer website_article.footer_html%type;
@@ -675,19 +682,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH content AS
             (
-                SELECT wa.article_id, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) content_updated
+                SELECT wa.article_id, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, 
+                        GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
                    AND a.id=wa.article_id
                 UNION ALL 
-                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, NVL(a.updated_date,a.created_date) last_updated 
-                  FROM article a, website_article wa
-                 WHERE a.parent_id=wa.article_id
-                   AND wa.website_id=pWebsiteId
+                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, 
+                        GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
+                  FROM article a, website_article wa, website w
+                 WHERE w.id=pWebsiteId
+                   AND wa.website_id=w.id
+                   AND a.parent_id=wa.article_id
             )
             SELECT c.article_id, c.path, C.collection_type, f.sha1, 
-                    CASE WHEN f.deployed_date IS NULL OR c.content_updated > f.deployed_date THEN 1 ELSE 0 END build
+                    CASE WHEN f.deployed_date IS NULL OR c.updated_date > f.deployed_date THEN 1 ELSE 0 END build
               FROM content c, website_files f
              WHERE f.website_id(+)=pWebsiteId
                AND f.path(+)=c.path
@@ -704,16 +714,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_dropdown:=buildDropdown(pWebsiteId);
                 l_common_header:=buildCommonHeader(pWebsiteid);
                 l_common_footer:=buildCommonFooter(pWebsiteid);
+                l_favicon:=buildFavicon(pWebsiteid);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, pEsmLibrary, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, pEsmLibrary, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_favicon, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
         /*
         **  2. Build FONT files
         */
-        logDeployment(pWebsiteId, pSiteId, 'Optimizing FONTS');
-
         pck_fonts.getFontFiles(pWebsiteid, pSiteId);  /* Sets website_fontfaces.created_date */
         
         FOR C IN (
@@ -733,7 +742,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /* 
             **  DEPLOY FONT FILE FROM GOOGLE
             */
-            logDeployment(pWebsiteId, pSiteId, 'Download Google - '|| C.deploy_filename);
+            logDeployment(pWebsiteId, pSiteId, 'Download Google Font - '|| C.deploy_filename);
             l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
             addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_font_download);
         
@@ -789,40 +798,72 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wf.path(+)=s.deploy_filename
         ) LOOP
             IF (C.build=0) THEN
-                IF (getSha256(C.file_content)=C.sha1) THEN
+                l_sha1:=LOWER(dbms_crypto.hash(src => C.file_content, typ => dbms_crypto.hash_sh1));
+                IF (l_sha1=C.sha1) THEN
                     l_files.put(C.deploy_filename, C.sha1);
-                    CONTINUE;
+                    EXIT;
                 END IF;
             END IF;
 
             logDeployment(pWebsiteId, pSiteId, 'Download CONTENT SECURITY HEADERS - '|| C.deploy_filename);
             addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
         END LOOP;
+
+        /*
+        **  5. BUILD SITEMAP
+        */
+        FOR C IN (
+            WITH data AS 
+            (
+                SELECT apex_string_util.get_slug(wa.navigation_label) path1, apex_string_util.get_slug(ac.first_heading) path2, TO_CHAR(NVL(a.updated_date,wa.updated_date),'yyyy-mm-dd') lastmod
+                  FROM website_article wa, article a, article_chars ac
+                 WHERE wa.website_id=pWebsiteid
+                   AND a.parent_id(+)=wa.article_id
+                   AND ac.article_id(+)=a.id
+                   AND ac.context(+)='headings'
+                 ORDER BY wa.display_order
+            ),
+            xml AS
+            (
+                SELECT 
+                    XMLElement("urlset", XMLAttributes('http://www.sitemaps.org/schemas/sitemap/0.9' as "xmlns"),
+                        XMLAgg(
+                            XMLElement("url",
+                                XMLElement("loc",path1 || CASE WHEN path2 IS NOT NULL THEN '/' || path2 END),
+                                XMLElement("lastmod",lastmod)
+                            )
+                        )
+                    ) as sitemap
+                FROM data
+            ),
+            source AS
+            (
+                SELECT '/sitemap.xml' AS deploy_filename, sitemap, nav_updated_date updated_date 
+                  FROM website, xml
+                 WHERE id=pWebsiteid
+            )
+            SELECT s.deploy_filename, s.sitemap.getClobVal() sitemap, wf.sha1,
+                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=s.deploy_filename
+        ) LOOP
+            IF (C.build=0) THEN
+                l_files.put(C.deploy_filename, C.sha1);
+            ELSE
+                logDeployment(pWebsiteId, pSiteId, 'Download SITEMAP.XML - '|| C.deploy_filename);
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.sitemap);
+            END IF;
+        END LOOP;
+
             
         -- dbms_output.put_line(l_files.to_string);
         sendNetlifyDeploy;
         RETURN;
 
-        /* 
-        ** The site favicon is an SVG format image file uploaded through the CMS to the Asset table.
-        */
-        FOR C IN (SELECT cld_cloud_name, resource_type, public_id, format FROM asset WHERE id=l_favicon_asset_id) LOOP
-           l_favicon_url:=pck_media.getCloudinaryUrl(C.cld_cloud_name,C.resource_type,C.public_id,C.format, 96) || '.svg';
-           l_favicon_url:=REPLACE(l_favicon_url,'q_auto,f_auto','f_auto,w_96,h_96');
-        END LOOP;
-        /* 
-        ** Alternatively use emoji as favicon
-        */
-        IF (l_favicon_url IS NULL) THEN
-            l_favicon_url:=
-            'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128516;</text></svg>';
-        END IF;
-
+        /*
         l_robots:='User-agent: *' || chr(10) || 'Allow: /' || chr(10) || chr(10) || 'Sitemap: ' || l_ssl_url || '/sitemap.xml';
 
-        /* 
-        ** Build individual website pages
-        */
         FOR i IN 1..l_labels.COUNT
         LOOP
             IF (i=1) THEN
@@ -841,12 +882,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
 
         END LOOP;
+        */
 
         /* Build website assets */
 
-        logDeployment(pWebsiteId, pSiteId, 'Building sitemap.xml');
-        addDeploy('sitemap.xml', l_sitemap);
-        addDeploy('robots.txt', l_robots);
+        -- logDeployment(pWebsiteId, pSiteId, 'Building sitemap.xml');
+        -- addDeploy('sitemap.xml', l_sitemap);
+        -- addDeploy('robots.txt', l_robots);
+
         /*
         **  DOGFACE DEPLOYMENT IF USER HAS DOGFACE API KEY AND ESMLIBRARY = 'TEST'
         */
