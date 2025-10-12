@@ -329,13 +329,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_test_site BOOLEAN:=FALSE;
         l_domain_name website.domain_name%type;
         l_netlify_site_id_custom website.netlify_site_id_custom%type;
+        l_publish_live_button VARCHAR2(1000);
         n PLS_INTEGER;
 
-        FUNCTION addButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2) RETURN VARCHAR2 IS
+        FUNCTION addButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pEnv IN VARCHAR2 DEFAULT null) RETURN VARCHAR2 IS
             l_class VARCHAR2(30);
         BEGIN
             l_class:=LOWER(REPLACE(pLabel,' ','-'));
-            RETURN ('<li><button type="button" class="button ' || l_class || '"data-endpoint="' || pUriTemplate || '" data-method="' ||pMethod || '" data-reports="' || l_reports || '">' || pLabel || '</button></li>');
+            RETURN ('<li><button type="button" class="button ' || l_class || '"' ||
+                    ' data-endpoint="' || pUriTemplate || '"' ||
+                    ' data-method="' ||pMethod || '"' ||
+                    CASE WHEN pEnv IS NOT NULL THEN
+                    ' data-env="' || pEnv || '"'
+                    END ||
+                    ' data-reports="' || l_reports || '"' ||
+                    '>' || 
+                    pLabel || 
+                    '</button></li>');
         END;
 
     BEGIN
@@ -345,55 +355,48 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         ** 2. URL IS SUB-DOMAIN OF "netlify.app", E.G. "example-com.netlify.app"
         */
 
-        
-
         SELECT domain_name, netlify_site_id_custom
           INTO l_domain_name, l_netlify_site_id_custom
           FROM website
          WHERE id=pWebsiteId;
 
-        IF (INSTR(pUrl,'netlify.app')>0 OR INSTR(pUrl,'editor.' || l_domain_name)>0) THEN
-            l_test_site:=TRUE;
-        END IF;
+        l_test_site:=pck_hosting.getEnvFromURL(pUrl)='TEST';
 
         refreshOrdsEndpoints(pWebsiteId);
 
         FOR C IN (
-            SELECT o.label, o.uri_template, o.method, o.priority
+            SELECT o.label, o.uri_template, SUBSTR(o.uri_template,1,INSTR(o.uri_template,'/')-1) route, o.method, o.priority
               FROM api_endpoint a, role r, ords_endpoints o
              WHERE a.website_id=pWebsiteId 
                AND a.role_id=r.id 
                AND r.name=pScope
                AND a.template_id=o.template_id
                AND INSTR(o.uri_template,'authenticate')=0
-             ORDER BY DECODE(o.label,'Publish Website',1,'Website Analytics',2,'Edit Content',3,'Edit Pages',4,5)
+             ORDER BY DECODE(route,'publish-website',1,'visits',2,'edit-content',3,'edit-pages',4,5)
         )
         LOOP
             l_reports:=NULL;
-            IF (INSTR(C.uri_template,'visits/')>0) THEN
+            IF (C.route='visits') THEN
                 l_reports:='visits|table;trends|graph;performance|graph;engagement|table;location|table;browser|table';
             END IF;
             IF (l_test_site) THEN
-                l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label);
+                l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label, CASE WHEN C.route='publish-website' THEN 'TEST' END);
             ELSIF (C.priority=1) THEN
                 l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label);
             END IF;
-        END LOOP;
-
-        FOR C IN (SELECT netlify_site_id_custom, netlify_last_published_custom, netlify_last_published
-                    FROM website
-                   WHERE id=pWebsiteId)
-        LOOP
-            IF (l_test_site AND l_netlify_site_id_custom IS NOT NULL) THEN
-                l_menulist:=l_menulist || '<li><a class="button" data-button-variant="nav-item" href="https://' || REPLACE(SUBSTR(pUrl,1,INSTR(pUrl,'.',1,1)-1),'-','.') || '">Live Site</a></li>';
-            END IF;
-            IF NOT (l_test_site) THEN
-                l_menulist:=l_menulist || '<li><a class="button" data-button-variant="nav-item" href="https://' || REPLACE(pUrl,'.','-') || '.netlify.app' || '">Edit Site</a></li>';
+            IF (l_netlify_site_id_custom IS NOT NULL AND C.route='publish-website') THEN
+                l_publish_live_button:=addButton(C.uri_template, C.method, 'Publish Live Site', 'LIVE');
             END IF;
         END LOOP;
 
         l_menulist:=l_menulist || 
         '<li><a class="button" data-button-variant="nav-item" href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a></li>';
+
+        /*
+        ** APPEND PUBLISH LIVE BUTTON AT END OF MENU LIST
+        */
+        l_menulist:=l_menulist || l_publish_live_button;
+
 
         RETURN (l_menulist);
     END;
