@@ -128,8 +128,8 @@ export const init = async (element) => {
                 const button = new ButtonView();
                 button.set( {
                     label: 'List Image URLs',
-                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="0" y="0" width="100" height="100" fill="white" stroke="black" stroke-width="20"/><text x="10" y="70" fill="red" font-size="40" font-weight="900" font-family="system-ui">URL</text>',
-                    tooltip: 'List Image URLs',
+                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M5 2.801a.7.7 0 0 0-.7.7v11.5a.8.8 0 0 1-1.6 0v-11.5a2.3 2.3 0 0 1 2.3-2.3h6.5a.8.8 0 0 1 0 1.6zm.7 3.7a2.3 2.3 0 0 1 2.3-2.3h7a2.3 2.3 0 0 1 2.3 2.3v10a2.3 2.3 0 0 1-2.3 2.3H8a2.3 2.3 0 0 1-2.3-2.3zm2.3-.7a.7.7 0 0 0-.7.7v10a.7.7 0 0 0 .7.7h7a.7.7 0 0 0 .7-.7v-10a.7.7 0 0 0-.7-.7z"/></svg>',
+					tooltip: 'Copy Image URL',
                     withText: false
                 } );
                 button.on('execute', (_) => {
