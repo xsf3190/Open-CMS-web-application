@@ -8,7 +8,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     PROCEDURE runDelete(pUserId IN users.id%type, pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type);
     --
-    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2, pEsmLibrary IN VARCHAR2);
+    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2);
     --
     PROCEDURE setTerraformApikey;
     --
@@ -404,7 +404,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_clob CLOB;
 
         l_nav_id VARCHAR2(20);
-        l_importmap VARCHAR2(200):='https://es-modules.netlify.app/' || pEsmLibrary || '/importmap.' || CASE WHEN pEnv='TEST' THEN 'editor' ELSE 'custom' END || '.json';
+        l_importmap VARCHAR2(200);
         
         l_icon_id icon.id%type;
         l_icons apex_t_varchar2:=apex_t_varchar2();
@@ -444,8 +444,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 buildPageCollection(pCollectionType, pArticleid, l_collection);
             END IF;
 
+            l_importmap:='https://es-modules.netlify.app/' || LOWER(pEsmLibrary) || '/importmap.json';
+
             /*
-            ** FAVICON SVG MUST BE PURE XML WITH ESCAPED " AND #
+            ** FAVICON SVG MUST BE PURE XML WITH NO <STYLE> OR COMMENTS AND ESCAPED QUOTE AND HASH CHARACTERS
             */
             pBody:=
             '<!DOCTYPE HTML>' ||
@@ -503,12 +505,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     /*
     **  DEPLOY BY UPLOADING HTML FILE CONTENT DIRECTLY TO NETLIFY
     */
-    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2, pEsmLibrary IN VARCHAR2) IS
+    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2) IS
         
         l_clob CLOB;
         l_files JSON_OBJECT_T;
-        l_keys JSON_KEY_LIST;
-
         
         TYPE tt_files IS RECORD (
             file_name VARCHAR2(200),
@@ -523,10 +523,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_script_sha256 VARCHAR2(500);
         l_font_download BLOB;
 
-        l_sitemap CLOB;
-        l_robots CLOB;
-        l_headers CLOB;
-        l_ssl_url VARCHAR2(200);
         l_sha1 VARCHAR2(40);
         n PLS_INTEGER;
 
@@ -596,7 +592,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=pWebsiteId;
             COMMIT;
 
-            FOR C IN (SELECT id, sha1 FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) WHERE sha1 IS NOT NULL) LOOP
+            FOR C IN (
+                SELECT id, sha1 
+                  FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) 
+                 WHERE sha1 IS NOT NULL
+            ) LOOP
                 dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
                 logDeployment(pWebsiteId, pSiteId, 'Uploading ' || l_deploy_files(C.sha1).file_name);
                 IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
@@ -682,21 +682,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH content AS
             (
-                SELECT wa.article_id, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, 
+                SELECT wa.article_id, w.esm_library, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, 
                         GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
                    AND a.id=wa.article_id
                 UNION ALL 
-                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, 
+                SELECT a.id, w.esm_library, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, 
                         GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
                    AND a.parent_id=wa.article_id
             )
-            SELECT c.article_id, c.path, C.collection_type, f.sha1, 
+            SELECT C.article_id, C.esm_library, C.path, C.collection_type, f.sha1, 
                     CASE WHEN f.deployed_date IS NULL OR c.updated_date > f.deployed_date THEN 1 ELSE 0 END build
               FROM content c, website_files f
              WHERE f.website_id(+)=pWebsiteId
@@ -716,7 +716,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_common_footer:=buildCommonFooter(pWebsiteid);
                 l_favicon:=buildFavicon(pWebsiteid);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, pEsmLibrary, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_favicon, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, C.esm_library, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_favicon, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
@@ -789,7 +789,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              SELECT '/' || REPLACE(file_name,'.txt') AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
                FROM apex_application_static_files 
               WHERE application_id=101
-                AND file_name IN ('_headers.txt')
+                AND file_name='_headers.txt'
             )
             SELECT s.deploy_filename, REPLACE(REPLACE(s.file_content,'#RESTURL#',pRestURL),'#SHA256#',l_script_sha256) file_content, s.updated_date, wf.sha1,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
@@ -815,9 +815,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH data AS 
             (
-                SELECT apex_string_util.get_slug(wa.navigation_label) path1, apex_string_util.get_slug(ac.first_heading) path2, TO_CHAR(NVL(a.updated_date,wa.updated_date),'yyyy-mm-dd') lastmod
-                  FROM website_article wa, article a, article_chars ac
-                 WHERE wa.website_id=pWebsiteid
+                SELECT 'https://' || w.domain_name || '/' || apex_string_util.get_slug(wa.navigation_label) AS path1, apex_string_util.get_slug(ac.first_heading) AS path2, TO_CHAR(NVL(a.updated_date,wa.updated_date),'yyyy-mm-dd') lastmod
+                  FROM website w, website_article wa, article a, article_chars ac
+                 WHERE w.id=pWebsiteid
+                   AND wa.website_id=w.id
                    AND a.parent_id(+)=wa.article_id
                    AND ac.article_id(+)=a.id
                    AND ac.context(+)='headings'
