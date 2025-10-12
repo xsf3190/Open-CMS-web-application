@@ -2,7 +2,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE deleteHero(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
-    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE getColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pContent IN VARCHAR2, pStatus OUT NUMBER);
     --
@@ -36,24 +36,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     TYPE t_labels IS TABLE OF tt_labels;
 
     /* 
-    **  DEPLOY WEBSITES SUBSCRIBING TO "TEST" ES_MODULE LIBRARY
-    **  DO THIS TO AVOID CSP FAILURE LOADING MODULES IN THE EDITOR  
-    */
-    PROCEDURE deployTestWebsites(pEsmLibrary IN VARCHAR2) IS
-    BEGIN
-        FOR C IN (
-            SELECT id, user_id, domain_name, netlify_site_id, esm_library FROM website WHERE esm_library=pEsmLibrary
-        ) LOOP
-            pck_core.log('Deploying ' || C.domain_name || ' due to ES Module changes');
-            pck_deploy.runDeployment(
-                pWebsiteId=>C.id, pUserId =>C.user_id, pEnv=>'TEST', pSiteId=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL, pEsmLibrary=>pEsmLibrary);
-        END LOOP;
-    END;
-
-    /* 
     **  DEPLOY WEBSITE
     */
-    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
+    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_job_name VARCHAR2(30);
         l_env VARCHAR2(4);
@@ -76,17 +61,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        FOR C IN (
-            SELECT w.domain_name, LOWER(NVL(w.esm_library,'live')) esm_library
-              FROM website w, apex_workspace_apex_users a, users u
-             WHERE w.id=pWebsiteId
-               AND u.id=l_session_data.user_id
-               AND u.email=a.email(+)
-         ) 
-         LOOP
-            l_esm_library:=C.esm_library;
-            l_env:=pck_hosting.getEnvFromURL(l_session_data.url);
-        END LOOP;
+        SELECT env INTO l_env FROM JSON_TABLE(pBodyText, '$' COLUMNS(env));
 
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId RETURNING netlify_site_id, netlify_site_id_custom INTO l_site_id, l_site_id_custom;
         
@@ -97,7 +72,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             job_name   => l_job_name,
             job_type   =>'STORED_PROCEDURE',
             job_action =>'pck_deploy.runDeployment',
-            number_of_arguments=>6,
+            number_of_arguments=>5,
             start_date=>systimestamp
         );
         dbms_scheduler.set_job_argument_value(
@@ -124,11 +99,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             job_name => l_job_name,
             argument_position => 5,
             argument_value => pck_core.getRestUrl()
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 6,
-            argument_value => l_esm_library
         );
         dbms_scheduler.enable(l_job_name);
 
