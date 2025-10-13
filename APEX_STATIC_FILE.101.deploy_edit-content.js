@@ -332,6 +332,7 @@ export const init = async (element) => {
                 break;
             case "main" : 
                 config = mainConfig;
+                element.insertAdjacentHTML("afterend",'<div style="opacity:0.5;text-align:center"><small class="wordcount"></small></div>');
                 break;
             case "footer" : 
                 config = footerConfig;
@@ -375,11 +376,7 @@ const page_id = Number(document.body.dataset.articleid);
 
 
 const saveData = async ( data, endpoint, id ) => {
-    const word_count = 100;
-    // const word_count = document.querySelector(".ck-word-count__words").textContent;
-    // const editor_status = document.querySelector("#editor-status");
-
-    // editor_status.textContent = "...";
+    const word_count = document.querySelector(".ck-word-count__words").textContent;
 
     callAPI(endpoint,'PUT', {body_html: data, word_count: word_count, id: id})
         .then((data) => {
