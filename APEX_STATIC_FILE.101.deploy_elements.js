@@ -48,12 +48,17 @@ export const set_alert = (alert) => {
 ** APPLICATION USES SINGLE HTML DIALOG ELEMENT FOR CUSTOM EDITOR FUNCTIONS
 */
 export const initDialog = (data) => {
-    dialog_header.replaceChildren();
-    const header = data.header + '<button type="button" class="button close no-focus" data-button-variant="round-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#cross"></use></svg></button>';
+    const header_elements = dialog_header.querySelectorAll(":not(:last-child)");
+    header_elements.forEach( (ele) => {
+        ele.remove();
+    });
     dialog_header.insertAdjacentHTML('afterbegin',header);
+
     dialog_article.replaceChildren();
     dialog_article.insertAdjacentHTML('afterbegin',data.article);
+
     dialog_footer.replaceChildren();
     dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
+    
     output_dialog.showModal();
 }
