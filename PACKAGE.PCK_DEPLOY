@@ -177,7 +177,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         l_nav:=
         '<nav aria-label="Main">' ||
-            '<ul role="list" class="flex-items" style="--flex-wrap:wrap">';
+            '<ul role="list" class="flex-items" style="--flex-wrap:wrap;--flex-horizontal-alignment:space-evenly;max-inline-size:60rem;">';
         FOR C IN (
             SELECT navigation_label, collection_type, article_id, ROW_NUMBER() OVER (ORDER BY display_order) rn
               FROM website_article 
