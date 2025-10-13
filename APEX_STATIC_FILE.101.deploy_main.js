@@ -2,7 +2,7 @@ const bodydata = document.body.dataset;
 const dropdown = document.querySelector("#menulist");
 const login_btn = dropdown.querySelector(".login-btn");
 const email = dropdown.querySelector(".email");
-const dialog_close = document.querySelectorAll("dialog .close");
+const dialog_close = document.querySelector("dialog.output .close");
 const vitalsQueue = new Set();
 const narrow_viewport = window.matchMedia("(width <= 600px)");
 
@@ -38,29 +38,32 @@ const pages_set = new Set(pages_visited);
 pages_set.add(page_id);
 sessionStorage.setItem("pages_visited",JSON.stringify(Array.from(pages_set)));
 
+const closeHandler = (e) => {
+    e.target.closest("dialog").close();
+}
+
+dialog_close.addEventListener("click", closeHandler);
 /* 
 ** 1. CLOSE DIALOG IF USER CLICKS CLOSE BUTTON 
 ** 2. DYNAMIC LoaD AND EXECUTE MODULE
 */
 const clickHandler = async (e) => {
-    if (e.target.classList.contains("close")) {
-        e.target.closest("dialog").close();
-    } else {
-        let module_name = e.target.dataset.endpoint;
-        if (!module_name) return;
+    let module_name = e.target.dataset.endpoint;
+    if (!module_name) return;
 
-        if (!document.querySelector("head > [type='importmap']")) {
-            await importmap();
-        }
-        
-        module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
-        const module = await import(module_name)
-        .catch((error) => {
-            console.error(error);
-            console.error("Failed to load " + module_name);
-        });
-        module.init(e.target);
+    if (!document.querySelector("head > [type='importmap']")) {
+        await importmap();
     }
+
+    
+    
+    module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
+    const module = await import(module_name)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+    });
+    module.init(e.target);
 }
 
 /*
@@ -91,13 +94,6 @@ const importmap = async () => {
     im.textContent = JSON.stringify(data);
     document.head.appendChild(im);
 }
-
-/*
-** CLICK HANDLER FOR DIALOG CLOSE BUTTON
-*/
-dialog_close.forEach((button) => {
-    button.addEventListener("click", clickHandler);
-})
 
 /*
 ** CLICK HANDLER FOR ALL BUTTONS IN DROPDOWN MENULIST
