@@ -309,7 +309,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_src:='';
             l_dimensions:='';
             FOR C IN (
-                SELECT cld_cloud_name, breakpoints, height, width FROM asset WHERE article_id=pArticleid AND public_id=l_public_id
+                SELECT cld_cloud_name, breakpoints, height, width FROM asset WHERE public_id=l_public_id
             ) LOOP
                 l_dimensions:=' width="' || C.width || '" height="' || C.height || '"';
                 FOR C1 IN (
