@@ -210,6 +210,8 @@ export const init = async (element) => {
     };
 
     /* Main Config */
+    const main = document.getElementById("main");
+    main.insertAdjacentHTML("afterend",'<div style="opacity:0.5;text-align:center"><small class="wordcount"></small></div>');
     const wordcount = document.querySelector(".wordcount");
 
     const mainConfig = {
@@ -332,7 +334,6 @@ export const init = async (element) => {
                 break;
             case "main" : 
                 config = mainConfig;
-                element.insertAdjacentHTML("afterend",'<div style="opacity:0.5;text-align:center"><small class="wordcount"></small></div>');
                 break;
             case "footer" : 
                 config = footerConfig;
@@ -376,9 +377,9 @@ const page_id = Number(document.body.dataset.articleid);
 
 
 const saveData = async ( data, endpoint, id ) => {
-    const word_count = document.querySelector(".ck-word-count__words").textContent;
 
-    callAPI(endpoint,'PUT', {body_html: data, word_count: word_count, id: id})
+    // callAPI(endpoint,'PUT', {body_html: data, word_count: wordcount.textContent, id: id})
+    callAPI(endpoint,'PUT', {body_html: data, id: id})
         .then((data) => {
             // editor_status.textContent = data.message;
             console.log(data.message);
