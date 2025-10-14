@@ -3,7 +3,7 @@
 */
 
 import { callAPI, handleError } from "deploy_callAPI";
-import { output_dialog, dialog_header, dialog_article, dialog_footer } from "deploy_elements";
+import { dialog_article, initDialog } from "deploy_elements";
 
 const endpoint = "publish-website/:ID";
 let intervalId;
@@ -14,18 +14,14 @@ export const init = (e) => {
 
     callAPI(endpoint,"POST",{env:e.dataset.env})
         .then( (data) => {
-            dialog_article.replaceChildren();
-            dialog_article.insertAdjacentHTML('afterbegin',data.content);
-            dialog_header.querySelector(":first-child").replaceChildren();
-            dialog_footer.replaceChildren();
-            output_dialog.showModal();
+            initDialog(data);
             if (data.stop) return;
             if (intervalId) {
                 clearInterval(intervalId);
             }
-            output_dialog.addEventListener("close", () => {
-                window.location.reload();
-            })
+            // output_dialog.addEventListener("close", () => {
+            //     window.location.reload();
+            // })
             intervalId = setInterval(getDeploymentStatus,2000);
         })
         .catch((error) => {
