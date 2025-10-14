@@ -16,6 +16,7 @@ const passcodeError = form.querySelector("#passcodeInput + output");
 const validate_passcode =  form.querySelector(".validate-passcode");
 const validate_msg = form.querySelector(".passcode-result");
 const loader = form.querySelector(".loader");
+const dialog_close = login_dialog.querySelector(".close");
 
 let endpoint, intervalId;
 let domain = false;
@@ -44,6 +45,12 @@ export const init = (element) => {
     validate_msg.textContent = ""; 
     login_dialog.showModal();
 }
+
+const closeHandler = (e) => {
+    e.target.closest("dialog").close();
+}
+
+dialog_close.addEventListener("click", closeHandler);
 
 /*
 ** CALL authenticate ENDPOINT
