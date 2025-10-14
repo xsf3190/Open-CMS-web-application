@@ -517,7 +517,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 ) LOOP
                 IF (C1.rn=1) THEN
                     l_min_src:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
-                ELSIF (C1.rn=C1.nb) THEN
+                END IF;
+                IF (C1.rn=C1.nb) THEN
                     l_max_src:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
                 END IF;
             END LOOP;
