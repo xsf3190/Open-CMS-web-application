@@ -7,7 +7,15 @@ import { callAPI, handleError } from "deploy_callAPI";
 
 let widget;
 
-const createWidget =  (multiple) => {
+const writeClipboard = async (url) => {
+    try {
+        await navigator.clipboard.writeText(url.substring(0,url.lastIndexOf(".")));
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+const createWidget =  async (multiple) => {
     const arrayToken = localStorage.getItem("refresh").split(".");
     const parsedToken = JSON.parse(atob(arrayToken[1]));
     const cloudName = parsedToken.cld_cloud_name;
@@ -30,6 +38,9 @@ const createWidget =  (multiple) => {
             let metadata = {
                 images: []
             }
+            
+            writeClipboard(result.info.secure_url);
+
             metadata.images.push({
                 "public_id": result.info.public_id,
                 "bytes": result.info.bytes,
@@ -79,7 +90,7 @@ export const init = (multiple) => {
         .then((result) => {
             console.log(result);
             widget.open();
-            widget.update({tags: [bodydata.articleid]});
+            widget.update({tags: [bodydata.articleid], multiple: multiple});
         })
         .catch((error) => handleError(error));
 }
