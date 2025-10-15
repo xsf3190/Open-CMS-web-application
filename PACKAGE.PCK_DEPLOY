@@ -1,5 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as 
     --
+    FUNCTION buildNav(pWebsiteId IN website.id%type) RETURN VARCHAR2;
+    --
     PROCEDURE deleteDirectory(pWebsiteId IN website.id%type, pUserId IN users.id%type);
     --
     PROCEDURE deployInfrastructure(pSenderEmail IN VARCHAR2 DEFAULT 'contact.form');
@@ -170,7 +172,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         RETURN ('<span class="logo"' || l_logo_styles || '>' || l_logo || '</span>');
     END;
 
-    FUNCTION buildNav(pWebsiteId IN website.id%type, pEnv IN VARCHAR2) RETURN VARCHAR2 IS
+    FUNCTION buildNav(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
         l_nav VARCHAR2(4000);
         l_nav_length PLS_INTEGER:=0;
         l_article_id article.id%type;
@@ -429,13 +431,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_clob:=C.header_html || C.body_html || C.footer_html;
             pck_fonts.getCharsUsed(pArticleId, l_clob);
             
-            l_main:='<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>' ||
-            CASE WHEN pEnv='TEST' THEN '<div style="opacity:0.5;text-align:center"><small class="wordcount"></small></div>' END;
+            l_main:='<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
             setImgSrcset(pArticleId, n, l_main);
 
             FOR C1 IN (
-                SELECT first_heading FROM article_chars WHERE article_id=pArticleid AND context='heading'
+                SELECT first_heading FROM article_chars WHERE article_id=pArticleid AND context='headings'
             ) LOOP
                 l_title:=C1.first_heading;
             END LOOP;
@@ -662,6 +663,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
               FROM source s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
                AND wf.path(+)=s.deploy_filename
+               AND wf.site_id(+)=pSiteid
         ) LOOP
             IF (INSTR(C.deploy_filename,'deploy_start.min.js')>0) THEN
                 l_script_sha256:=getSha256(C.file_content);
@@ -700,6 +702,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     CASE WHEN f.deployed_date IS NULL OR c.updated_date > f.deployed_date THEN 1 ELSE 0 END build
               FROM content c, website_files f
              WHERE f.website_id(+)=pWebsiteId
+               AND f.site_id(+)=pSiteid
                AND f.path(+)=c.path
                AND f.mime_type(+)='html'
         ) LOOP
@@ -709,7 +712,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
             n:=n+1;
             IF (n=1) THEN
-                l_nav:=buildNav(pWebsiteId, pEnv);
+                l_nav:=buildNav(pWebsiteId);
                 l_logo:=buildLogo(pWebsiteId);
                 l_dropdown:=buildDropdown(pWebsiteId);
                 l_common_header:=buildCommonHeader(pWebsiteid);
@@ -731,6 +734,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
               FROM website_fontface ff, website_files wf
              WHERE ff.website_id=pWebsiteid
                AND wf.website_id(+)=pWebsiteid
+               AND wf.site_id(+)=pSiteid
                AND wf.path(+)=ff.deploy_filename
                AND wf.mime_type(+)='woff2'
         ) LOOP
@@ -767,6 +771,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
+               AND wf.site_id(+)=pSiteid
                AND wf.path(+)=s.deploy_filename
                AND wf.mime_type(+)='css'
         ) LOOP
@@ -795,6 +800,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
+               AND wf.site_id(+)=pSiteid
                AND wf.path(+)=s.deploy_filename
         ) LOOP
             IF (C.build=0) THEN
@@ -847,6 +853,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
+               AND wf.site_id(+)=pSiteid
                AND wf.path(+)=s.deploy_filename
         ) LOOP
             IF (C.build=0) THEN
