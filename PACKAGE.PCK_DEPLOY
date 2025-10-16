@@ -255,15 +255,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         RETURN (l_favicon);
     END;
-            
-    FUNCTION buildSitemap(pWebsiteid IN website.id%type) RETURN VARCHAR2 IS
-        l_sitemap LONG;
-    BEGIN
-        l_sitemap:=
-        '<?xml version="1.0" encoding="UTF-8"?>' || 
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
-
-    END;
 
     /*
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT FIRST, ASSUMING ONLY FIRST IMAGE WILL BE IN VIEWPORT
@@ -435,10 +426,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             
             setImgSrcset(pArticleId, n, l_main);
 
+            /*
+            ** OPTIMAL TITLE LENGTH IS 60 CHARACTERS, I.E. 580PX
+            */
             FOR C1 IN (
-                SELECT first_heading FROM article_chars WHERE article_id=pArticleid AND context='headings'
+                SELECT first_heading, second_heading FROM article_chars WHERE article_id=pArticleid AND context='headings'
             ) LOOP
-                l_title:=C1.first_heading;
+                l_title:=C1.second_heading;
+                IF (l_title IS NOT NULL) THEN
+                    l_title:=l_title || '|' || C1.first_heading;
+                END IF;
             END LOOP;
 
             IF (pCollectionType='BLOG') THEN
