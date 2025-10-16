@@ -9,15 +9,15 @@ let nav_items, edit, collection, errors;
 const endpoint = "edit-pages/:ID/:PAGE";
 
 /*
-** USER CLICKS NAVIGATION LABEL IN EDITOR MAKING IT "active"
+** USER CLICKS NAVIGATION LABEL IN EDITOR MAKING IT "current"
 */
-const clickHandler = (e) => {
+const navHandler = (e) => {
     e.preventDefault();
                 
     for(let li of nav_items.children){
-        li.classList.remove("active");
+        li.querySelector("[aria-current='page']")?.removeAttribute("aria-current");
     }
-    e.target.parentElement.classList.add("active");
+    e.target.setAttribute("aria-current","page");
     edit.value = e.target.textContent;
     setCollectionType(e.target.dataset.collection);
 }
@@ -28,12 +28,12 @@ const clickHandler = (e) => {
 const inputHandler = (e) => {
     if (e.target.matches("[name='navigation_label']")) {
         errors.textContent = "";
-        nav_items.querySelector(".active>a").textContent = e.target.value;
+        nav_items.querySelector("[aria-current='page']").textContent = e.target.value;
     }
 
     if (e.target.matches("[name='collection_type']")) {
         errors.textContent = "";
-        nav_items.querySelector(".active>a").dataset.collection = e.target.value;
+        nav_items.querySelector("[aria-current='page']").dataset.collection = e.target.value;
     }
 }
 
@@ -42,16 +42,16 @@ export const init = () => {
         .then((data) => {
             initDialog(data);
 
-            nav_items = dialog_article.querySelector("nav>ul");
+            nav_items = dialog_article.querySelector("ul");
             errors = dialog_article.querySelector(".errors");
 
             edit = dialog_article.querySelector("input[name='navigation_label']");
-            edit.value = dialog_article.querySelector(".active>a").textContent;
+            edit.value = nav_items.querySelector("[aria-current='page']").textContent;
 
             collection = dialog_article.querySelectorAll("[name='collection_type']");
-            setCollectionType(dialog_article.querySelector(".active>a").dataset.collection);
+            setCollectionType(dialog_article.querySelector("[aria-current='page']").dataset.collection);
 
-            nav_items.addEventListener("click", clickHandler);
+            nav_items.addEventListener("click", navHandler);
             dialog_article.addEventListener("input", inputHandler);
             dialog_article.addEventListener("click", buttonHandler);
 
@@ -89,7 +89,7 @@ const newLabel = "[NEW PAGE]";
 
 const buttonHandler = async (e) => {
     if (e.target.matches(".add-page")) {
-        const target = nav_items.querySelector(".active");
+        const target = nav_items.querySelector("[aria-current='page']").parentElement;
 
         const clone = target.cloneNode(true);
         const a = clone.querySelector("a");
@@ -101,12 +101,14 @@ const buttonHandler = async (e) => {
         edit.value = newLabel;
         setCollectionType("N/A");
 
-        target.classList.remove("active");
+        target.firstElementChild.removeAttribute("aria-current");
         return;
     }
 
     if (e.target.matches(".delete-site")) {
-        console.log("clicked delete-site");
+        console.log("User wants to delete site!!");
+        return;
+        /*
         callAPI(endpoint,'DELETE',{})
             .then(() => {
                 window.location.reload();
@@ -115,6 +117,7 @@ const buttonHandler = async (e) => {
             .catch((error) => {
                 handleError(error);
             });
+        */
     }
 
     if (e.target.matches(".delete-page")) {
@@ -124,8 +127,7 @@ const buttonHandler = async (e) => {
             e.target.textContent = "Delete Site";
             return;
         }
-        const target = nav_items.querySelector(".active");
-        target.remove();
+        nav_items.querySelector("[aria-current='page']").parentElement.remove();
         edit.value = "";
         unsetCollection();
         
@@ -134,6 +136,7 @@ const buttonHandler = async (e) => {
 
     if (e.target.matches(".deploy")) {
         const arr = [];
+        errors.textContent = "";
         nav_items.querySelectorAll("a").forEach ((item) => {
             const obj = {};
             obj.article_id = item.dataset.id;
@@ -152,7 +155,7 @@ const buttonHandler = async (e) => {
             .then((data) => {
                 console.log("data",data);
                 if (data.deploy) {
-                    dropdown.querySelector("button.publish-website").click();
+                    dropdown.querySelector("button.publish-editor-site").click();
                 }
             })
             .catch((error) => {
