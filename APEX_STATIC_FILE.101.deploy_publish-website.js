@@ -3,7 +3,7 @@
 */
 
 import { callAPI, handleError } from "deploy_callAPI";
-import { dialog_article, initDialog } from "deploy_elements";
+import { output_dialog, dialog_article, initDialog } from "deploy_elements";
 
 const endpoint = "publish-website/:ID";
 let intervalId;
@@ -19,9 +19,12 @@ export const init = (e) => {
             if (intervalId) {
                 clearInterval(intervalId);
             }
-            // output_dialog.addEventListener("close", () => {
-            //     window.location.reload();
-            // })
+            /*
+            ** RELOAD HOME PAGE WHEN CLOSING DIALOG
+            */
+            output_dialog.addEventListener("close", () => {
+                window.location.replace(location.origin);
+            })
             intervalId = setInterval(getDeploymentStatus,2000);
         })
         .catch((error) => {
