@@ -63,7 +63,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_chars_bold_normal LONG;
         l_chars_bold_italic LONG;
 
-        l_first_heading VARCHAR2(160);
+        l_first_heading article_chars.first_heading%type;
+        l_second_heading article_chars.second_heading%type;
 
     BEGIN
         DELETE article_chars WHERE article_id=pArticleId;
@@ -95,12 +96,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             IF (i=1) THEN
                 l_first_heading:=SUBSTR(l_heading,1,160);
             END IF;
+            IF (i=2) THEN
+                l_second_heading:=SUBSTR(l_heading,1,160);
+            END IF;
         END LOOP;
         l_headings_italic:=distinct_chars(l_headings_italic);
         l_headings:=distinct_chars(l_headings);
 
-        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, first_heading)
-        VALUES (pArticleId, 'headings', l_headings_italic, l_headings, l_first_heading);
+        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, first_heading, second_heading)
+        VALUES (pArticleId, 'headings', l_headings_italic, l_headings, l_first_heading, l_second_heading);
 
         l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
 
