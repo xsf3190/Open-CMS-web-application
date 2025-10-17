@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as 
     --
-    FUNCTION buildNav(pWebsiteId IN website.id%type) RETURN VARCHAR2;
+    FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2;
     --
     PROCEDURE deleteDirectory(pWebsiteId IN website.id%type, pUserId IN users.id%type);
     --
@@ -172,7 +172,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         RETURN ('<span class="logo"' || l_logo_styles || '>' || l_logo || '</span>');
     END;
 
-    FUNCTION buildNav(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
+    FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2 IS
         l_nav VARCHAR2(4000);
         l_nav_length PLS_INTEGER:=0;
         l_article_id article.id%type;
@@ -189,7 +189,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_nav:=l_nav ||
             '<li>' ||
                 '<a href="/' || CASE WHEN C.rn>1 THEN apex_string_util.get_slug(C.navigation_label) END || '"' ||
-                ' data-id="' || C.article_id || '" data-collection="' || C.collection_type || '">' ||
+                ' data-id="' || C.article_id || '" data-collection="' || C.collection_type || '"' ||
+                CASE WHEN pArticleid=C.article_id THEN ' aria-current="page"' END || '>' ||
                 C.navigation_label || 
                 '</a>' ||
             '</li>';
@@ -396,13 +397,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_collection CLOB;
         l_clob CLOB;
 
-        l_nav_id VARCHAR2(20);
         l_importmap VARCHAR2(200);
         
         l_icon_id icon.id%type;
         l_icons apex_t_varchar2:=apex_t_varchar2();
 
         n PLS_INTEGER;
+        n1 PLS_INTEGER;
     BEGIN
         pBody:=null;
         FOR C IN (
@@ -412,9 +413,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wa.article_id=NVL(a.parent_id,pArticleId)
                AND a.id=pArticleId
         ) LOOP
-            l_nav_id:='data-id="' || C.nav_id || '"';
-            n:=INSTR(pNav,l_nav_id);
-            l_nav:=SUBSTR(pNav,1,n-1) || 'aria-current="page" ' || SUBSTR(pNav,n+LENGTH(l_nav_id));
+            n:=INSTR(pNav,C.nav_id);
+            n1:=INSTR(pNav,'>',n);
+            l_nav:=SUBSTR(pNav,1,n1-1) || ' aria-current="page"' || SUBSTR(pNav,n1);
 
             l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
             l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
