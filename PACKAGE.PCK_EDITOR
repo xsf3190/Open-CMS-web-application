@@ -52,7 +52,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         FOR C IN (SELECT job_name FROM user_scheduler_running_jobs WHERE job_name LIKE 'DEPLOY_%') LOOP
             l_json:= new JSON_OBJECT_T;
             l_json.put('success',true);
-            l_json.put('content', '<h4>Someone else is deploying ... try again later</h4>');
+            l_json.put('header', '<small>Problem publishing website</small>');
+            l_json.put('article', '<h4>Someone else is currently deploying</h4>');
+            l_json.put('footer', '<smallTry again later OR sign up for Free account at <a href="https://netlify.com">Netlify</a></small>');
             l_json.put('stop', TRUE);
             apex_util.prn(l_json.to_clob,false);
             RETURN;
@@ -105,7 +107,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json.put('success',true);
         l_json.put('header', '<small>Replacing website with changed content</small>');
         l_json.put('article', '<table role="presentation" style="font-family:monospace;background:#342a21;color:white"><tbody><tr><td>' || TO_CHAR(current_timestamp AT TIME ZONE l_session_data.timezone,'hh24:mi:ss') || '</td><td>Starting deployment</td></tr></tbody></table>');
-        l_json.put('footer', 'Reload page when completed');
+        l_json.put('footer', 'Close window loads new website when deployment successful');
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -250,21 +252,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article CLOB;
         l_footer LONG;
         l_json JSON_OBJECT_T;
-        l_nav VARCHAR2(4000);
-        l_nav_id VARCHAR2(20);
-        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
         l_header:='<small>Add / Delete pages, change navigation labels.</small>';
 
-        l_nav:=pck_deploy.buildNav(pWebsiteId);
-        l_nav_id:='data-id="' || pArticleId || '"';
-        n:=INSTR(l_nav,l_nav_id);
-        l_nav:=SUBSTR(l_nav,1,n-1) || 'aria-current="page" ' || SUBSTR(l_nav,n+LENGTH(l_nav_id));
-        
         l_article:=
-            l_nav ||
+            pck_deploy.buildNav(pWebsiteId, pArticleId) ||
             '<fieldset class="flex-items">' ||
                 '<div>' ||
                     '<label for="navigation-label">Navigation Label</label>' ||
@@ -306,16 +300,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     */
     PROCEDURE updatePages(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_body_text CLOB:=pBodyText;
         TYPE tt_arr IS RECORD(
             display_order website_article.display_order%type,
             article_id website_article.article_id%type,
             navigation_label website_article.navigation_label%type,
             collection_type website_article.collection_type%type
         );
-        TYPE t_arr IS TABLE OF tt_arr INDEX BY PLS_INTEGER;
+        TYPE t_arr IS TABLE OF tt_arr;
         l_arr t_arr;
         l_current_date TIMESTAMP:=current_timestamp;
-        l_moved_article_id website_article.article_id%type;
         TYPE t_article_id IS TABLE OF website_article.article_id%type;
         l_article_id t_article_id;
         l_old_nav VARCHAR2(4000);
@@ -326,28 +320,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT LISTAGG(navigation_label) WITHIN GROUP (ORDER BY display_order) INTO l_old_nav FROM website_article WHERE website_id=pWebsiteid;
+        l_old_nav:=pck_deploy.buildNav(pWebsiteid);
 
         SELECT display_order, article_id, navigation_label, collection_type
           BULK COLLECT INTO l_arr
           FROM JSON_TABLE(pBodyText, '$[*]' COLUMNS (display_order FOR ORDINALITY, article_id, navigation_label, collection_type));
 
-       -- Create ARTICLE rows for new pages. Retain rows where labels have been moved.
+       -- Create ARTICLE and WEBSITE_ARTICLE rows for new pages.
         FOR i IN 1..l_arr.COUNT LOOP
             IF (l_arr(i).article_id<=0) THEN
-                FOR C IN (
-                    SELECT article_id FROM website_article WHERE website_id=pWebsiteId AND navigation_label=l_arr(i).navigation_label
-                ) LOOP
-                    l_moved_article_id:=C.article_id;
-                    l_arr(i).article_id:=C.article_id;
-                END LOOP;
-                IF (l_moved_article_id IS NULL) THEN
-                    INSERT INTO article (id, author_user_id) 
+                INSERT INTO article (id, author_user_id) 
                     VALUES (seq_article.nextval, l_session_data.user_id);
-                    INSERT INTO website_article (website_id, article_id, navigation_label, collection_type, user_id, display_order)
-                    VALUES (pWebsiteId, seq_article.currval, l_arr(i).navigation_label, l_arr(i).collection_type, l_session_data.user_id, 1);
-                    l_arr(i).article_id:=seq_article.currval;
-                END IF;
+                INSERT INTO website_article (website_id, article_id, navigation_label, collection_type, user_id, display_order)
+                    VALUES (pWebsiteId, seq_article.currval, l_arr(i).navigation_label, l_arr(i).collection_type, l_session_data.user_id, l_arr(i).display_order);
             END IF;
         END LOOP;
 
@@ -363,22 +348,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         -- Delete pages not passed from client
         DELETE website_article WHERE website_id=pWebsiteId AND updated_date<l_current_date RETURNING article_id BULK COLLECT INTO l_article_id;
 
-        -- Delete Cloudinary assets tagged by article_id
-        FOR i IN 1..l_article_id.COUNT LOOP
-            FOR C IN (
-                SELECT DISTINCT cld_cloud_name, resource_type
-                  FROM asset
-                 WHERE article_id=l_article_id(i)
-            )   
-            LOOP
-                pck_api.callCloudinaryAPI(pUserId=>l_session_data.user_id, pEndpoint=>C.cld_cloud_name || '/resources/' || C.resource_type || '/tags/' || l_article_id(i), pMethod=>'DELETE', pData=>l_clob);
-            END LOOP;
-        END LOOP;
-
         FORALL i IN l_article_id.FIRST .. l_article_id.LAST
             DELETE article WHERE id=l_article_id(i);
 
-        SELECT LISTAGG(navigation_label) WITHIN GROUP (ORDER BY display_order) INTO l_new_nav FROM website_article WHERE website_id=pWebsiteid;
+        l_new_nav:=pck_deploy.buildNav(pWebsiteid);
 
         l_do_deploy:=NVL(l_new_nav,'x') <> NVL(l_old_nav,'x');
         
