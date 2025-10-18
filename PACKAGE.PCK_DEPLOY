@@ -296,7 +296,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (i>1) THEN
                 l_loading:=' loading="lazy" sizes="auto"';
             ELSE
-                l_loading:=' loading="eager" sizes="50%"';
+                l_loading:=' loading="eager" sizes="50vw"';
             END IF;
 
             l_srcset:='';
