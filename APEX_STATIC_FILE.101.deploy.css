@@ -62,6 +62,11 @@ img {
   border-radius: var(--img-border-radius,1em);
 }
 
+img:not([alt]), img[alt=""] {
+	border: dashed 10px red;
+    border-radius: 0;
+}
+
 body>main {
   padding-inline: 1rem;
   container-type: inline-size;
