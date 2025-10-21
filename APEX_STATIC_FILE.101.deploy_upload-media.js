@@ -9,7 +9,7 @@ let widget;
 
 const writeClipboard = async (url) => {
     try {
-        await navigator.clipboard.writeText(url.substring(0,url.lastIndexOf(".")));
+        await navigator.clipboard.writeText(url);
     } catch (error) {
         handleError(error);
     }
@@ -30,7 +30,6 @@ const createWidget =  async (cloudName, uploadPreset, multiple) => {
     },
     (error, result) => {
         if (!error && result && result.event === "success") { 
-            console.log('Done! Here is the image info: ', result.info);
             let metadata = {
                 images: []
             }
@@ -62,9 +61,9 @@ const createWidget =  async (cloudName, uploadPreset, multiple) => {
             }
             
             callAPI("upload-media/:ID/:PAGE","PUT",metadata)
-                .then( () => {
+                .then( (data) => {
                     console.log("Uploaded MEDIA metadata successfully");
-                    // writeClipboard(result.info.secure_url);
+                    writeClipboard(data.url);
                 })
                 .catch((error) => {
                     handleError(error);
