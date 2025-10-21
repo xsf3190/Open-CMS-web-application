@@ -258,11 +258,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
-    ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT FIRST, ASSUMING ONLY FIRST IMAGE WILL BE IN VIEWPORT
+    ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT THE FIRST WHICH WE ASSUME WILL BE IN VIEWPORT
     */
-    PROCEDURE setImgSrcset(pArticleid IN article.id%type, pImgCount IN OUT PLS_INTEGER, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
-        l_img_regex varchar2(15):='<img[^>]+>';
-        l_img_html VARCHAR2(2000);
+    PROCEDURE setImgSrcset(pArticleid IN article.id%type, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
+        l_img_regex VARCHAR2(20):='<img.+?src="(.+?)"';
+        l_img_width_regex VARCHAR2(50):='class=".+?image_resized".+?width:(.+?)%';
+        l_img_width VARCHAR2(5);
+        l_img_src VARCHAR2(200);
         l_img_alt VARCHAR2(500);
         l_img_err VARCHAR2(100);
         l_img_style VARCHAR2(100);
@@ -274,10 +276,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         n PLS_INTEGER;
     BEGIN
         n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
+
         FOR i IN 1..n LOOP
-            l_img_html:=regexp_substr(pBodyHtml,l_img_regex,1,i);
-            l_public_id:=SUBSTR(l_img_html,INSTR(l_img_html,'/',-1)+1);
-            l_public_id:=SUBSTR(l_public_id,1,INSTR(l_public_id,'"')-1);
+            l_img_src:=regexp_substr(pBodyHtml,l_img_regex,1,i);
+            l_public_id:=SUBSTR(l_img_src,INSTR(l_img_src,'/',-1)+1);
 
             /* Get alt text*/
             l_img_alt:=regexp_substr(l_img_html,'alt="(.+?)"');
@@ -326,7 +328,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             pBodyHtml:=regexp_replace(pBodyHtml,l_img_regex,l_img_html,1,i);
             
         END LOOP;
-        pImgCount:=n;
+        
     END;
 
     PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB) IS
@@ -425,7 +427,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             
             l_main:='<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
-            setImgSrcset(pArticleId, n, l_main);
+            setImgSrcset(pArticleId, l_main);
 
             /*
             ** OPTIMAL TITLE LENGTH IS 60 CHARACTERS, I.E. 580PX
