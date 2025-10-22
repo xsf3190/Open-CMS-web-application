@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_MEDIA" IS
     --
-    PROCEDURE deleteCldAsset(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
+    PROCEDURE DeleteAsset(pCldCloudName IN asset.cld_cloud_name%type, pPublicId IN asset.public_id%type, pCldApiKey IN users.cld_api_key%type, pCldApiSecret IN users.cld_api_secret%type);
     --
     FUNCTION getCloudinaryUrl(pCloudname IN VARCHAR2, pResourceType IN VARCHAR2, pPublicId IN VARCHAR2, pFormat IN VARCHAR2, pWidth IN INTEGER, pDimension IN NUMBER DEFAULT NULL) RETURN VARCHAR2;
     --
@@ -70,28 +70,47 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     END;
 
     /*
-    ** DELETE CLOUDINARY ASSET
-    */
-    PROCEDURE deleteCldAsset(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodytext IN CLOB, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_asset_id asset.id%type;
-        l_bodytext CLOB:=pBodytext;
+     **  Delete ASSET row and its Cloudinary media
+     */   
+    PROCEDURE DeleteAsset(pCldCloudName IN asset.cld_cloud_name%type, pPublicId IN asset.public_id%type, pCldApiKey IN users.cld_api_key%type, pCldApiSecret IN users.cld_api_secret%type) IS
+        l_parm_names apex_application_global.VC_ARR2;
+        l_parm_values apex_application_global.VC_ARR2;
+        l_timestamp NUMBER:=trunc((cast(current_timestamp at time zone 'UTC' as date) - to_date('01-jan-1970','dd-mon-yyyy')) * (86400));
+        l_signature VARCHAR2(100);
+        l_string_to_sign varchar2(2000);  
+        l_clob CLOB;
+        l_json JSON_OBJECT_T;
     BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-        pck_core.log(l_bodytext);
-        pck_core.log('l_session_data.user_id:'||l_session_data.user_id);
+        l_parm_names(1):='invalidate';
+        l_parm_values(1):='true';
+        l_parm_names(2):='public_id';
+        l_parm_values(2):=pPublicId;        
+        l_parm_names(3):='timestamp';    
+        l_parm_values(3):=l_timestamp;                
 
-        SELECT id INTO l_asset_id FROM asset a, JSON_TABLE(pBodytext, '$' COLUMNS (asset_id)) j
-        WHERE a.id=j.asset_id
-        AND a.user_id=l_session_data.user_id
-        AND a.article_id=pArticleId;
+        l_string_to_sign:=NULL;
+        FOR i IN 1..3 LOOP
+            l_string_to_sign:=l_string_to_sign || l_parm_names(i) || '=' || l_parm_values(i) || '&';
+        END LOOP;
+        l_string_to_sign:=RTRIM(l_string_to_sign,'&') || pCldApiSecret;
+        l_parm_names(4):='signature';
+        l_parm_values(4):=dbms_crypto.hash(utl_raw.cast_to_raw(l_string_to_sign), dbms_crypto.HASH_SH1);   
+        l_parm_names(5):='api_key';
+        l_parm_values(5):=pCldApiKey;    
 
-        pck_cms_delete.deleteAsset(l_session_data.user_id, l_asset_id);
+        l_json:=new JSON_OBJECT_T;
+        FOR i IN 1..l_parm_names.COUNT LOOP
+            l_json.put(l_parm_names(i), l_parm_values(i));
+        END LOOP;        
 
-        pStatus:=200;
-        
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
+        pck_api.callCloudinaryAPI(pUserId=>null, pEndpoint=>pCldCloudName || '/image/destroy', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+        IF (apex_web_service.g_status_code<>200) THEN
+            pck_core.log(l_clob);
+        END IF;
+
+        EXCEPTION
+            WHEN OTHERS THEN
+                pck_core.log_error;
     END;
 
     /*
@@ -292,8 +311,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_session_data pck_sec.t_session_data;
         l_bodytext CLOB:=pBodyText;
         l_article_id asset.article_id%type;
-        l_favicon_asset_id website.favicon_asset_id%type;
         l_job_name VARCHAR2(30);
+        l_asset_id asset.id%type;
+        l_url VARCHAR2(200);
+        l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -320,21 +341,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
             dbms_scheduler.enable(l_job_name);
         END LOOP;
 
-        /* 
-        ** Set website favicon uploaded SVG file with "favicon' in the name"
-        */
-        BEGIN
-            SELECT NVL(MAX(id),0) INTO l_favicon_asset_id FROM asset WHERE article_id=pArticleId AND format='svg' AND INSTR(public_id,'favicon')>0;
-            IF (l_favicon_asset_id>0) THEN
-                UPDATE website 
-                   SET favicon_asset_id=l_favicon_asset_id
-                 WHERE id=pWebsiteId;
-            END IF;
-        END;
+        l_asset_id:=seq_asset.currval;
 
-        APEX_JSON.open_object; 
-        APEX_JSON.write('success', TRUE);
-        APEX_JSON.close_object;
+        FOR C IN (
+            SELECT cld_cloud_name, width, public_id FROM asset WHERE id=l_asset_id
+        ) LOOP
+            l_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || LEAST(C.width,1200) || '/' || C.public_id;
+        END LOOP;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('url',l_url);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
         
@@ -497,15 +515,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_clob:='<ul role="list" class="carousel">';
 
         FOR C IN (
-            WITH articles AS
-            (
-                SELECT article_id FROM website_article WHERE website_id=pWebsiteid
-                UNION ALL
-                SELECT id FROM article WHERE parent_id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A')
-            )
             SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints
-              FROM asset a, articles w
-             WHERE a.article_id=w.article_id
+              FROM asset a
+             WHERE a.article_id=pArticleId
                AND NVL(a.format,'N/A')<>'clt'
                AND a.resource_type='image'
              ORDER BY a.created_date DESC )
