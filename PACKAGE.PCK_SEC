@@ -389,14 +389,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             END IF;
         END LOOP;
 
-        l_menulist:=l_menulist || 
-        '<li><a class="button" data-button-variant="nav-item" href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a></li>';
-
-        /*
-        ** APPEND PUBLISH LIVE BUTTON AT END OF MENU LIST
-        */
-        l_menulist:=l_menulist || l_publish_live_button;
-
+        IF (l_test_site) THEN
+            l_menulist:=l_menulist || 
+            '<li><a class="button" data-button-variant="nav-item" href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a></li>' ||
+            l_publish_live_button;
+        END IF;
 
         RETURN (l_menulist);
     END;
