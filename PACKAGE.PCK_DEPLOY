@@ -260,10 +260,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     /*
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT THE FIRST WHICH WE ASSUME WILL BE IN VIEWPORT
     */
-    PROCEDURE setImgSrcset(pMaxWidth IN website.max_width%type, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
+    PROCEDURE setImgSrcset(pArticleid IN article.id%type, pMaxWidth IN website.max_width%type, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
         l_img_width_regex varchar2(100):='class=".*?image_resized".+?width:(.+?)%.+?src="(.+?)"';
         l_img_regex varchar2(50):='<img.+?src="(.+?)"';
-        l_img_width varchar2(5);
+        l_img_width varchar2(10);
         l_img_width_pct NUMBER;
         l_max_width_px NUMBER;
         l_srcset VARCHAR2(4000);
@@ -276,12 +276,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         TYPE tt_img_src IS RECORD (
             img_src VARCHAR2(100),
-            public_id asset.public_id%type
+            public_id asset.public_id%type,
+            article_id article.id%type,
+            asset_id asset.id%type
         );
         TYPE t_img_src IS TABLE OF tt_img_src;
         l_img_src t_img_src:=t_img_src();
 
     BEGIN
+        pck_core.log('Processing images for '||pArticleid);
+        DELETE asset_used WHERE article_id_1=pArticleid;
+
         n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
 
         /* BUILD COLLECTION OF IMAGES IN HTML */
@@ -308,11 +313,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         
 
         FOR i IN 1..l_img_src.COUNT LOOP
-
             l_srcset:=null;
             FOR C IN (
-                SELECT cld_cloud_name, breakpoints, height, width FROM asset WHERE public_id=l_img_src(i).public_id
+                SELECT id, article_id, cld_cloud_name, breakpoints, height, width FROM asset WHERE public_id=l_img_src(i).public_id
             ) LOOP
+                l_img_src(i).article_id:=C.article_id;
+                l_img_src(i).asset_id:=C.id;
                 FOR C1 IN (
                         SELECT breakpoint FROM (SELECT TO_NUMBER(column_value) AS breakpoint FROM TABLE(apex_string.split(C.breakpoints,','))) ORDER BY 1 DESC
                     ) LOOP
@@ -348,7 +354,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         FORALL i IN 1..l_img_src.COUNT
-            UPDATE asset SET referenced_ind='Y' WHERE public_id=l_img_src(i).public_id;
+            INSERT INTO asset_used (asset_id, article_id_1, article_id_2) 
+            VALUES (l_img_src(i).asset_id, pArticleid, l_img_src(i).article_id);
     END;
 
 
@@ -452,7 +459,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             
             l_main:='<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
-            setImgSrcset(C.max_width, l_main);
+            setImgSrcset(pArticleId, C.max_width, l_main);
 
             /*
             ** OPTIMAL TITLE LENGTH IS 60 CHARACTERS, I.E. 580PX
@@ -960,12 +967,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         /*
         ** DELETE UN-REFERENCED ASSETS
         */
-        FoR C IN (
-            SELECT a.id, a.cld_cloud_name, a.public_id, u.cld_api_key, u.cld_api_secret,a.article_id,wa.navigation_label
-              FROM asset a, users u, website_article wa
-             WHERE a.referenced_ind IS NULL
-               AND wa.website_id=pWebsiteId
-               AND a.article_id=wa.article_id
+
+
+        FOR C IN (
+            WITH unused_assets AS 
+            (
+                SELECT a.id
+                  FROM asset a, website_article wa
+                 WHERE wa.website_id=pWebsiteId
+                   AND a.article_id=wa.article_id
+                MINUS
+                SELECT u.asset_id
+                  FROM asset_used u, website_article wa1, website_article wa2
+                 WHERE wa1.website_id=pWebsiteId
+                   AND wa1.article_id=u.article_id_1
+                   AND wa2.website_id=pWebsiteId
+                   AND wa2.article_id=u.article_id_2
+            )
+            SELECT a.id, a.cld_cloud_name, a.public_id, u.cld_api_key, u.cld_api_secret
+              FROM unused_assets, asset a, users u
+             WHERE a.id=unused_assets.id
                AND u.cld_cloud_name=a.cld_cloud_name
         ) LOOP
             DELETE asset WHERE id=C.id;
