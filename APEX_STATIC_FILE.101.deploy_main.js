@@ -205,6 +205,7 @@ const flushQueues = () => {
     page_visit++;
 
     if (navigator.webdriver) return;
+    if (json["duration_visible"]<=1) return;
 
     (navigator.sendBeacon && navigator.sendBeacon(bodydata.resturl+"page-visit", body)) || fetch(visit_url, {body, method: 'POST', keepalive: true});
 }
