@@ -70,7 +70,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     END;
 
     /*
-     **  Delete ASSET row and its Cloudinary media
+     **  Delete Cloudinary media asset
      */   
     PROCEDURE DeleteAsset(pCldCloudName IN asset.cld_cloud_name%type, pPublicId IN asset.public_id%type, pCldApiKey IN users.cld_api_key%type, pCldApiSecret IN users.cld_api_secret%type) IS
         l_parm_names apex_application_global.VC_ARR2;
