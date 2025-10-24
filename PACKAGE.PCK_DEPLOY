@@ -284,19 +284,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_img_src t_img_src:=t_img_src();
 
     BEGIN
-        pck_core.log('Processing images for '||pArticleid);
         DELETE asset_used WHERE article_id_1=pArticleid;
 
         n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
 
-        /* BUILD COLLECTION OF IMAGES IN HTML */
+        /* BUILD COLLECTION OF CLOUDINARY IMAGES FOUND IN HTML */
         FOR i IN 1..n LOOP
-            l_img_src.EXTEND;
             l_img_src_tmp:=regexp_substr(pBodyHtml,l_img_regex,1,i,null,1);
-            l_img_src(l_img_src.COUNT).img_src:=l_img_src_tmp;
-            l_img_src(l_img_src.COUNT).public_id:=SUBSTR(l_img_src_tmp,INSTR(l_img_src_tmp,'/',-1)+1);
+            IF (l_img_src_tmp LIKE 'https://res.cloudinary.com%') THEN
+                l_img_src.EXTEND;
+                l_img_src(l_img_src.COUNT).img_src:=l_img_src_tmp;
+                l_img_src(l_img_src.COUNT).public_id:=SUBSTR(l_img_src_tmp,INSTR(l_img_src_tmp,'/',-1)+1);
+            END IF;
         END LOOP;
-
 
         IF (n>0) THEN
             /* CONVERT CONTAINER WIDTH TO PX */
@@ -309,7 +309,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /* remove padding 2rem */
             l_max_width_px:=l_max_width_px-32;
         END IF;
-        
         
 
         FOR i IN 1..l_img_src.COUNT LOOP
@@ -328,7 +327,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END LOOP;
 
             IF (i=1) THEN
-                
                 l_loading:='eager';
                 /* IF FIRST IMAGE HAS WIDTH PERCENTAGE */
                 IF (regexp_substr(pBodyHtml,l_img_width_regex,1,1,null,2)=l_img_src(i).img_src) THEN
@@ -965,10 +963,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        ** DELETE UN-REFERENCED ASSETS
+        ** DELETE UPLOADED ASSETS NOT USED IN ANY WEBSITE PAGE
         */
-
-
         FOR C IN (
             WITH unused_assets AS 
             (
