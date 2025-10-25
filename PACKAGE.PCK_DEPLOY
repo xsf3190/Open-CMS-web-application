@@ -269,6 +269,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_srcset VARCHAR2(4000);
         l_sizes VARCHAR2(100);
         l_loading VARCHAR2(16);
+        l_fetchpriority VARCHAR2(4);
         l_img_src_tmp VARCHAR2(100);
         n pls_integer;
         n1 pls_integer;
@@ -328,6 +329,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
             IF (i=1) THEN
                 l_loading:='eager';
+                l_fetchpriority:='high';
                 /* IF FIRST IMAGE HAS WIDTH PERCENTAGE */
                 IF (regexp_substr(pBodyHtml,l_img_width_regex,1,1,null,2)=l_img_src(i).img_src) THEN
                     l_img_width:=regexp_substr(pBodyHtml,l_img_width_regex,1,1,null,1);
@@ -343,11 +345,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END IF;
             ELSE
                 l_loading:='lazy';
+                l_fetchpriority:='auto';
                 l_sizes:='auto';
             END IF;
 
             pBodyHtml:=regexp_replace(pBodyHtml,'src="' || l_img_src(i).img_src || '"',
-                'src="' || l_img_src(i).img_src || '"' || ' srcset="' || l_srcset || '"' || ' loading="' || l_loading || '"' || ' sizes="' || l_sizes || '"',
+                'src="' || l_img_src(i).img_src || '"' || ' srcset="' || l_srcset || '"' || ' loading="' || l_loading || '"' || ' sizes="' || l_sizes || '"' || ' fetchpriority="' || l_fetchpriority || '"',
                 i,0);
         END LOOP;
 
