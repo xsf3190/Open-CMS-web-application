@@ -396,8 +396,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
         SELECT j.domain_name_custom, w.domain_name, w.user_id INTO l_domain_name_custom, l_domain_name, l_user_id FROM website w, JSON_TABLE(pBodytext, '$' COLUMNS (domain_name_custom)) j WHERE w.id=pWebsiteId;
 
-        pck_core.log('l_domain_name:'|| l_domain_name);
-        pck_core.log('l_domain_name_custom:'||l_domain_name_custom);
+        pck_core.log('linking '|| l_domain_name || ' to custom domain: ' || l_domain_name_custom);
 
         /* Create NETLIFY site object for LIVE site connected to custom domain */
         l_json:=new JSON_OBJECT_T;
@@ -407,10 +406,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pMethod=>'POST', pStatusAllowed=>422, pBody=>l_json.stringify, pData=>l_clob);
 
         IF (apex_web_service.g_status_code=422) THEN
-            apex_json.open_object;
-            apex_json.write('success', TRUE);
-            apex_json.write('error', 'Domain Name invalid. Must include top level domain, eg ".com", ".co.uk"');
-            apex_json.close_object;
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('success',true);
+            l_json.put('error','Domain Name invalid. Must include top level domain, eg ".com", ".co.uk"');
+            apex_util.prn(l_json.to_clob,false);
             RETURN;
         END IF;
 
@@ -440,11 +439,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
            SET netlify_site_id_custom=l_netlify_site_id_custom, netlify_dns_zone_id=l_netlify_dns_zone_id, updated_date=current_timestamp 
          WHERE id=pWebsiteId;
 
-        apex_json.open_object; 
-        apex_json.write('success', TRUE);
-        apex_json.write('article', l_article);
-        apex_json.write('footer', 'Update your domain''s nameservers');
-        apex_json.close_object;
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('article', l_article);
+        l_json.put('footer', 'Update your domain''s nameservers OR configure your domain''s DNS');
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
@@ -453,7 +452,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         */
         pck_deploy.runDeployment(pWebsiteId, l_user_id, 'LIVE', l_netlify_site_id_custom, pck_core.getRestUrl());
 
-        createURLExistsJob(l_domain_name_custom, l_user_id);
+        -- createURLExistsJob(l_domain_name_custom, l_user_id);
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
