@@ -434,8 +434,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 4=>tt_font_category('sans-serif','sans-serif'), 
                 5=>tt_font_category('serif','serif'), 
                 6=>tt_font_category('variable','variable fonts'), 
-                7=>tt_font_category('italic','fonts with italics'), 
-                8=>tt_font_category('system-ui','web-safe fonts')
+                7=>tt_font_category('italic','fonts with italics')
             );
     BEGIN
         l_header:='<small>Select complementary fonts for headings and text</small>';
@@ -524,7 +523,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             SELECT MAX(DECODE(variable,1,nb)) nb_variable, SUM(nb) total, MAX(last_modified) last_modified
             FROM
                 (
-                    SELECT variable,COUNT(*) nb, MAX(last_modified) last_modified FROM font WHERE family<>'system-ui' GROUP BY  variable
+                    SELECT variable,COUNT(*) nb, MAX(last_modified) last_modified FROM font GROUP BY  variable
                 )
         ) LOOP
             l_footer:=
@@ -563,7 +562,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     
     BEGIN
         CASE 
-            WHEN pCategory IN ('display', 'handwriting', 'monospace', 'sans-serif', 'serif', 'system-ui') THEN
+            WHEN pCategory IN ('display', 'handwriting', 'monospace', 'sans-serif', 'serif') THEN
                 FOR C IN (
                     SELECT id, family, COUNT(*) OVER () nb
                     FROM font 
@@ -634,7 +633,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_json JSON_OBJECT_T;
         l_urls JSON_ARRAY_T;
         l_font JSON_OBJECT_T;
-        l_system_ui PLS_INTEGER;
         n PLS_INTEGER;
         
     BEGIN
@@ -649,34 +647,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
          WHERE website_id=pWebsiteId
            AND context=l_context;
 
-        SELECT COUNT(*) INTO l_system_ui FROM dual 
-         WHERE EXISTS (SELECT null FROM font WHERE id=l_font_id AND category='system-ui');
-        
-        IF (l_system_ui=0) THEN
-            -- getCharsUsed(pArticleId);
-            getFontFiles(pWebsiteId, pContext=>l_context, pArticleId=>pArticleId);
-        END IF;
+        getFontFiles(pWebsiteId, pContext=>l_context, pArticleId=>pArticleId);
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
 
-        IF (l_system_ui=0) THEN
-            l_urls:= new JSON_ARRAY_T;
-            FOR C IN (
-                SELECT font_family, font_weight, font_stretch, font_style, 'url("' || src_url || '")' src_url
-                  FROM website_fontface 
-                 WHERE website_id=pWebsiteid 
-                   AND context=l_context
-            ) LOOP
-                l_font:= new JSON_OBJECT_T;
-                l_font.put('font_style',C.font_style);
-                l_font.put('font_weight',C.font_weight);
-                l_font.put('font_stretch',C.font_stretch);
-                l_font.put('src_url',C.src_url);
-                l_urls.append(l_font);
-            END LOOP;
-            l_json.put('urls',l_urls);
-        END IF;
+        l_urls:= new JSON_ARRAY_T;
+        FOR C IN (
+            SELECT font_family, font_weight, font_stretch, font_style, 'url("' || src_url || '")' src_url
+              FROM website_fontface 
+             WHERE website_id=pWebsiteid 
+               AND context=l_context
+        ) LOOP
+            l_font:= new JSON_OBJECT_T;
+            l_font.put('font_style',C.font_style);
+            l_font.put('font_weight',C.font_weight);
+            l_font.put('font_stretch',C.font_stretch);
+            l_font.put('src_url',C.src_url);
+            l_urls.append(l_font);
+        END LOOP;
+        l_json.put('urls',l_urls);
 
         apex_util.prn(l_json.to_clob,false);
         pStatus:=200;
