@@ -854,7 +854,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH data AS 
             (
-                SELECT 'https://' || w.domain_name || '/' || apex_string_util.get_slug(wa.navigation_label) AS path1, apex_string_util.get_slug(ac.first_heading) AS path2, TO_CHAR(NVL(a.updated_date,wa.updated_date),'yyyy-mm-dd') lastmod
+                SELECT 'https://' || w.domain_name ||
+                        CASE WHEN wa.display_order>1 THEN '/' || apex_string_util.get_slug(wa.navigation_label) END AS path1, 
+                        CASE WHEN wa.display_order>1 THEN apex_string_util.get_slug(ac.first_heading) END AS path2, 
+                        TO_CHAR(NVL(a.updated_date,wa.updated_date),'yyyy-mm-dd') lastmod
                   FROM website w, website_article wa, article a, article_chars ac
                  WHERE w.id=pWebsiteid
                    AND wa.website_id=w.id
