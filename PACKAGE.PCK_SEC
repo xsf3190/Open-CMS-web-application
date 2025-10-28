@@ -353,6 +353,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         ** SITE IS "TEST" WHEN
         ** 1. URL IS "editor" SUB-DOMAIN OF CUSTOM DOMAIN, E.G. "editor.example.com"
         ** 2. URL IS SUB-DOMAIN OF "netlify.app", E.G. "example-com.netlify.app"
+        ** 3. URL CONTAINS "codepen.io"
         */
 
         SELECT domain_name, netlify_site_id_custom
