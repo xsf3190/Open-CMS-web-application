@@ -13,74 +13,71 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
     */
     PROCEDURE getCodepen(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_domain_name website.domain_name%type;
-        l_is_media BOOLEAN:=FALSE;
         l_html CLOB;
         l_css website.css%type;
         l_javascript CLOB;
+        l_logo website.logo%type;
+        l_nav VARCHAR2(4000);
+        l_dropdown LONG;
+        n PLS_INTEGER;
+        n1 PLS_INTEGER;
         l_session_data pck_sec.t_session_data;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-
-        /* Get page content */
-
         FOR C IN (
-            SELECT w.css, w.domain_name, w.title, w.subtitle, w.header_effect, w.hero_asset_id, w.promotion, a.body_html, w.contact_email, w.telephone_number, w.mobile_number, w.linkedin_name, w.instagram_name, wa.collection_type
-              FROM website w, website_article wa, article a
+            SELECT domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width
+              FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
-               AND wa.article_id=a.id
+               AND wa.article_id=NVL(a.parent_id,pArticleId)
                AND a.id=pArticleId
         ) LOOP
             l_domain_name:=C.domain_name;
-            l_html:=C.body_html;
-            l_is_media:=C.collection_type='MEDIA';
-            buildBodyHtml(
-                l_session_data.user_id, 
-                pWebsiteId,
-                'TEST', /* TEST environemt for Codepen */
-                pck_core.getresturl(),
-                pArticleId, 
-                C.collection_type, 
-                l_is_media, 
-                C.header_effect,
-                C.hero_asset_id,
-                C.contact_email,
-                C.telephone_number, 
-                C.mobile_number, 
-                C.linkedin_name,
-                C.instagram_name,
-                C.promotion,
-                l_html);
 
-            l_html:=l_html || '</body>';
+            l_logo:=pck_deploy.buildLogo(pWebsiteId);
+            l_nav:=pck_deploy.buildNav(pWebsiteId);
+            l_dropdown:=pck_deploy.buildDropdown(pWebsiteId);
+            
 
-            /* Import font-face first for codepen */
+            n:=INSTR(l_nav,pArticleid);
+            n1:=INSTR(l_nav,'>',n);
+            l_nav:=SUBSTR(l_nav,1,n1-1) || ' aria-current="page"' || SUBSTR(l_nav,n1);
+
+            l_html:=
+            '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pck_core.getRestUrl() || '" data-importmap="https://es-modules.netlify.app/' || LOWER(C.esm_library) || '/importmap.json">' ||
+                '<div class="topnav flex-items space-between">' || l_logo || l_nav || l_dropdown || '</div>' ||
+                '<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>' ||
+                '<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>' ||
+                '<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>' ||
+                pck_deploy.buildLoginForm || pck_deploy.buildContentDialog ||
+            '</body>';
+
             FOR C1 IN (
-                SELECT DISTINCT f.family
-                  FROM font f, website_font wf
-                 WHERE f.id=wf.font_id
-                   AND wf.website_id=pWebsiteId
+                SELECT link_order, content
+                  FROM
+                        (
+                            SELECT link_order, NVL(content,content_minified) content
+                              FROM css
+                             UNION ALL
+                            SELECT 0, REPLACE(css,'/fonts','https://' || l_session_data.url || '/fonts')
+                              FROM website
+                             WHERE id=pWebsiteid
+                        )
+                ORDER BY link_order
             ) LOOP
-                l_css:=l_css ||
-                '@import url("https://fonts.googleapis.com/css2?family=' || REPLACE(C1.family,' ','+') || '");' || chr(10);
+                l_css:=l_css || C1.content;
             END LOOP;
 
-            l_css:=l_css || buildCSSRoot(pWebsiteId);
+            FOR C1 IN (
+                SELECT apex_util.blob_to_clob(file_content) file_content
+                  FROM apex_application_static_files 
+                 WHERE application_id=101
+                   AND file_name='deploy_main.js'
+            ) LOOP
+                l_javascript:=REPLACE(C1.file_content,'/javascript','https://' || l_session_data.url || '/javascript');
+            END LOOP;
 
-            /* Append either author-uploaded CSS or mine  */
-            IF (C.css IS NOT NULL) THEN
-                l_css:=l_css || C.css;
-            ELSE
-                FOR C IN (
-                    SELECT apex_util.blob_to_clob(file_content) file_content
-                      FROM apex_application_static_files 
-                     WHERE application_id=101
-                       AND file_name='deploy.css'
-                ) LOOP
-                    l_css:=l_css || C.file_content;
-                END LOOP;
-            END IF;
         END LOOP;
 
         apex_json.open_object;
