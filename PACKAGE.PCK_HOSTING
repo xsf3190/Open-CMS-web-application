@@ -40,9 +40,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             RETURN 'TEST';
         ELSIF (INSTR(pUrl,'editor.')>0) THEN
             RETURN 'TEST';
+        ELSIF (INSTR(pUrl,'cdpn.io')>0) THEN
+            RETURN 'TEST';
         END IF;
         RETURN 'LIVE';
-
     END;
 
     /*
