@@ -1,5 +1,13 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as 
     --
+    FUNCTION buildContentDialog RETURN VARCHAR2;
+    --
+    FUNCTION buildDropdown(pWebsiteId IN website.id%type) RETURN VARCHAR2;
+    --
+    FUNCTION buildLoginForm RETURN VARCHAR2;
+    --
+    FUNCTION buildLogo(pWebsiteId IN website.id%type) RETURN VARCHAR2;
+    --
     FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2;
     --
     PROCEDURE deleteDirectory(pWebsiteId IN website.id%type, pUserId IN users.id%type);
@@ -40,7 +48,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     FUNCTION buildLoginForm RETURN VARCHAR2 IS
     BEGIN
         RETURN(
-            '<dialog class="login-email" style="--max-width:40rem">' ||
+            '<dialog class="login-email" style="--max-width:40rem" closedBy="any">' ||
                 '<form>' ||
                     '<input type="hidden" name="url" value="">' ||
                     '<input type="hidden" name="request_type" value="">' ||
@@ -48,8 +56,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<header class="flex-items space-between">' ||
                         '<h2>Log in</h2>' ||
                         '<button type="button" class="button close no-focus" data-button-variant="round-icon">' ||
-                            '<svg class="icon" aria-hidden="true" focusable="false">' ||
-                                '<use href="#cross"></use>' ||
+                            '<svg viewBox="0 0 18 18" class="icon" aria-hidden="true" focusable="false">' ||
+                                '<line x1="18" y1="0" x2="0" y2="18"/><line x1="0" y1="0" x2="18" y2="18"/>' ||
                             '</svg>' ||
                         '</button>' ||
                     '</header>' ||
@@ -82,13 +90,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     FUNCTION buildContentDialog RETURN VARCHAR2 IS
     BEGIN
         RETURN(
-            '<dialog class="output">' ||
+            '<dialog class="output" closedBy="any">' ||
                 '<form method="dialog">' ||
                     '<header class="flex-items space-between no-wrap">' ||
                         '<div></div>' ||
                         '<button type="button" class="button close no-focus" data-button-variant="round-icon">' ||
-                            '<svg class="icon" aria-hidden="true" focusable="false">' ||
-                                '<use href="#cross"></use>' ||
+                            '<svg viewBox="0 0 18 18" class="icon" aria-hidden="true" focusable="false">' ||
+                                '<line x1="18" y1="0" x2="0" y2="18"/><line x1="0" y1="0" x2="18" y2="18"/>' ||
                             '</svg>' ||
                         '</button>' ||
                     '</header>' ||
@@ -172,6 +180,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         RETURN ('<span class="logo"' || l_logo_styles || '>' || l_logo || '</span>');
     END;
 
+    /*
+    ** BUILD NAVIGATION ELEMENT COMMON TO ALL PAGES
+    */
     FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2 IS
         l_nav VARCHAR2(4000);
         l_nav_length PLS_INTEGER:=0;
@@ -179,7 +190,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         l_nav:=
         '<nav aria-label="Main">' ||
-            '<ul role="list" class="flex-items" style="--flex-wrap:wrap;--flex-horizontal-alignment:space-evenly;max-inline-size:60rem;">';
+            '<ul role="list">';
         FOR C IN (
             SELECT navigation_label, collection_type, article_id, ROW_NUMBER() OVER (ORDER BY display_order) rn
               FROM website_article 
@@ -946,7 +957,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
     /*
     **  DELETE OLD DEPLOYMENTS FROM NETLIFY SYSTEM
-    **  DELETE ASSET WITH referenced_ind IS NULL
+    **  DELETE UNUSED ASSETS - EXPERIMENTAL
     */
     PROCEDURE runDelete(pUserId IN users.id%type, pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type) IS
         l_clob CLOB;
@@ -991,8 +1002,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              WHERE a.id=unused_assets.id
                AND u.cld_cloud_name=a.cld_cloud_name
         ) LOOP
-            DELETE asset WHERE id=C.id;
-            pck_media.DeleteAsset(pCldCloudName=>C.cld_cloud_name, pPublicId=>C.public_id, pCldApiKey=>C.cld_api_key, pCldApiSecret=>C.cld_api_secret);
+            pck_core.log('Deployment "would" delete asset:' || C.id || ' public_id:'|| C.public_id);
+            -- DELETE asset WHERE id=C.id;
+            -- pck_media.DeleteAsset(pCldCloudName=>C.cld_cloud_name, pPublicId=>C.public_id, pCldApiKey=>C.cld_api_key, pCldApiSecret=>C.cld_api_secret);
         END LOOP;
     END;
 
