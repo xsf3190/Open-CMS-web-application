@@ -187,6 +187,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_nav VARCHAR2(4000);
         l_nav_length PLS_INTEGER:=0;
         l_article_id article.id%type;
+        n PLS_INTEGER:=0;
     BEGIN
         l_nav:=
         '<nav aria-label="Main">' ||
@@ -197,6 +198,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              WHERE website_id=pWebsiteId
              ORDER BY display_order
         ) LOOP
+            n:=n+1;
             l_nav:=l_nav ||
             '<li>' ||
                 '<a href="/' || CASE WHEN C.rn>1 THEN apex_string_util.get_slug(C.navigation_label) END || '"' ||
@@ -210,7 +212,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             '<ul>' ||
         '</nav>';
 
-        RETURN (l_nav);
+        IF (n>1) THEN
+            RETURN (l_nav);
+        ELSE
+            RETURN (null);
+        END IF;
     END;
 
     /*
@@ -253,8 +259,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             SELECT favicon, SUBSTR(domain_name,1,1) first_letter_domain FROM website WHERE id=pWebsiteid
         ) LOOP
             IF (C.favicon IS NOT NULL) THEN
-                IF (C.favicon LIKE '&%;') THEN /* EMOJI */
-                    l_favicon:='<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>' || C.favicon|| '</text></svg>';
+                IF (LENGTH(C.favicon)<10) THEN /* EMOJI */
+                    l_favicon:='<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%221em%22 fill=%22rebeccapurple%22 font-family=%22system-ui%22 font-size=%2290%22>' || C.favicon|| '</text></svg>';
                 ELSE
                     l_favicon:=REPLACE(REPLACE(C.favicon,'"','%22'),'#','%23');
                 END IF;
@@ -262,7 +268,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_favicon:='<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>' || C.first_letter_domain|| '</text></svg>';
             END IF;
         END LOOP;
-
+        
         l_favicon:='data:image/svg+xml,' || l_favicon;
 
         RETURN (l_favicon);
@@ -281,13 +287,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_sizes VARCHAR2(100);
         l_loading VARCHAR2(16);
         l_fetchpriority VARCHAR2(4);
-        l_img_src_tmp VARCHAR2(100);
+        l_img_src_tmp VARCHAR2(200);
         n pls_integer;
         n1 pls_integer;
         n2 pls_integer;
 
         TYPE tt_img_src IS RECORD (
-            img_src VARCHAR2(100),
+            img_src VARCHAR2(200),
             public_id asset.public_id%type,
             article_id article.id%type,
             asset_id asset.id%type
@@ -459,9 +465,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wa.article_id=NVL(a.parent_id,pArticleId)
                AND a.id=pArticleId
         ) LOOP
-            n:=INSTR(pNav,C.nav_id);
-            n1:=INSTR(pNav,'>',n);
-            l_nav:=SUBSTR(pNav,1,n1-1) || ' aria-current="page"' || SUBSTR(pNav,n1);
+            IF (pNav IS NOT NULL) THEN
+                n:=INSTR(pNav,C.nav_id);
+                n1:=INSTR(pNav,'>',n);
+                l_nav:=SUBSTR(pNav,1,n1-1) || ' aria-current="page"' || SUBSTR(pNav,n1);
+            END IF;
 
             l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
             l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
