@@ -250,26 +250,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
-    ** GET TWEBSITE FAVICON. DEFAULTS TO FIRST LETTER OF DOMAIN
+    ** GET WEBSITE FAVICON. DEFAULTS TO FIRST 2 LETTERS OF DOMAIN
+    ** RETURN FAVICON AS ESCAPED SVG CODE IN XML FORMAT
     */
     FUNCTION buildFavicon(pWebsiteId IN website.id%type) RETURN website.favicon%type IS
+        l_favicon_template website.favicon%type:=
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="1em" fill="darkgreen" font-family="system-ui" font-size="90">#FAVICON#</text></svg>';
         l_favicon website.favicon%type;
     BEGIN
         FOR C IN (
-            SELECT favicon, SUBSTR(domain_name,1,1) first_letter_domain FROM website WHERE id=pWebsiteid
+            SELECT NVL(favicon, UPPER(SUBSTR(domain_name,1,2))) favicon FROM website WHERE id=pWebsiteid
         ) LOOP
-            IF (C.favicon IS NOT NULL) THEN
-                IF (LENGTH(C.favicon)<10) THEN /* EMOJI */
-                    l_favicon:='<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%221em%22 fill=%22rebeccapurple%22 font-family=%22system-ui%22 font-size=%2290%22>' || C.favicon|| '</text></svg>';
-                ELSE
-                    l_favicon:=REPLACE(REPLACE(C.favicon,'"','%22'),'#','%23');
-                END IF;
+            IF (INSTR(C.favicon,'svg')=0) THEN
+                l_favicon:=REPLACE(l_favicon_template,'#FAVICON#', C.favicon);
             ELSE
-                l_favicon:='<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>' || C.first_letter_domain|| '</text></svg>';
+                l_favicon:=C.favicon;
             END IF;
         END LOOP;
         
-        l_favicon:='data:image/svg+xml,' || l_favicon;
+        l_favicon:='data:image/svg+xml,' || REPLACE(REPLACE(l_favicon,'"','%22'),'#','%23');
 
         RETURN (l_favicon);
     END;
