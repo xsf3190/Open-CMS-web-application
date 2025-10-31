@@ -343,11 +343,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
 
         l_asset_id:=seq_asset.currval;
 
-        FOR C IN (
-            SELECT cld_cloud_name, width, public_id FROM asset WHERE id=l_asset_id
-        ) LOOP
-            l_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || LEAST(C.width,1200) || '/' || C.public_id;
-        END LOOP;
+        SELECT 'https://res.cloudinary.com/' || cld_cloud_name || '/w_' || LEAST(width,1200) || '/' || public_id 
+          INTO l_url
+          FROM asset 
+         WHERE id=l_asset_id;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
