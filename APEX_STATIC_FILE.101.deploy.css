@@ -878,10 +878,10 @@ summary {
     margin-inline-start: .2em;
 }
 
-/* PLACE POPOVER TOP LEFT OF VIEWPORT IF BROWSER NOT SUPPORTING ANCHOR API */
+/* PLACE POPOVER TOP RIGHT OF VIEWPORT IF BROWSER NOT SUPPORTING ANCHOR API */
 @supports not (position-anchor: --anchor) {
   [popover]:popover-open {
-    inset: 2rem;
+    right: 0;
   }
 }
 
