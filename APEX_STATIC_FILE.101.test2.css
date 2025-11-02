@@ -3,3 +3,9 @@
         max-width: calc(100% - var(--ck-image-style-spacing));
     }
 }
+div {
+    p (
+        color:red;
+    )
+}
+/* comment */
