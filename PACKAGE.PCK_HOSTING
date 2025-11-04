@@ -2,13 +2,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
     PROCEDURE changeURL(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE createWebsite(pWebsiteId IN website.id%type, pUserid IN users.id%type, pEmail IN users.email%type, pUrl IN OUT VARCHAR2);
+    PROCEDURE createWebsite(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB,  pStatus OUT NUMBER);
+    --
+    --PROCEDURE createWebsite(pWebsiteId IN website.id%type, pUserid IN users.id%type, pEmail IN users.email%type, pUrl IN OUT VARCHAR2);
     --
     PROCEDURE deleteDNS(pWebsiteId IN website.id%type);
     --
     PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getChangeURL(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    --
+    PROCEDURE getCreateWebsiteForm(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pStatus OUT NUMBER);
     --
     FUNCTION getEnvFromURL(pUrl IN VARCHAR2) RETURN VARCHAR2;
     --
@@ -116,6 +120,69 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_domain:=SUBSTR(pEmail,1,INSTR(pEmail,'@')-1);
         l_domain:=REPLACE(REPLACE(l_domain,'.','-'),'_','-');
         RETURN(l_domain);
+    END;
+
+    /*
+    ** CREATE HTML FOR FORM TO CHANGE SUBDOMAIN OF TEST URL
+    */
+    PROCEDURE getCreateWebsiteForm(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        l_header:='<small>Create New Website</small>';
+        l_article:='<label for="domain">Enter Domain Name</label><input type="text" name="domain" value="">';
+        l_footer:='<button type="button" class="button send">SEND REQUEST</button><span class="send-result"></span>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+    /* 
+    ** CREATE NEW WEBSITE WHEN REQUESTED VIA MENULIST
+    */
+    PROCEDURE createWebsite(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB,  pStatus OUT NUMBER) IS
+        l_domain website.domain_name%type;
+        l_netlify_subdomain website.domain_name%type;
+        l_session_data pck_sec.t_session_data;
+        l_message VARCHAR2(100);
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        
+        SELECT domain, REPLACE(domain,'.','-') || '.netlify.app' INTO l_domain, l_netlify_subdomain FROM JSON_TABLE(pBodyText,  '$' COLUMNS (domain));
+
+        IF (l_domain IS NOT NULL) THEN
+            IF (urlExists(l_netlify_subdomain)) THEN
+                l_message:='Netlify site ' || l_netlify_subdomain || ' already taken';
+            ELSE
+            null;
+            END IF;
+        END IF;
+
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('message',l_message);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
     END;
 
     /* 
