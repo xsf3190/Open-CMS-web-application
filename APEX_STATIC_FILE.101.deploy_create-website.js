@@ -18,8 +18,16 @@ export const init = (element) => {
     });
 }
 
+let isSending = false;
+
 const clickHandler = (e) => {
     if (!e.target.matches(".send")) return;
+
+    if (isSending) {
+        console.log("Prevent double sends");
+        return;
+    }
+    isSending = true;
 
     const form = output_dialog.querySelector("form");
 
@@ -27,10 +35,18 @@ const clickHandler = (e) => {
     const formObj = Object.fromEntries(formData);
     callAPI(endpoint, 'POST', formObj)
         .then((data) => {
+            isSending = false;
             const sendresult = dialog_footer.querySelector(".send-result");
-            sendresult.textContent = data.message;
-            sendresult.style.color = "green";
-            e.target.disabled = true;
+            if (data.message) {
+                sendresult.textContent = data.message;
+                sendresult.style.color = "red";
+            } else if (data.link) {
+                sendresult.replaceChildren();
+                sendresult.insertAdjacentHTML('beforeend',data.link);
+                sendresult.style.color = "green";
+            } else {
+                console.error("ERROR. MUST RETURN EITHER MESSAGE OR LINK");
+            }
         })
         .catch((error) => {
             handleError(error);
