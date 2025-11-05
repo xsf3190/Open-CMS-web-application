@@ -8,6 +8,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
     PROCEDURE deleteDNS(pWebsiteId IN website.id%type);
     --
+    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type);
+    --
     PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getChangeURL(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
@@ -136,7 +138,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
         l_header:='<small>Create New Website</small>';
         l_article:='<label for="domain">Enter Domain Name</label><input type="text" name="domain" value="">';
-        l_footer:='<button type="button" class="button send">SEND REQUEST</button><span class="send-result"></span>';
+        l_footer:='<button type="button" class="button send">SEND REQUEST</button><span class="send-result aria-live="assertive"></span>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
@@ -157,26 +159,112 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     PROCEDURE createWebsite(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB,  pStatus OUT NUMBER) IS
         l_domain website.domain_name%type;
         l_netlify_subdomain website.domain_name%type;
+        l_ssl_url VARCHAR2(100);
         l_session_data pck_sec.t_session_data;
+        
         l_message VARCHAR2(100);
         l_json JSON_OBJECT_T;
+
+        FUNCTION createWebsite RETURN VARCHAR2 IS
+            l_clob CLOB;
+            l_ssl_url VARCHAR2(100);
+            l_netlify_site_id website.netlify_site_id%type;
+            l_netlify_site_id_custom website.netlify_site_id_custom%type;
+            l_new_website_id website.id%type:=seq_website.nextval;
+            l_new_article_id website.id%type:=seq_article.nextval;
+            l_netlify_account_slug users.netlify_account_slug%type;
+            l_netlify_dns_zone_id website.netlify_dns_zone_id%type;
+        BEGIN
+            /*
+            ** CREATE EDITOR SITE
+            */
+            l_json:=new JSON_OBJECT_T;
+            l_json.put('name', l_domain);
+            pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+            
+            SELECT site_id, ssl_url INTO l_netlify_site_id, l_ssl_url FROM JSON_TABLE(l_clob, '$' COLUMNS (site_id, ssl_url));
+            
+            /*
+            ** CREATE WEBSITE AND RELATED TABLE ROWS COPYING FROM CURRENT WEBSITE / PAGE
+            */
+            INSERT INTO website (id, domain_name, netlify_site_id, user_id, contact_email, logo, favicon, esm_library)
+            SELECT l_new_website_id, l_domain, l_netlify_site_id, user_id, contact_email, logo, favicon, esm_library
+              FROM website
+             WHERE id=pWebsiteid;
+
+            INSERT INTO website_font (website_id, context, font_id, opsz, slnt, wdth, wght)
+            SELECT l_new_website_id, context, font_id, opsz, slnt, wdth, wght
+              FROM website_font
+             WHERE website_id=pWebsiteId;
+            
+            INSERT INTO article (id, body_html, author_user_id)
+            SELECT l_new_article_id, body_html, author_user_id
+              FROM article
+             WHERE id=pArticleid;
+
+            INSERT INTO website_article (website_id, article_id, display_order, navigation_label, collection_type, header_html, footer_html)
+            SELECT l_new_website_id, l_new_article_id, 1, navigation_label, collection_type, header_html, footer_html
+              FROM website_article
+             WHERE website_id=pWebsiteid
+               AND display_order=(SELECT MIN(display_order) FROM website_article WHERE website_id=pWebsiteid);
+
+            /*
+            ** IF DOMAIN SPECIFIED CREATE SEPARATE SITE WITH CUSTOM DOMAIN AND DNS ZONE
+            */
+            IF (l_domain IS NOT NULL) THEN 
+                l_json:=new JSON_OBJECT_T;
+                l_json.put('name', l_netlify_subdomain || '-custom');
+                l_json.put('custom_domain', l_domain);
+                pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+
+                SELECT id, account_slug 
+                  INTO l_netlify_site_id_custom, l_netlify_account_slug
+                  FROM JSON_TABLE(l_clob, '$' COLUMNS (id, account_slug));
+
+                /* 
+                ** CREATE NETLIFY DNS ZONE For CUSTOM DOMAIN
+                */
+                l_json:=new JSON_OBJECT_T;
+                l_json.put('account_slug', l_netlify_account_slug);
+                l_json.put('site_id', l_netlify_site_id_custom);
+                l_json.put('name', l_domain);
+
+                pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'dns_zones', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+
+                SELECT id INTO l_netlify_dns_zone_id FROM JSON_TABLE(l_clob, '$' COLUMNS (id));
+                
+                UPDATE website 
+                   SET netlify_site_id_custom=l_netlify_site_id_custom,
+                       netlify_dns_zone_id=l_netlify_dns_zone_id
+                 WHERE id=l_new_website_id;
+            END IF;
+
+            pck_deploy.runDeployment(l_new_website_id, null, 'TEST', l_netlify_site_id, pck_core.getRestUrl());
+
+            RETURN (l_ssl_url);
+        END;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
-        SELECT domain, REPLACE(domain,'.','-') || '.netlify.app' INTO l_domain, l_netlify_subdomain FROM JSON_TABLE(pBodyText,  '$' COLUMNS (domain));
+        SELECT domain, REPLACE(domain,'.','-') INTO l_domain, l_netlify_subdomain FROM JSON_TABLE(pBodyText,  '$' COLUMNS (domain));
 
         IF (l_domain IS NOT NULL) THEN
-            IF (urlExists(l_netlify_subdomain)) THEN
+            IF (urlExists(l_netlify_subdomain || '.netlify.app')) THEN
                 l_message:='Netlify site ' || l_netlify_subdomain || ' already taken';
             ELSE
-            null;
+                l_ssl_url:=createWebsite;
             END IF;
+        ELSE
+            l_ssl_url:=createWebsite;
         END IF;
-
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('message',l_message);
+        IF (l_ssl_url IS NOT NULL) THEN
+            l_json.put('link','<a href="' || l_ssl_url || '" target="a_blank" rel="noopener noreferrer" aria-describedby="open-in-new-tab">Website created successfully</a>');
+        ELSE
+            l_json.put('message',l_message);
+        END IF;
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -237,17 +325,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         pUrl:=l_ssl_url;
     END;
 
+
     /*
-     * DELETE WEBSITE INCLUDING HOSTING AND ANY ASSETS OWNED BY US
+     * DELETE WEBSITE CALLED FROM PLSQL
     */
-    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
+    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type) IS
         TYPE t_website_article IS TABLE OF article.id%type INDEX BY PLS_INTEGER;
         l_website_articles t_website_article;
         l_clob CLOB;
     BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
         FOR C IN (
             SELECT w.user_id, w.netlify_site_id, w.netlify_site_id_custom, w.netlify_dns_zone_id, u.cld_api_key 
               FROM website w, users u 
@@ -264,13 +350,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
                 pck_api.callNetlifyAPI(pUserId=>C.user_id, pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
             END IF;
 
+            IF (C.netlify_dns_zone_id IS NOT NULL) THEN
+                pck_api.callNetlifyAPI(pUserId=>C.user_id, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+            END IF;
+
             /* DELETE ALL DATABASE ROWS RELATED TO WEBSITE */
 
             SELECT article_id BULK COLLECT INTO l_website_articles FROM website_article WHERE website_id=pWebsiteId;
             
             FOR i IN 1..l_website_articles.COUNT LOOP
 
-                /* DELETE ASSETS ON:Y IF WE ARE HOSTING THEM (USER OWNS THESE INDEPENDENTLY */
+                /* DELETE ASSETS ONLY IF WE ARE HOSTING THEM ON THE PLATFORM */
                 IF (C.cld_api_key IS NULL) THEN
                     FOR C1 IN (SELECT DISTINCT cld_cloud_name, resource_type FROM asset WHERE article_id=l_website_articles(i)) LOOP
                         pck_api.callCloudinaryAPI(pUserId=>C.user_id, pEndpoint=>C1.cld_cloud_name || '/resources/' || C1.resource_type || '/tags/' || l_website_articles(i), pMethod=>'DELETE', pData=>l_clob);
@@ -279,6 +369,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
                 /* DELETE ARTICLE (CASCADES TO ASSET AND WEBSITE_ARTICLE) */
                 DELETE article WHERE id=l_website_articles(i);
+                DELETE asset_used WHERE article_id_1=l_website_articles(i);
                 DELETE page_hit WHERE article_id=l_website_articles(i);
                 DELETE website_article_cwv WHERE article_id=l_website_articles(i);
 
@@ -289,10 +380,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             DELETE website WHERE id=pWebsiteId;
 
         END LOOP;
+    END;
+    
+    /*
+     * DELETE WEBSITE CALLED FROM JAVASCRIPT FETCH
+    */
+    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        apex_json.open_object; 
-        apex_json.write('success', TRUE);
-        apex_json.close_object;
+        deleteWebsite(pWebsiteId);
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        apex_util.prn(l_json.to_clob,false);
         
         pStatus:=200;
 
