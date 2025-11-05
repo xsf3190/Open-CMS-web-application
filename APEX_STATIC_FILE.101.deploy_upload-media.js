@@ -25,7 +25,7 @@ const createWidget =  async (cloudName, uploadPreset, multiple) => {
         multiple: multiple,
         cropping: !multiple,
         singleUploadAutoClose: false,
-        clientAllowedFormats: ['image','video','audio'],
+        clientAllowedFormats: ['image','video','audio','zip','pdf'],
         maxFiles: 10
     },
     (error, result) => {
