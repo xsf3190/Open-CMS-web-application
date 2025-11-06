@@ -27,26 +27,22 @@ const clickHandler = (e) => {
         console.log("Prevent double sends");
         return;
     }
+    const sendresult = dialog_footer.querySelector(".send-result");
+
     isSending = true;
+    sendresult.textContent = e.target.getAttribute("data-loading-msg");
 
     const form = output_dialog.querySelector("form");
-
+    
     const formData = new FormData(form);
     const formObj = Object.fromEntries(formData);
     callAPI(endpoint, 'POST', formObj)
         .then((data) => {
             isSending = false;
-            const sendresult = dialog_footer.querySelector(".send-result");
-            if (data.message) {
-                sendresult.textContent = data.message;
-                sendresult.style.color = "red";
-            } else if (data.link) {
-                sendresult.replaceChildren();
-                sendresult.insertAdjacentHTML('beforeend',data.link);
-                sendresult.style.color = "green";
-            } else {
-                console.error("ERROR. MUST RETURN EITHER MESSAGE OR LINK");
-            }
+            
+            sendresult.replaceChildren();
+            sendresult.insertAdjacentHTML('beforeend',data.link);
+            sendresult.style.color = "green";
         })
         .catch((error) => {
             handleError(error);
