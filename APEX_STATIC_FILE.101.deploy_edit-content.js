@@ -73,15 +73,15 @@ export const init = async (element) => {
             editor.ui.componentFactory.add( 'uploadImage', () => {
                 const button = new ButtonView();
                 button.set( {
-                    label: 'Upload Image',
+                    label: 'Upload single Image and crop',
                     icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M1.201 1C.538 1 0 1.47 0 2.1v14.363c0 .64.534 1.037 1.186 1.037h9.494a3 3 0 0 1-.414-.287 3 3 0 0 1-1.055-2.03 3 3 0 0 1 .693-2.185l.383-.455-.02.018-3.65-3.41a.695.695 0 0 0-.957-.034L1.5 13.6V2.5h15v5.535a2.97 2.97 0 0 1 1.412.932l.088.105V2.1c0-.63-.547-1.1-1.2-1.1zm11.713 2.803a2.146 2.146 0 0 0-2.049 1.992 2.14 2.14 0 0 0 1.28 2.096 2.13 2.13 0 0 0 2.644-3.11 2.13 2.13 0 0 0-1.875-.978"/><path d="M15.522 19.1a.79.79 0 0 0 .79-.79v-5.373l2.059 2.455a.79.79 0 1 0 1.211-1.015l-3.352-3.995a.79.79 0 0 0-.995-.179.8.8 0 0 0-.299.221l-3.35 3.99a.79.79 0 1 0 1.21 1.017l1.936-2.306v5.185c0 .436.353.79.79.79"/><path d="M15.522 19.1a.79.79 0 0 0 .79-.79v-5.373l2.059 2.455a.79.79 0 1 0 1.211-1.015l-3.352-3.995a.79.79 0 0 0-.995-.179.8.8 0 0 0-.299.221l-3.35 3.99a.79.79 0 1 0 1.21 1.017l1.936-2.306v5.185c0 .436.353.79.79.79"/></svg>',
-                    tooltip: 'Upload Image and crop',
+                    tooltip: 'Upload single Image and crop',
                     withText: false
                 } );
                 button.on('execute', (_) => {
                     import("deploy_upload-media")
                     .then((module) => {
-                        module.init(false);
+                        module.init(false,"image");
                     })
                     .catch((error) => {
                         console.error(error);
@@ -100,15 +100,69 @@ export const init = async (element) => {
             editor.ui.componentFactory.add( 'uploadImages', () => {
                 const button = new ButtonView();
                 button.set( {
-                    label: 'Upload Images',
+                    label: 'Upload multiple images',
                     icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M1.201 1C.538 1 0 1.47 0 2.1v14.363c0 .64.534 1.037 1.186 1.037h9.494a3 3 0 0 1-.414-.287 3 3 0 0 1-1.055-2.03 3 3 0 0 1 .693-2.185l.383-.455-.02.018-3.65-3.41a.695.695 0 0 0-.957-.034L1.5 13.6V2.5h15v5.535a2.97 2.97 0 0 1 1.412.932l.088.105V2.1c0-.63-.547-1.1-1.2-1.1zm11.713 2.803a2.146 2.146 0 0 0-2.049 1.992 2.14 2.14 0 0 0 1.28 2.096 2.13 2.13 0 0 0 2.644-3.11 2.13 2.13 0 0 0-1.875-.978"/><path d="M15.522 19.1a.79.79 0 0 0 .79-.79v-5.373l2.059 2.455a.79.79 0 1 0 1.211-1.015l-3.352-3.995a.79.79 0 0 0-.995-.179.8.8 0 0 0-.299.221l-3.35 3.99a.79.79 0 1 0 1.21 1.017l1.936-2.306v5.185c0 .436.353.79.79.79"/><path d="M15.522 19.1a.79.79 0 0 0 .79-.79v-5.373l2.059 2.455a.79.79 0 1 0 1.211-1.015l-3.352-3.995a.79.79 0 0 0-.995-.179.8.8 0 0 0-.299.221l-3.35 3.99a.79.79 0 1 0 1.21 1.017l1.936-2.306v5.185c0 .436.353.79.79.79"/></svg>',
-                    tooltip: 'Upload Images (no crop)',
+                    tooltip: 'Upload multiple images',
                     withText: false
                 } );
                 button.on('execute', (_) => {
                     import("deploy_upload-media")
                     .then((module) => {
-                        module.init(true);
+                        module.init(true,"image");
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                        console.error("Failed to load module deploy_upload-media");
+                    });
+                });
+                return button;
+            } );
+        }
+    }
+
+    /* Add "Upload PDF" button to toolbar */
+    class UploadPdf extends Plugin {
+        init() {
+            const editor = this.editor;
+            editor.ui.componentFactory.add( 'uploadPdf', () => {
+                const button = new ButtonView();
+                button.set( {
+                    label: 'Upload PDF files',
+                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M208 48L96 48c-8.8 0-16 7.2-16 16l0 384c0 8.8 7.2 16 16 16l80 0 0 48-80 0c-35.3 0-64-28.7-64-64L32 64C32 28.7 60.7 0 96 0L229.5 0c17 0 33.3 6.7 45.3 18.7L397.3 141.3c12 12 18.7 28.3 18.7 45.3l0 149.5-48 0 0-128-88 0c-39.8 0-72-32.2-72-72l0-88zM348.1 160L256 67.9 256 136c0 13.3 10.7 24 24 24l68.1 0zM240 380l32 0c33.1 0 60 26.9 60 60s-26.9 60-60 60l-12 0 0 28c0 11-9 20-20 20s-20-9-20-20l0-128c0-11 9-20 20-20zm32 80c11 0 20-9 20-20s-9-20-20-20l-12 0 0 40 12 0zm96-80l32 0c28.7 0 52 23.3 52 52l0 64c0 28.7-23.3 52-52 52l-32 0c-11 0-20-9-20-20l0-128c0-11 9-20 20-20zm32 128c6.6 0 12-5.4 12-12l0-64c0-6.6-5.4-12-12-12l-12 0 0 88 12 0zm76-108c0-11 9-20 20-20l48 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 24 28 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 44c0 11-9 20-20 20s-20-9-20-20l0-128z"/></svg>',
+                    tooltip: 'Upload PDF files',
+                    withText: false
+                } );
+                button.on('execute', (_) => {
+                    import("deploy_upload-media")
+                    .then((module) => {
+                        module.init(true,"pdf");
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                        console.error("Failed to load module deploy_upload-media");
+                    });
+                });
+                return button;
+            } );
+        }
+    }
+
+    /* Add "Upload ZIP" button to toolbar */
+    class UploadZip extends Plugin {
+        init() {
+            const editor = this.editor;
+            editor.ui.componentFactory.add( 'uploadZip', () => {
+                const button = new ButtonView();
+                button.set( {
+                    label: 'Upload ZIP files',
+                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path d="M64 48l112 0 0 88c0 39.8 32.2 72 72 72l88 0 0 240c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16L48 64c0-8.8 7.2-16 16-16zM224 67.9l92.1 92.1-68.1 0c-13.3 0-24-10.7-24-24l0-68.1zM64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-261.5c0-17-6.7-33.3-18.7-45.3L242.7 18.7C230.7 6.7 214.5 0 197.5 0L64 0zM80 104c0 13.3 10.7 24 24 24l16 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-16 0c-13.3 0-24 10.7-24 24zm0 80c0 13.3 10.7 24 24 24l32 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-32 0c-13.3 0-24 10.7-24 24zm64 56l-32 0c-17.7 0-32 14.3-32 32l0 48c0 26.5 21.5 48 48 48s48-21.5 48-48l0-48c0-17.7-14.3-32-32-32zm-16 64a16 16 0 1 1 0 32 16 16 0 1 1 0-32z"/></svg>',
+                    tooltip: 'Upload ZIP files',
+                    withText: false
+                } );
+                button.on('execute', (_) => {
+                    import("deploy_upload-media")
+                    .then((module) => {
+                        module.init(true,"zip");
                     })
                     .catch((error) => {
                         console.error(error);
@@ -222,10 +276,10 @@ export const init = async (element) => {
                     Italic, Link, LinkImage, List, ListImages, Paragraph, 
                     SelectAll, SelectFonts, ShowBlocks, 
                     Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar,
-                    Underline, UploadImage, UploadImages, WordCount ],
+                    Underline, UploadImage, UploadImages, UploadPdf, UploadZip, WordCount ],
         toolbar: [ 'heading', '|', 'undo', 'redo',  '|',  'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
-                    '|', 'uploadImage', 'uploadImages', 'listImages', 'insertImage', 
+                    '|', 'uploadImage', 'uploadImages', 'uploadPdf', 'uploadZip', 'listImages', 'insertImage', 
                     '|', 'insertTable' ],
         menuBar: {
             isVisible: true
