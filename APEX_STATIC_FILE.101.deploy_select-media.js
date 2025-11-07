@@ -7,13 +7,8 @@ import { callAPI, handleError } from "deploy_callAPI";
 const selectHandler = async (e) => {
     /* click on <button class="copy"> */
     if (e.target.classList.contains("copy")) {
-        dialog_article.querySelectorAll(".copied").forEach( (copied) => {
-			copied.classList.toggle("copied");
-		});
-        e.target.closest("li").classList.toggle("copied");
-        const img = e.target.querySelector("img");
         try {
-            await navigator.clipboard.writeText(img.dataset.max);
+            await navigator.clipboard.writeText(e.target.dataset.url);
         } catch (error) {
             handleError(error);
         }
