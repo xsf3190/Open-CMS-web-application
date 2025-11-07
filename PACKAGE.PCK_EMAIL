@@ -169,6 +169,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
     FUNCTION emailTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
         l_html LONG;
     BEGIN
+        
         l_html:=
 '<!doctype html>' ||
 '<html lang="en">' ||
@@ -263,16 +264,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
                 '<td class="wrapper" style="font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top; box-sizing: border-box; padding: 24px;" valign="top">' ||
                   '<p style="font-family: Helvetica, sans-serif; font-size: 16px; font-weight: bold; margin: 0; margin-bottom: 16px;">' ||
                   CASE pAuthMethod
-                    WHEN 'website' THEN 'Your new website is ' || SUBSTR(pWebsite,1,INSTR(pWebsite,'?')-1) ELSE 'Your Login request to ' || pWebsite
+                    WHEN 'website' THEN 'Your Editor website is created at ' || pWebsite ELSE 'Your Login request to ' || pWebsite
                   END ||
                   '</p>' ||
                   '<p style="font-family: Helvetica, sans-serif; font-size: 16px; font-weight: normal; margin: 0; margin-bottom: 16px;">' ||
                   CASE pAuthMethod
                     WHEN 'magic' THEN 'Click the button below to log in. Your link expires in 5 minutes.'
                     WHEN 'passcode' THEN 'Enter this passcode to log in. Expires in 5 minutes.'
-                    WHEN 'website' THEN 'Click button below to open website.'
+                    WHEN 'website' THEN 'Add following DNS records to your domain:'
                   END ||
                   '</p>' ||
+                  CASE WHEN pAuthMethod='website' THEN
+                  '<p style="font-family: Helvetica, sans-serif; font-size: 24px; font-weight: normal; margin: 0; margin-bottom: 24px;">Type:A Name:@ Data:75.2.60.5</p>' ||
+                  '<p style="font-family: Helvetica, sans-serif; font-size: 24px; font-weight: normal; margin: 0; margin-bottom: 24px;">Type:CNAME Name:editor Data:' || SUBSTR(pWebsite,9) || '</p>' ||
+                  '<p style="font-family: Helvetica, sans-serif; font-size: 24px; font-weight: normal; margin: 0; margin-bottom: 24px;">Type:CNAME Name:www Data:' || REPLACE(SUBSTR(pWebsite,9),'editor','custom') || '</p>'
+                  END ||
                   '<table role="presentation" border="0" cellpadding="0" cellspacing="0" class="btn btn-primary" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; box-sizing: border-box; width: 100%; min-width: 100%;" width="100%">' ||
                     '<tbody>' ||
                       '<tr>' ||
@@ -284,7 +290,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
                                 CASE pAuthMethod
                                     WHEN 'magic' THEN '<a href="' || pAuthData || '" target="_blank" style="border: solid 2px #0867ec; border-radius: 4px; box-sizing: border-box; cursor: pointer; display: inline-block; font-size: 16px; font-weight: bold; margin: 0; padding: 12px 24px; text-decoration: none; text-transform: capitalize; background-color: #0867ec; border-color: #0867ec; color: #ffffff;">Login</a>'
                                     WHEN 'passcode' THEN '<span style="border: solid 2px #0867ec; border-radius: 4px; box-sizing: border-box; display: inline-block; font-size: 24px; letter-spacing: 8px; font-weight: bold; margin: 0; padding: 12px 24px; text-transform: capitalize; background-color: #0867ec; border-color: #0867ec; color: #ffffff;">' || pAuthData || '</span>'
-                                    WHEN 'website' THEN '<a href="' || pWebsite || '" target="_blank" style="border: solid 2px #0867ec; border-radius: 4px; box-sizing: border-box; cursor: pointer; display: inline-block; font-size: 16px; font-weight: bold; margin: 0; padding: 12px 24px; text-decoration: none; text-transform: capitalize; background-color: #0867ec; border-color: #0867ec; color: #ffffff;">' || SUBSTR(pWebsite,1,INSTR(pWebsite,'?')-1) || '</a>'
+                                    WHEN 'website' THEN '<span style="border: solid 2px #0867ec; border-radius: 4px; box-sizing: border-box; display: inline-block; font-size: 24px; letter-spacing: 8px; font-weight: bold; margin: 0; padding: 12px 24px; text-transform: capitalize; background-color: #0867ec; border-color: #0867ec; color: #ffffff;">Like this you can also access the editor site at https://editor.' || SUBSTR(apex_string_util.get_domain(pWebsite),1,INSTR(pWebsite,'-')-1) || '</span>'
                                 END ||
                                 '</td>' ||
                               '</tr>' ||
@@ -309,7 +315,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
                 '</tr>' ||
                 '<tr>' ||
                   '<td class="content-block powered-by" style="font-family: Helvetica, sans-serif; vertical-align: top; color: #9a9ea6; font-size: 16px; text-align: center;" valign="top" align="center">' ||
-                    'Engineered by Florent Meijer using <a href="https://docs.aws.amazon.com/ses/latest/dg/Welcome.html" style="color: #9a9ea6; font-size: 16px; text-align: center; text-decoration: none;">Amazon Simple Email Service</a>' ||
+                    'Engineered by Florent Meijer and Mark Brown using <a href="https://docs.aws.amazon.com/ses/latest/dg/Welcome.html" style="color: #9a9ea6; font-size: 16px; text-align: center; text-decoration: none;">Amazon Simple Email Service</a>' ||
                   '</td>' ||
                 '</tr>' ||
               '</table>' ||
