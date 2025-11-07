@@ -97,10 +97,10 @@ const loadScript = async (url, cloudName, uploadPreset, multiple) => {
 
 /*
 ** This module is initialized from CKEditor as a request to
-** 1) upload and optionally crop a single image, OR 
+** 1) upload and optionally crop a single image, OR
 ** 2) upload multiple images
 */
-export const init = (multiple) => {
+export const init = (multiple, clientAllowedFormats) => {
     const arrayToken = localStorage.getItem("refresh").split(".");
     const parsedToken = JSON.parse(atob(arrayToken[1]));
     const cloudName = parsedToken.cld_cloud_name;
@@ -113,6 +113,10 @@ export const init = (multiple) => {
         uploadPreset += '_crop';
     }
 
+    if (clientAllowedFormats==="pdf") {
+        uploadPreset = "ml_default";
+    }
+
     loadScript("https://upload-widget.cloudinary.com/latest/global/all.js", cloudName, uploadPreset, multiple)
         .then((result) => {
             console.log(result);
@@ -121,7 +125,8 @@ export const init = (multiple) => {
                 tags: [bodydata.articleid], 
                 multiple: multiple,
                 cropping: !multiple,
-                uploadPreset: uploadPreset
+                uploadPreset: uploadPreset,
+                clientAllowedFormats: clientAllowedFormats
             });
         })
         .catch((error) => handleError(error));
