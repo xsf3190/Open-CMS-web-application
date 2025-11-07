@@ -62,7 +62,7 @@ img {
   border-radius: var(--img-border-radius,1em);
 }
 
-img:not([alt]), img[alt=""] {
+img:not([alt]) {
 	border: dashed 10px red;
     border-radius: 0;
 }
@@ -715,29 +715,22 @@ dialog hr+span {
   color: green;
 }
 
-/* STYLES FOR CAROUSEL COMPONENT */
 
-.carousel {
-  --grid-auto-columns:25%;
-  padding-block-end:1rem;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: var(--grid-auto-columns);
-  gap: 1rem;
-  overflow-x: auto;
-  scrollbar-color: var(--color-primary) var(--color-primary-lightest);
-}
+/* STYLES FOR IMAGE SELECTION COMPONENT */
 
-.carousel li {
-  padding-block-start:1rem;
-}
-
-.carousel li.copied {
-  border-block-start: solid 5px green;
-}
-
-.carousel img {
-  border-radius: 8px;
+.data-table {
+  font-size: var(--step--2);
+  tr + tr {
+    border-block-start: 2px solid rebeccapurple;
+  }
+  img, svg {
+    width: 5rem;
+    height: 5rem;
+    object-fit: cover;
+  }
+  figcaption {
+    font-size: 70%;
+  }
 }
 
 
