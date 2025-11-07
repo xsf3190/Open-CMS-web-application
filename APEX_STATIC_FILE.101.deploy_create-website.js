@@ -28,6 +28,7 @@ const clickHandler = (e) => {
         return;
     }
     const sendresult = dialog_footer.querySelector(".send-result");
+    const loader = dialog_footer.querySelector(".loader");
 
     isSending = true;
     sendresult.textContent = e.target.getAttribute("data-loading-msg");
@@ -36,15 +37,18 @@ const clickHandler = (e) => {
     
     const formData = new FormData(form);
     const formObj = Object.fromEntries(formData);
+    loader.style.opacity=1;
+
     callAPI(endpoint, 'POST', formObj)
         .then((data) => {
             isSending = false;
-            
+            loader.style.opacity=0;        
             sendresult.replaceChildren();
             sendresult.insertAdjacentHTML('beforeend',data.link);
             sendresult.style.color = "green";
         })
         .catch((error) => {
+            loader.style.opacity=0;
             handleError(error);
         });
 };
