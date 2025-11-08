@@ -143,7 +143,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             '<span class="visually-hidden" aria-live="assertive" data-loading-msg="Creating new website, wait..."></span>' ||
             'CREATE WEBSITE' ||
         '</button>' ||
-        '<span class="send-result aria-live="assertive"></span>';
+        '<span class="send-result aria-live="assertive"></span>' ||
+        '<span class="loader icon"></span>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
