@@ -13,6 +13,15 @@ const selectHandler = async (e) => {
             handleError(error);
         }
     }
+    if (e.target.classList.contains("delete")) {
+        callAPI("upload-media/:ID/:PAGE","DELETE",{id:e.target.dataset.id})
+            .then(() => {
+                e.target.closest("tr").remove();
+            })
+            .catch((error) => {
+                handleError(error);
+            });
+    }
 };
 
 export const init = () => {
