@@ -301,8 +301,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_img_src t_img_src:=t_img_src();
 
     BEGIN
-        DELETE asset_used WHERE article_id_1=pArticleid;
-
         n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
 
         /* BUILD COLLECTION OF CLOUDINARY IMAGES FOUND IN HTML */
@@ -369,10 +367,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 'src="' || l_img_src(i).img_src || '"' || ' srcset="' || l_srcset || '"' || ' loading="' || l_loading || '"' || ' sizes="' || l_sizes || '"' || ' fetchpriority="' || l_fetchpriority || '"',
                 i,0);
         END LOOP;
-
-        FORALL i IN 1..l_img_src.COUNT
-            INSERT INTO asset_used (asset_id, article_id_1, article_id_2) 
-            VALUES (l_img_src(i).asset_id, pArticleid, l_img_src(i).article_id);
     END;
 
 
@@ -984,34 +978,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (C.published_at<C.last_published_at) THEN
                 pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'sites/'|| pSiteId || '/deploys/' || C.id, pMethod=>'DELETE', pData=>l_clob);
             END IF;
-        END LOOP;
-
-        /*
-        ** DELETE UPLOADED ASSETS NOT USED IN ANY WEBSITE PAGE
-        */
-        FOR C IN (
-            WITH unused_assets AS 
-            (
-                SELECT a.id
-                  FROM asset a, website_article wa
-                 WHERE wa.website_id=pWebsiteId
-                   AND a.article_id=wa.article_id
-                MINUS
-                SELECT u.asset_id
-                  FROM asset_used u, website_article wa1, website_article wa2
-                 WHERE wa1.website_id=pWebsiteId
-                   AND wa1.article_id=u.article_id_1
-                   AND wa2.website_id=pWebsiteId
-                   AND wa2.article_id=u.article_id_2
-            )
-            SELECT a.id, a.cld_cloud_name, a.public_id, u.cld_api_key, u.cld_api_secret
-              FROM unused_assets, asset a, users u
-             WHERE a.id=unused_assets.id
-               AND u.cld_cloud_name=a.cld_cloud_name
-        ) LOOP
-            pck_core.log('Deployment "would" delete asset:' || C.id || ' public_id:'|| C.public_id);
-            -- DELETE asset WHERE id=C.id;
-            -- pck_media.DeleteAsset(pCldCloudName=>C.cld_cloud_name, pPublicId=>C.public_id, pCldApiKey=>C.cld_api_key, pCldApiSecret=>C.cld_api_secret);
         END LOOP;
     END;
 
