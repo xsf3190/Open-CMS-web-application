@@ -14,6 +14,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE getPages(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
+    PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB);
+    --
     PROCEDURE updateColor(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
@@ -407,10 +409,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         pck_core.log_error(pStatus);
     END;
 
+    /* 
+    **  UPDATE ASSET_USED TABLE FOR ALL CLOUDINARY ASSETS INCLUDED IN CONTENT
+    */
+    PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB) IS
+        l_res_regex VARCHAR2(50):='"https://res.cloudinary.com/(.+?)/(.+?)"';
+        l_cld_cloud_name asset.cld_cloud_name%type;
+        l_public_id asset.public_id%type;
+        n PLS_INTEGER;
 
+        TYPE t_asset_id IS TABLE OF asset.id%type;
+        l_asset_id t_asset_id:=t_asset_id();
+    BEGIN
+        n:=NVL(regexp_count(pHtml,l_res_regex),0);
+        FOR i IN 1..n LOOP
+            l_cld_cloud_name:=regexp_substr(pHtml,l_res_regex,1,i,null,1);
+            l_public_id:=regexp_substr(pHtml,l_res_regex,1,i,null,2);
+            l_public_id:=REPLACE(SUBSTR(l_public_id,INSTR(l_public_id,'/',-1)+1),'.pdf');
+            
+            -- dbms_output.put_line(' l_cld_cloud_name:'||l_cld_cloud_name||' l_public_id:'||l_public_id);
+            FOR C IN (
+                SELECT id FROM asset WHERE cld_cloud_name=l_cld_cloud_name AND public_id=l_public_id
+            ) LOOP
+                l_asset_id.EXTEND;
+                l_asset_id(l_asset_id.COUNT):=C.id;
+                -- dbms_output.put_line('C.id:'||C.id||' l_cld_cloud_name:'||l_cld_cloud_name||' l_public_id:'||l_public_id);
+            END LOOP;
+        END LOOP;
+        
+        DELETE asset_used WHERE article_id=pArticleid;
+        FORALL i IN 1..l_asset_id.COUNT
+            INSERT INTO asset_used (asset_id, article_id) 
+            VALUES (l_asset_id(i), pArticleid);
+    END;
 
     /* 
-    **  UPDATE CONTENT RECEIVED FROM CKEDITOR. SET FLAG ON WEBSITE IF HOME PAGE HEADER / FOOTER UPDATED
+    **  UPDATE CONTENT RECEIVED FROM CKEDITOR. 
+    **  SET FLAG ON WEBSITE IF THE HOME PAGE HEADER OR FOOTER UPDATED
     */
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -428,12 +463,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                   FROM website_article
                  WHERE website_id=pWebsiteId 
                    AND article_id=pArticleid 
-                   AND display_order=(
-                        SELECT MAX(display_order) 
-                          FROM website_article
-                         WHERE website_id=pWebsiteId 
-                           AND article_id=pArticleid 
-                        )
+                   AND display_order=1
                 );
         END;
     BEGIN
@@ -459,6 +489,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        body_html=l_html,
                        updated_date = current_timestamp
                  WHERE id=pArticleId;
+
+                setAssetUsed(pArticleId, l_html);
 
             WHEN 'footer' THEN
                 UPDATE website_article 
