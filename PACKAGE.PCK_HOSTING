@@ -304,7 +304,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
                 /* DELETE ARTICLE (CASCADES TO ASSET AND WEBSITE_ARTICLE) */
                 DELETE article WHERE id=l_website_articles(i);
-                DELETE asset_used WHERE article_id_1=l_website_articles(i);
+                DELETE asset_used WHERE article_id=l_website_articles(i);
                 DELETE page_hit WHERE article_id=l_website_articles(i);
                 DELETE website_article_cwv WHERE article_id=l_website_articles(i);
 
