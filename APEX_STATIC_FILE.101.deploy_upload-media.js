@@ -25,7 +25,7 @@ const createWidget =  async (cloudName, uploadPreset, multiple) => {
         multiple: multiple,
         cropping: !multiple,
         singleUploadAutoClose: false,
-        clientAllowedFormats: ['image','video','audio','zip','pdf'],
+        clientAllowedFormats: ['image','zip','pdf'],
         maxFiles: 10
     },
     (error, result) => {
@@ -126,7 +126,7 @@ export const init = (multiple, clientAllowedFormats) => {
                 multiple: multiple,
                 cropping: !multiple,
                 uploadPreset: uploadPreset,
-                clientAllowedFormats: clientAllowedFormats
+                // clientAllowedFormats: clientAllowedFormats
             });
         })
         .catch((error) => handleError(error));
