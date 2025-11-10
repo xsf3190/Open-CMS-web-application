@@ -55,8 +55,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             l_json:= new JSON_OBJECT_T;
             l_json.put('success',true);
             l_json.put('header', '<small>Problem publishing website</small>');
-            l_json.put('article', '<h4>Someone else is currently deploying</h4>');
-            l_json.put('footer', '<smallTry again later OR sign up for Free account at <a href="https://netlify.com">Netlify</a></small>');
+            l_json.put('article', '<h4>Someone else is currently deploying on this shared platform</h4>');
+            l_json.put('footer', '<small>Try again later</small>');
             l_json.put('stop', TRUE);
             apex_util.prn(l_json.to_clob,false);
             RETURN;
@@ -253,14 +253,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
+        l_nav LONG;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
         l_header:='<small>Add / Delete pages, change navigation labels.</small>';
+        
+        l_nav:=pck_deploy.buildNav(pWebsiteId, pArticleId);
+        IF (l_nav IS NULL) THEN
+            FOR C IN (
+                SELECT navigation_label, collection_type FROM website_article WHERE website_id=pWebsiteId AND article_id=pArticleId
+            ) LOOP
+                l_nav:='<nav><ul role="list"><li><a href="/" aria-current="page" data-id="' || pArticleId || '" data-collection="' || C.collection_type || '">' || C.navigation_label || '</a></li></ul></nav>';
+            END LOOP;
+        END IF;
 
         l_article:=
-            pck_deploy.buildNav(pWebsiteId, pArticleId) ||
+            l_nav ||
             '<fieldset class="flex-items">' ||
                 '<div>' ||
                     '<label for="navigation-label">Navigation Label</label>' ||
