@@ -222,8 +222,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         /*
         ** CREATE WEBSITE AND RELATED TABLE ROWS COPYING FROM CURRENT WEBSITE / PAGE
         */
-        INSERT INTO website (id, domain_name, user_id, logo, favicon, esm_library, contact_email, netlify_site_id, netlify_site_id_custom)
-        SELECT l_new_website_id, l_domain, user_id, logo, favicon, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom
+        INSERT INTO website (id, domain_name, user_id, css, logo, favicon, esm_library, contact_email, netlify_site_id, netlify_site_id_custom)
+        SELECT l_new_website_id, l_domain, user_id, css, logo, favicon, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom
           FROM website
          WHERE id=pWebsiteid;
 
@@ -231,11 +231,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         SELECT l_new_website_id, context, font_id, opsz, slnt, wdth, wght
           FROM website_font
          WHERE website_id=pWebsiteId;
+
+        INSERT INTO website_fontface (website_id, context, font_family, font_style, font_weight, font_stretch, src_url, created_date, api_url, deploy_filename)
+        SELECT l_new_website_id, context, font_family, font_style, font_weight, font_stretch, src_url, created_date, api_url, deploy_filename
+          FROM website_fontface
+         WHERE website_id=pWebsiteId;
         
         INSERT INTO article (id, body_html, author_user_id)
         SELECT l_new_article_id, body_html, author_user_id
           FROM article
          WHERE id=pArticleid;
+
+        INSERT INTO asset_used (article_id, asset_id)
+        SELECT l_new_article_id, asset_id
+          FROM asset_used 
+         WHERE article_id=pArticleid;
 
         INSERT INTO website_article (website_id, article_id, display_order, navigation_label, collection_type, header_html, footer_html)
         SELECT l_new_website_id, l_new_article_id, 1, navigation_label, collection_type, header_html, footer_html
