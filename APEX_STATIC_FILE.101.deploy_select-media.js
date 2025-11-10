@@ -1,14 +1,16 @@
 /*
 **  SELECT MEDIA COPIES ITS URL TO CLIPBOARD. USER PASTES URL TO INSERT IMAGE IN CONTENT
 */
-import { dialog_article, initDialog } from "deploy_elements";
+import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 const selectHandler = async (e) => {
     /* click on <button class="copy"> */
+    const live=dialog_footer.querySelector("[aria-live]");
     if (e.target.classList.contains("copy")) {
         try {
             await navigator.clipboard.writeText(e.target.dataset.url);
+            live.textContent = e.target.dataset.file + " copied to clipboard";
         } catch (error) {
             handleError(error);
         }
@@ -17,6 +19,7 @@ const selectHandler = async (e) => {
         callAPI("upload-media/:ID/:PAGE","DELETE",{id:e.target.dataset.id})
             .then(() => {
                 e.target.closest("tr").remove();
+                live.textContent = e.target.dataset.file + " is permanently deleted";
             })
             .catch((error) => {
                 handleError(error);
