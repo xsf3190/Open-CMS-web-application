@@ -27,14 +27,13 @@ const clickHandler = (e) => {
         console.log("Prevent double sends");
         return;
     }
-    const sendresult = dialog_footer.querySelector(".send-result");
+    const live=dialog_footer.querySelector("[aria-live]");
     const loader = dialog_footer.querySelector(".loader");
 
     isSending = true;
-    sendresult.textContent = e.target.getAttribute("data-loading-msg");
+    live.textContent = e.target.dataset.processing;
 
     const form = output_dialog.querySelector("form");
-    
     const formData = new FormData(form);
     const formObj = Object.fromEntries(formData);
     loader.style.opacity=1;
@@ -43,9 +42,9 @@ const clickHandler = (e) => {
         .then((data) => {
             isSending = false;
             loader.style.opacity=0;        
-            sendresult.replaceChildren();
-            sendresult.insertAdjacentHTML('beforeend',data.link);
-            sendresult.style.color = "green";
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.link);
+            live.style.color = "green";
         })
         .catch((error) => {
             loader.style.opacity=0;
