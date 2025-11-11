@@ -1,5 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_MEDIA" IS
     --
+    PROCEDURE deleteArticleAssets(pArticleId IN article.id%type, pDeleteArticle IN OUT BOOLEAN);
+    --
     PROCEDURE DeleteAsset(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     FUNCTION getCloudinaryUrl(pCloudname IN VARCHAR2, pResourceType IN VARCHAR2, pPublicId IN VARCHAR2, pFormat IN VARCHAR2, pWidth IN INTEGER, pDimension IN NUMBER DEFAULT NULL) RETURN VARCHAR2;
@@ -58,9 +60,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
 
             l_json:= new JSON_OBJECT_T;
             l_json.put('success',true);
-            l_json.put('header', '<small>' || CASE WHEN l_nb_images=0 THEN 'Hint: Upload file or image first' ELSE 'Use this form to copy URL or delete unused file' END || '</small>');
+            l_json.put('header', '<small>' || CASE WHEN l_nb_images=0 THEN 'Hint: Upload file or image first' ELSE 'Use this form to copy URL or delete unused files' END || '</small>');
             l_json.put('article', l_thumbnails);
-            l_json.put('footer', '<small>' || l_nb_images || ' image' || CASE WHEN l_nb_images>1 THEN 's' END || '</small>');
+            l_json.put('footer', '<small aria-live="polite" style="color:green">' || l_nb_images || ' image' || CASE WHEN l_nb_images>1 THEN 's' END || '</small>');
             apex_util.prn(l_json.to_clob,false);
         END IF;
 
@@ -68,6 +70,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
+    END;
+
+    /*
+     **  Delete All Cloudinary media assets tagged with pArticleId
+     **  Disconnect article if any of it's assets in use
+     */  
+    PROCEDURE deleteArticleAssets(pArticleId IN article.id%type, pDeleteArticle IN OUT BOOLEAN) IS
+        n PLS_INTEGER;
+    BEGIN
+        SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM asset a, asset_used au WHERE a.article_id=pArticleid AND au.asset_id=a.id AND au.article_id<>pArticleid);
+        pDeleteArticle:=n=0;
     END;
 
     /*
@@ -81,9 +94,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_resource_type asset.resource_type%type;
         l_cld_api_key users.cld_api_key%type;
         l_cld_api_secret users.cld_api_secret%type;
-        l_parm_names apex_application_global.VC_ARR2;
-        l_parm_values apex_application_global.VC_ARR2;
-        l_parm_index PLS_INTEGER;
         l_timestamp NUMBER:=trunc((cast(current_timestamp at time zone 'UTC' as date) - to_date('01-jan-1970','dd-mon-yyyy')) * (86400));
         l_signature VARCHAR2(100);
         l_string_to_sign VARCHAR2(2000);  
@@ -542,12 +552,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_file_name asset.public_id%type;
         n PLS_INTEGER:=0;
     BEGIN
+        /*
+        ** TABLE OF ASSETS UPLOADED TO PAGE WITH AVAILABLE COPY / DELETE OPTIONS.
+        ** ONLY UNUSED ASSETS CAN BE DELETED
+        */
         FOR C IN (
-            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, au.asset_id asset_used_id
-              FROM asset a, asset_used au
+            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, au.asset_id asset_used_id, w.domain_name, wa.navigation_label
+              FROM asset a, asset_used au, article ar, website_article wa, website w
              WHERE a.article_id=pArticleId
-               AND au.asset_id(+)=a.id
-             ORDER BY a.created_date DESC )
+               AND au.asset_id=a.id
+               AND ar.id=au.article_id
+               AND wa.article_id=NVL(ar.parent_id,au.article_id)
+               AND w.id=wa.website_id
+               UNION ALL               
+            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, null, null, null
+              FROM asset a
+             WHERE a.article_id=pArticleId
+               AND NOT EXISTS (SELECT null FROM asset_used au WHERE au.asset_id=a.id)
+             ORDER BY asset_used_id, created_date  DESC )
         LOOP
             n:=n+1;
             IF (n=1) THEN
@@ -555,7 +577,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 '<div style="overflow-x:auto;font-size:50%" tabindex="0" role="group" aria-labelledby="table-caption">' ||
                     '<table class="data-table">' ||
                         '<caption id="table-caption" style="text-align:left">Images and media files uploaded to this page</caption>' ||
-                        '<tr><th style="text-align:left">Uploaded File</th><th>Copy URL</th><th>Status</th></tr>';
+                        '<tr><th style="text-align:left">Uploaded File</th><th style="text-align:left">Where Used</th><th>Copy URL</th><th>Delete File</th></tr>';
             END IF;
             l_clob:=l_clob ||
             '<tr><td><figure role="group" aria-labelledby="fig' || n || '">';
@@ -593,11 +615,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 '</figcaption></figure></td>';
 
             l_clob:=l_clob ||
-                '<td><button type="button" class="button copy" data-url="' || l_data_url || '">COPY</button></td>';
+                '<td><small>' || CASE WHEN C.navigation_label IS NULL THEN 'UNUSED' ELSE C.domain_name || '/' || C.navigation_label END || '</small></td>';
+
+            l_clob:=l_clob ||
+                '<td><button type="button" class="button copy" data-url="' || l_data_url || '" data-file="' || l_file_name || '">COPY</button></td>';
             
             IF (C.asset_used_id IS NULL) THEN
                 l_clob:=l_clob ||
-                '<td><button type="button" class="button delete" data-id="' || C.id || '">DELETE</button></td>';
+                '<td><button type="button" class="button delete" data-id="' || C.id || '" data-file="' || l_file_name || '">DELETE</button></td>';
             ELSE
                 l_clob:=l_clob ||
                 '<td style="text-align:center">IN USE</td>';
