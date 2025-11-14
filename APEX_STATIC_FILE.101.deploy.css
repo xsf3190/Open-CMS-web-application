@@ -156,22 +156,6 @@ nav ul {
   --text-color: var(--nav-highlight-color);
 }
 
-/*
-** CURVE AND WAVE EFFECTS
-*/
-.curve {
-  --block-size: 2em;
-  display: block;
-  block-size: var(--block-size);
-  inline-size: 100%;
-  fill: var(--color-primary);
-}
-
-aside.login {
-  padding-block-start: 0.25em;
-  padding-inline-end: 0.5em;
-}
-
 /* 
 ** FONT SIZES
 */
@@ -751,52 +735,18 @@ summary {
     cursor: pointer;
 }
 
-/* DROPDOWN STYLES REPLACING DETAILS ELEMENT'S SUMMARY */
-.dropdown summary {
-  --icon-height: var(--space-xs);
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  min-height: 42px;
-  padding-inline-start: calc(42px - var(--icon-height));
-}
-
-.dropdown summary svg {
-  height: var(--icon-height);
-}
-
-.dropdown summary::-webkit-details-marker {
-  display: none; 
-}
-
-/* POPOVER ANCHOR BUTTONS */
-[popovertarget] {
-    cursor: pointer;
-    /* background-color: transparent; */
-    border: none;
-}
-
-/*
-** MENULIST
-*/
-
-[id=menulist] > li:has(.button) {
-    padding-inline: 0.5rem;
-}
-
-[id=menulist] .button {
-  --button-bg: transparent;
-  --button-color: black;
-  --button-hover-bg: black;
-  --button-hover-color: white;
-  --button-padding: 0.5em 1.5em;
-  --button-display: block;
-  margin-block: var(--space-3xs);
-  inline-size: 100%;
+/* POPOVER ANCHOR BUTTON */
+[popovertarget="menulist"] {
+  apearance:none;
+  background:none;
+  border:none;
+  display:flex;
+  align-items:center;
+  gap:0.5rem;
 }
 
 
-/* MENULIST POPOVER BUTTON */
+/* MENULIST HAMBURGER BUTTON SWITCHES TO CROSS WHEN ACTIVATED */
 
 [id=menulist-btn] {
     --icon-size: 32;
@@ -825,51 +775,97 @@ summary {
     transform: rotate(-45deg) translate(0, calc(var(--icon-translation-size) * -1px));
 }
 
-[id=menulist] li + li {
-  border-block-start: solid 1px black;
+/* MENULIST */
+[role="menu"] {
+  /* Anchor Positioning */
+  position: absolute;
+  position-area: end span-end;
+  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  
+  /* End of fade-out */
+  opacity: 0;
+  transform: scale(1);
+  transition: opacity, transform, overlay, display;
+  transition-behavior: allow-discrete;
+  transition-duration: 100ms;
+  transition-timing-function: linear;
+ 
+  /* Other properties */
+  flex-direction: column;
+  margin: 0.25rem 0;
+  padding: 0.25rem 0;
+  border: none;
+  border-radius: 0.25rem;
+  box-shadow: 8px 8px 15px -5px rgb(0 0 0 / 0.75);
+  
+  & >* {
+    appearance: none;
+    background: none;
+    border: none;
+    border-radius: 0;
+    color: black;
+    font-size: 0.875rem;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    display: flex;
+    gap: 0.5em;
+    align-items: center;
+    text-decoration: none;
+    
+    svg {
+      height: 1em;
+    }
+
+    &:focus {
+      outline: none;
+    }
+ 
+    &:is(:hover, :focus-visible) {
+      background-color: pink;
+    }
+    
+ 
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: -4px;
+    }
+    
+
+  }
+  
+  a {
+    display: block;
+    border-block-end: solid 1px black;
+  }
+  
+      
+    [aria-current="page"]::after {
+      content:" \2713 ";
+        color: green;
+   }
+  
 }
 
-[id=menulist]:popover-open {
-  max-height: 80dvh;
-  overflow: scroll;
+
+[role="menu"]:popover-open {
+/*   display: flex; */
+
+  /* End of fade-in and start of fade-out */
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  opacity: 1;
+  transform: scale(1);
 }
 
-[id=metrics] {
-  max-height: 80dvh;
-  max-width: 90vw;
-  overflow: auto;
-  font-family: system-ui;
-  font-size: var(--step--2);
+@starting-style {
+  /* Start of fade-in */
+  [role="menu"]:popover-open {
+    opacity: 0;
+    transform: scale(0.8);
+  }
 }
 
-[id=metrics] th {
-  position:sticky;
-  top: 0;
-  background-color: rebeccapurple;
-  color:white;
-}
 
-[id=metrics] th, [id=metrics] td {
-  padding: 0.2em;
-  border: solid 1px red;
-}
-
-/* DEFAULT POPOVER CONFIG */
-[popover] {
-    font-family:system-ui;
-    position: absolute;
-    padding: 0;
-    inset: auto;
-    right: anchor(right);
-    top: anchor(bottom);
-}
-
-.popover-right {
-    top: anchor(top);
-    left: anchor(right);
-    align-self: anchor-center;
-    margin-inline-start: .2em;
-}
 
 /* PLACE POPOVER TOP RIGHT OF VIEWPORT IF BROWSER NOT SUPPORTING ANCHOR API */
 @supports not (position-anchor: --anchor) {
