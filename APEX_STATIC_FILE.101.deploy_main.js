@@ -1,3 +1,5 @@
+export const metrics = [];
+
 const bodydata = document.body.dataset;
 const dropdown = document.querySelector("#menulist");
 const login_btn = dropdown.querySelector(".login-btn");
@@ -43,28 +45,6 @@ const closeHandler = (e) => {
 }
 
 dialog_close.addEventListener("click", closeHandler);
-/* 
-** 1. CLOSE DIALOG IF USER CLICKS CLOSE BUTTON 
-** 2. DYNAMIC LoaD AND EXECUTE MODULE
-*/
-const clickHandler = async (e) => {
-    let module_name = e.target.dataset.endpoint;
-    if (!module_name) return;
-
-    if (!document.querySelector("head > [type='importmap']")) {
-        await importmap();
-    }
-
-    
-    
-    module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
-    const module = await import(module_name)
-    .catch((error) => {
-        console.error(error);
-        console.error("Failed to load " + module_name);
-    });
-    module.init(e.target);
-}
 
 /*
 ** SET DROPDOWN ELEMENTS AND EVENT HANDLERS IF LOGGED IN
@@ -96,32 +76,17 @@ const importmap = async () => {
 }
 
 /*
-** CLICK HANDLER FOR ALL BUTTONS IN DROPDOWN MENULIST
-*/
-dropdown.addEventListener("click", clickHandler);
-
-/*
-** PROMOTION BUTTON IS FOR VISITOR TO CREATE THEIR OWN WEBSITE - SIMULATE  LOG IN WITH DOMAIN NAME PROMPT
-*/
-document.querySelector(".promotion")?.addEventListener("click", () => {
-    login_btn.dataset.promotion = true;
-    login_btn.click();
-})
-
-/*
 ** SETUP COLLECTION OF METRICS. 
 */
 let website_loaded = Number(sessionStorage.getItem("website_loaded"));
 if (!website_loaded) {
-    console.log("setting sessionStorage.website_loaded");
     website_loaded = Math.round(Date.now()/1000);
     sessionStorage.setItem("website_loaded",website_loaded);
+    console.log("sessionStorage.website_loaded",website_loaded);
 }
 
 let page_loaded = Date.now(),
     page_visit = 0;
-
-const metrics = [];
 
 const page_weight = () => {
   const total = metrics.reduce((accumulator,currentValue) => {
@@ -130,24 +95,10 @@ const page_weight = () => {
   return total;
 }
 
-const page_weight_kb = () => {
-    const k = 1024;
-    const i = Math.floor(Math.log(page_weight()) / Math.log(k));
-    return `${parseFloat((page_weight() / Math.pow(k, i)).toFixed(0))}KB`;
-}
-
 const total_requests = () => {
     return metrics.length;
 }
 
-/*
-** UPDATE METRICS IN DROPDOWN WHEN USER OPENS POPUP
-*/
-dropdown.addEventListener("toggle", (e) => {
-    if (e.newState==="open") {
-        dropdown.querySelector(".page-weight").textContent = page_weight_kb();
-    }
-})
 /*
 ** SEND PAGE VISIT METRICS TO DATABASE SERVER UNLESS LOGGED IN AS "ADMIN" OR "OWNER"
 */
@@ -156,10 +107,6 @@ const flushQueues = () => {
     //if (aud === "admin" || aud === "owner") return;
 
     if (page_loaded === 0) return;
-
-    // const website_loaded = Number(sessionStorage.getItem("website_loaded"));
-    /* This would happen if user manually clears sessionStorage for example */
-    // if (website_loaded === 0) return; 
 
     const json = {};
     json["website_id"] = bodydata.websiteid;
@@ -247,79 +194,14 @@ if (pages_edited_set.has(Number(document.body.dataset.articleid))) {
     load_edited_page();
 }
 
-const secondsToHms = (d) => {
-    d = Number(d);
-    const h = Math.floor(d / 3600);
-    const m = Math.floor(d % 3600 / 60);
-    const s = Math.floor(d % 3600 % 60);
-
-    const hDisplay = h > 0 ? h + (h == 1 ? " hour, " : " hours, ") : "";
-    const mDisplay = m > 0 ? m + (m == 1 ? " minute, " : " minutes, ") : "";
-    const sDisplay = s > 0 ? s + (s == 1 ? " second" : " seconds") : "";
-    return hDisplay + mDisplay + sDisplay; 
-}
 /*
-** TRACK RESOURCE TRANSFER SIZE ETC.
+** MAINTAIN ARRAY OF PERFORMANCE AND NAVIGATION DETAILS
 */
-let metric_count = 0;
-const metrics_popover_anchor = document.querySelector("[id='metrics-btn']");
-const metrics_details = document.querySelector("[id='metrics'] tbody");
 const observer = new PerformanceObserver((list) => {
     list.getEntries().forEach((entry) => {
         if (metrics.some( ({name}) => name===entry.name)) return;
-
-        metrics.push({entryType: entry.entryType, name:entry.name, transferSize:entry.transferSize, contentType: entry.contentType});
-        let type = entry.name.split(".").pop().toUpperCase();
-        let start = entry.startTime.toFixed() + ' ms';
-        let end = entry.responseEnd.toFixed() + " ms";
-        let redirect = (entry.redirectEnd - entry.redirectStart).toFixed() + " ms";
-        let cache = entry.deliveryType;
-        let dns = (entry.domainLookupEnd - entry.domainLookupStart).toFixed() + " ms";
-        let tcp = (entry.connectEnd - entry.connectStart).toFixed() + " ms";
-        let request = (entry.responseStart - entry.requestStart).toFixed() + " ms";
-        let response = (entry.responseEnd - entry.responseStart).toFixed() + " ms";
-        let duration = entry.duration.toFixed() + ' ms';
-
-        if (type==="WOFF2") type="FONT";
-        if (!cache) cache = "";
-
-        if (!["FONT","CSS","JS","JSON"].includes(type)) {
-            if (entry.contentType === "text/html" || entry.entryType.toUpperCase()==="NAVIGATION") {
-                type = "HTML";
-            } else if (entry.initiatorType === "img") {
-                type = "IMAGE";
-            } else {
-                type = entry.initiatorType.toUpperCase();
-            }
-        }
-
-        if (entry.startTime > 2000) {
-            start = secondsToHms(entry.startTime / 1000);
-            end = "";
-            // response = "";
-        }
-
-        if (type==="BEACON") {
-            redirect = ""; cache = ""; dns = ""; tcp = ""; request = ""; response = "";
-        }
-
-        metric_count++;
-        let tr = "<tr><td>" + type + "</td><td>" 
-            + start + "</td><td>" 
-            + end + "</td><td>" 
-            + redirect + "</td><td>" 
-            + cache + "</td><td>" 
-            + dns + "</td><td>" 
-            + tcp + "</td><td>" 
-            + request + "</td><td>" 
-            + response + "</td><td>" 
-            + duration + "</td><td>" 
-            + entry.transferSize + "</td></tr>";
-        tr  +=  "<tr style='border-block-end:3px solid black'><td></td><td colspan='10'><small>" + entry.name + "</small></td></tr>";
-        metrics_details.insertAdjacentHTML("beforeend",tr);
-        
+        metrics.push({entryType: entry.entryType, name:entry.name, transferSize:entry.transferSize, contentType: entry.contentType});        
     })
-    metrics_popover_anchor.textContent = page_weight_kb();
 });
 observer.observe({ type: "resource", buffered: true });
 observer.observe({ type: "navigation", buffered: true });
@@ -330,16 +212,10 @@ observer.observe({ type: "navigation", buffered: true });
 const addToVitalsQueue = ({name,value,rating}) => {
     console.log(name,value);
     vitalsQueue.add({name:name,value:value,rating:rating});
-    
-    const el = dropdown.querySelector("."+name);  
-    const valueRnd = name==="CLS" ? value.toFixed(2) : (value/1000).toFixed(2);
-    const units = name==="CLS" ? "" : "s";
-    el.textContent = valueRnd + units;
-    el.classList.add(rating);
 };
 
 /*
-** START CORE WEB VITALS COLLECTION
+** START CORE WEB VITALS COLLECTION USING SELF-HOSTED GOOGLE LIBRARY
 */
 import { onTTFB, onFCP, onLCP, onCLS, onINP } from "/javascript/deploy_web_vitals5.min.js";
 onTTFB(addToVitalsQueue);
@@ -352,3 +228,96 @@ onINP(addToVitalsQueue);
 ** GET WEB-vitAls TO EMIT
 */
 document.body.click();
+
+/*
+ * DROPDOWN MENU ACTIONS
+ * Applies keyboard interaction as described in https://www.w3.org/WAI/ARIA/apg/patterns/menubar/.
+ * Also ensures that menu is closed when a menu option is activated (on click or enter).
+ */
+class MenuNavigationHandler {
+  constructor(menuEl) {
+    this.menuEl = menuEl;
+    this.menuBtn = document.getElementById(this.menuEl.getAttribute("aria-labelledby")
+);
+    this.menuItems = Array.from(menuEl.children);
+    this.selectedItem = null;
+    this.selectedItemIndex = 0;
+    // Handle interaction with menu
+    this.menuEl.addEventListener("toggle", (event) => this.onMenuOpen(event));
+    this.menuEl.addEventListener("keydown", (event) => this.onMenuKeydown(event));
+    this.menuEl.addEventListener("click", (event) => this.onMenuClick(event));
+  }
+
+  onMenuOpen(event) {
+    if (event.newState === 'open') {
+      // Select first item when menu is opened
+      this.selectAndFocusMenuItem(0);
+    } else {
+      // Cleanup when menu is closed
+      this.selectedItem.tabIndex = -1;
+    }
+  }
+
+  onMenuKeydown(event) {
+    if (event.key === 'ArrowDown') {
+      this.selectNextMenuItem(event);
+    } else if (event.key === 'ArrowUp') {
+      this.selectPreviousMenuItem(event);
+    } else if (event.key === 'Tab') {
+      // On TAB or SHIFT+TAB, close panel after short delay.
+      setTimeout(() => this.menuEl.hidePopover(), 50);
+    }
+  }
+  
+  onMenuClick = async (event) => {
+    if (event.target.tagName==="A") return;
+    
+    let module_name = event.target.dataset.endpoint;
+    if (!module_name) return;
+
+    if (!document.querySelector("head > [type='importmap']")) {
+        await importmap();
+    }
+
+    module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
+    const module = await import(module_name)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+    });
+    module.init(event.target);
+  }
+
+  selectNextMenuItem(event) {
+    // Remove currently selected menu item from tab order
+    this.selectedItem.tabIndex = -1;
+    // Focus next menu item. If we're at the last item, then loop back to first.
+    if (this.selectedItemIndex < this.menuItems.length - 1) {
+      this.selectAndFocusMenuItem(this.selectedItemIndex + 1);
+    } else {
+      this.selectAndFocusMenuItem(0);
+    }
+    event.preventDefault();
+  }
+
+  selectPreviousMenuItem(event) {
+    // Remove currently selected menu item from tab order
+    this.selectedItem.tabIndex = -1;
+    // Focus previous menu item. If we're at the first item, then loop back to last.
+    if (this.selectedItemIndex > 0) {
+      this.selectAndFocusMenuItem(this.selectedItemIndex - 1);
+    } else {
+      this.selectAndFocusMenuItem(this.menuItems.length - 1);
+    }
+    event.preventDefault();
+  }
+
+  selectAndFocusMenuItem(index) {
+    this.selectedItemIndex = index;
+    this.selectedItem = this.menuItems[index];
+    this.selectedItem.focus();
+  }
+}
+
+// Initialize menu dropdown
+new MenuNavigationHandler(dropdown);
