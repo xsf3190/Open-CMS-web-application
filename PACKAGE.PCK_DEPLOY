@@ -126,33 +126,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND a.template_id=o.template_id
         ) LOOP
             l_html:=
-            '<div>' ||
-                '<button type="button" popovertarget="metrics" id="metrics-btn" style="anchor-name:--metrics-btn" aria-label="Page loading details">' ||
-                '00KB' ||
-                '</button>' ||
-                '<div popover id="metrics" style="position-anchor:--metrics-btn">' ||
-                    '<table>' ||
-                        '<thead><tr><th>Resource</th><th>Start</th><th>End</th><th>Redirect</th><th>Cache</th><th>DNS</th><th>TCP</th><th>Request</th><th>Response</th><th>Duration</th><th>Transfer</th></tr></thead>' ||
-                        '<tbody></tbody>' ||
-                    '</table>' ||
-                '</div>' ||
-                '<button type="button" popovertarget="menulist" id="menulist-btn" style="anchor-name:--menulist-btn" aria-label="dropdown menu">' ||
+            
+                '<button type="button" popovertarget="menulist" id="menulist-btn" style="anchor-name:--menulist-btn" aria-label="Actions menu">' ||
+                    'Menu' ||
                     '<svg height="1rem" viewBox="0 0 32 32" preserveAspectRatio="none" aria-hidden="true" focusable="false">' ||
                       '<rect class="top" x="0" y="0" width="32" height="6" fill="currentColor" />' ||
                       '<rect class="middle" x="0" y="13" width="32" height="6" fill="currentColor" />' ||
                       '<rect class="bottom" x="0" y="26" width="32" height="6" fill="currentColor" />' ||
                     '</svg>' ||
                 '</button>' ||
-                '<ul popover id="menulist" class="dropdown scrollable" role="list"  style="position-anchor:--menulist-btn">' ||
-                    '<li class="align-center"><small class="email"></small></li>' ||
-                    '<li class="align-center">' ||
-                        '<table>' ||
-                            '<thead><tr><th>TTFB</th><th>FCP</th><th>LCP</th><th>CLS</th><th>INP</th><th>WGT</th></tr></thead>' || 
-                            '<tbody><tr><td class="TTFB"></td><td class="FCP"></td><td class="LCP"></td><td class="CLS"></td><td class="INP"></td><td class="page-weight"></td></tr></tbody>' ||
-                        '</table></li>' ||
-                    '<li><button type="button" class="button login-btn" data-endpoint="' || C.uri_template || '">Log In</button></li>' ||
-                '</ul>' ||
-            '</div>';
+                '<div id="menulist" role="menu" aria-labelledby="menulist-btn" popover>' ||
+                    '<button role="menuitem" tabindex="-1" type="button">' ||
+                        '<svg viewBox="0 0 512 512"><path d="M471.3 6.7C477.7 .6 487-1.6 495.6 1.2 505.4 4.5 512 13.7 512 24l0 186.9c0 131.2-108.1 237.1-238.8 237.1-77 0-143.4-49.5-167.5-118.7-35.4 30.8-57.7 76.1-57.7 126.7 0 13.3-10.7 24-24 24S0 469.3 0 456C0 381.1 38.2 315.1 96.1 276.3 131.4 252.7 173.5 240 216 240l80 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-80 0c-39.7 0-77.3 8.8-111 24.5 23.3-70 89.2-120.5 167-120.5 66.4 0 115.8-22.1 148.7-44 19.2-12.8 35.5-28.1 50.7-45.3z" fill="green"/></svg>' ||
+                        'Ecological Impact' ||
+                    '</button>' ||
+                    '<button role="menuitem" tabindex="-1" type="button" class="login-btn" data-endpoint="' || C.uri_template || '">' ||
+                        '<svg viewBox="0 0 448 512"><path d="M224 248a120 120 0 1 0 0-240 120 120 0 1 0 0 240zm-29.7 56C95.8 304 16 383.8 16 482.3 16 498.7 29.3 512 45.7 512l356.6 0c16.4 0 29.7-13.3 29.7-29.7 0-98.5-79.8-178.3-178.3-178.3l-59.4 0z" fill="blue"/></svg>' ||
+                        'Log In' ||
+                    '</button>' ||
+                '</div>';
         END LOOP;
             
         RETURN(l_html);
