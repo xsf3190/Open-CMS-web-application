@@ -3,7 +3,7 @@
 /* ALSO USED TO CREATE A NEW WEBSITE                              */
 /* ************************************************************** */
 
-import { login_dialog, login_btn, email, dropdown, bodydata, getJWTClaim } from "deploy_elements";
+import { login_dialog, login_btn, dropdown, bodydata, getJWTClaim } from "deploy_elements";
 
 const form = login_dialog.querySelector("form");
 const emailInput = form.querySelector("[name='email']");
@@ -19,7 +19,6 @@ const loader = form.querySelector(".loader");
 const dialog_close = login_dialog.querySelector(".close");
 
 let endpoint, intervalId;
-let domain = false;
 
 export const init = (element) => {
     if (element.textContent==="Log Out") {
@@ -31,11 +30,6 @@ export const init = (element) => {
         });
         login_btn.textContent = "Log In";
         return;
-    }
-    if (login_btn.dataset.promotion) {
-        domain = true;
-        login_dialog.querySelector("h2").textContent = "Create My Website";
-        delete login_btn.dataset.promotion;
     }
     endpoint = element.dataset.endpoint;
     form.reset();
@@ -66,7 +60,7 @@ const callAuthAPI = async (method, data) => {
     let headers = new Headers();
     headers.append("Content-Type", "application/json");
     headers.append("url", window.location.hostname);
-    headers.append("email", email.textContent);
+    headers.append("email", emailInput.value);
     
     let config = {method: method, headers: headers};
     if (method==="POST" || method==="PUT") {
@@ -151,19 +145,14 @@ sendmail_magic.addEventListener("click", () => {
     }
     form.querySelector("[name='url']").value = window.location.hostname;
     form.querySelector("[name='request_type']").value = "magic";
-    if (domain) {
-        form.querySelector("[name='domain']").value = emailInput.value;
-    }
     const formData = new FormData(form);
     const formObj = Object.fromEntries(formData);
     callAuthAPI("POST", formObj)
         .then((data) => {
             sendmail_msg.textContent = data.message;
             sendmail_msg.style.color = "green";
-            if (!domain) {
-                clearInterval(intervalId);
-                intervalId = setInterval(checkAuthStatus,3000, formObj);
-            }
+            clearInterval(intervalId);
+            intervalId = setInterval(checkAuthStatus,3000, formObj);
         })
         .catch((error) => {
             sendmail_msg.textContent = error;
@@ -175,21 +164,11 @@ sendmail_magic.addEventListener("click", () => {
 ** USER LOGGED IN. SET NEW TOKENS IN STORAGE AND MEMORY. UPDATE DROPDOWN MENULIST.
 */
 const setTokens = (data) => {
-    
     localStorage.setItem("refresh",data.refresh);
-    localStorage.setItem("menulist",data.menulist);
-  
+    localStorage.setItem("menulist",data.menulist);  
     sessionStorage.setItem("token",data.token);
-
-    dropdown.querySelectorAll("li:nth-child(n+4)").forEach((item) => {
-        item.remove();
-    });
     dropdown.insertAdjacentHTML('beforeend',data.menulist);
-
-    email.textContent = getJWTClaim("sub") + " (" + getJWTClaim("aud") + ")";
-  
-    login_btn.textContent = "Log Out";
-    email.classList.remove("visually-hidden");
+    login_btn.textContent = getJWTClaim("sub");
 }
 
 /* 
@@ -258,27 +237,13 @@ validate_passcode.addEventListener("click", (e) => {
   
     let query = "?request=passcode&user=" + e.target.dataset.userid 
             + "&verify=" + form.querySelector("[name='passcode']").value;
-    if (domain) {
-        query+="&domain=" + form.querySelector("[name='email']").value;
-        loader.classList.remove("visually-hidden");
-        const footer = form.querySelector("footer");
-        footer.replaceChildren();
-        footer.insertAdjacentHTML("beforeend","<span>Building website...</span>");
-    } else {
-        query+="&domain=NO";
-    }
     callAuthAPI("GET", query)
         .then((data) => {
-            /* data.url is the editor website if requested */
-            if (data.url) {
-                window.location.replace(data.url);
-            } else {
-                setTokens(data);
-                validate_msg.textContent = "Logged In!";
-                validate_msg.style.color = "green";
-                validate_passcode.classList.add("visually-hidden");
-                validate_passcode.previousElementSibling.classList.add("visually-hidden");
-            }
+            setTokens(data);
+            validate_msg.textContent = "Logged In!";
+            validate_msg.style.color = "green";
+            validate_passcode.classList.add("visually-hidden");
+            validate_passcode.previousElementSibling.classList.add("visually-hidden");
         })
         .catch((error) => {
             if (domain) {
