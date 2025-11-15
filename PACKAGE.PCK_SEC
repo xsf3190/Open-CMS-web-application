@@ -595,6 +595,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_scope VARCHAR2(7);
         l_cld_cloud_name users.cld_cloud_name%type:=pCldCloudName;
         l_cld_upload_preset users.cld_upload_preset%type:=pCldUploadPreset;
+        l_json JSON_OBJECT_T;
     BEGIN
         SELECT client_secret 
           INTO l_jwt_enc_key
@@ -640,12 +641,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         INSERT INTO refresh_token(user_id, website_id, token_issued) VALUES (pUserId, pWebsiteId, l_new_refresh_hash);
         
         APEX_JSON.open_object;
-        APEX_JSON.write ('success', TRUE);
-        APEX_JSON.write ('token', l_new_token);
-        APEX_JSON.write ('refresh', l_new_refresh);
-        APEX_JSON.write ('menulist', getMenulist(pWebsiteId, l_scope, OWA_UTIL.get_cgi_env('url')));
-        APEX_JSON.write ('dialogs',  buildContentDialog || buildInfoDialog || buildMessageDialog || buildErrorDialog);
-        APEX_JSON.close_object;
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('token', l_new_token);
+        l_json.put('refresh', l_new_refresh);
+        l_json.put('menulist', getMenulist(pWebsiteId, l_scope, OWA_UTIL.get_cgi_env('url')));
+        apex_util.prn(l_json.to_clob,false);
             
     END;
 
