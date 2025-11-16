@@ -46,6 +46,10 @@ if (jwt) {
     console.log("Refresh token exists. User is logged in as " + aud);
 }
 
+// Initialize menu dropdown
+import { MenuNavigationHandler } from "/javascript/deploy_menulist.min.js";
+new MenuNavigationHandler(dropdown);
+
 /*
 ** INJECT IMPORTMAP IF USER SIGNALS INTENT TO EXECUTE ES MODULE
 */
@@ -213,6 +217,3 @@ onINP(addToVitalsQueue);
 ** GET WEB-vitAls TO EMIT
 */
 document.body.click();
-
-// Initialize menu dropdown
-new MenuNavigationHandler(dropdown);
