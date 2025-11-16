@@ -1,9 +1,8 @@
 /* ************************************************************** */
 /* LOGIN HANDLER - AUTHENTICATION BY EMAIL USING LINK OR PASSCODE */
-/* ALSO USED TO CREATE A NEW WEBSITE                              */
 /* ************************************************************** */
 
-import { login_dialog, login_btn, dropdown, bodydata, getJWTClaim } from "deploy_elements";
+import { login_dialog, login_btn, dropdown, bodydata, MenuNavigationHandler } from "deploy_elements";
 
 const form = login_dialog.querySelector("form");
 const emailInput = form.querySelector("[name='email']");
@@ -167,8 +166,10 @@ const setTokens = (data) => {
     localStorage.setItem("refresh",data.refresh);
     localStorage.setItem("menulist",data.menulist);  
     sessionStorage.setItem("token",data.token);
-    dropdown.insertAdjacentHTML('beforeend',data.menulist);
-    login_btn.textContent = getJWTClaim("sub");
+    dropdown.replaceChildren();
+    dropdown.insertAdjacentHTML('afterbegin',data.menulist);
+    // Initialize menu dropdown
+    new MenuNavigationHandler(dropdown);
 }
 
 /* 
