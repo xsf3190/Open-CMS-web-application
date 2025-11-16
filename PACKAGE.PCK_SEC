@@ -34,12 +34,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    FUNCTION createWebsite(pWebsiteId IN website.id%type, pEmail IN users.email%type, pUserId IN users.id%type, pEncKey IN user_ords_clients.client_secret%type, 
-                pcldCloudName IN users.cld_cloud_name%type, pCldUploadPreset IN users.cld_upload_preset%type) RETURN VARCHAR2;
-    --
     PROCEDURE getMenulist(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
-    PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pDomain IN VARCHAR2, pStatus OUT NUMBER);
+    PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER);
     --
     PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -186,7 +183,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_user_id users.id%type;
         l_ords_user_id user_ords_clients.id%type;
         l_jwt_enc_key user_ords_clients.client_secret%type;
-        l_domain website.domain_name%type;
         l_token VARCHAR2(4000);
         l_digits   CONSTANT VARCHAR2(10) := '0123456789';
         l_passcode VARCHAR2(6);
@@ -198,25 +194,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_return_message VARCHAR2(100);
         
     BEGIN
-        SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id, j.domain
-          INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id, l_domain
-          FROM user_ords_clients o, users u, JSON_TABLE(pBodyText, '$' COLUMNS email, url, request_type, domain) j
+        SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id
+          INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id
+          FROM user_ords_clients o, users u, JSON_TABLE(pBodyText, '$' COLUMNS email, url, request_type) j
          WHERE o.name(+)=LOWER(j.email)
            AND u.email(+)=LOWER(j.email);
-
-        /* NEW WEBSITE REQUESTS PUT EMAIL ADDRESS IN THE domain FIELD, WHICH WE CONVERT TO A PROPER SUBDOMAIN NAME */
-        IF (l_domain IS NOT NULL) THEN
-            l_domain:=pck_hosting.getEditorDomain(l_email);           
-            IF (pck_hosting.urlExists(l_domain || '.netlify.app')) THEN
-                APEX_JSON.open_object;
-                APEX_JSON.write ('success', FALSE);
-                APEX_JSON.write ('message', l_domain || '.netlify.app already exists');
-                APEX_JSON.close_object;
-                pStatus:=200;
-                RETURN;
-            END IF;
-            pck_core.log('Creating website converting email "' || l_email || '" to subdomain "' || l_domain || '"');
-        END IF;
 
         IF (l_ords_user_id=0) THEN
             OAUTH.create_client(
@@ -244,12 +226,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_token_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
 
                 IF (l_user_id=0) THEN
-                    INSERT INTO users (email, login_status, token, domain) VALUES (l_email, 'AUTH WAITING', l_token_hash, l_domain) RETURNING id INTO l_user_id;
+                    INSERT INTO users (email, login_status, token) VALUES (l_email, 'AUTH WAITING', l_token_hash) RETURNING id INTO l_user_id;
                 ELSE
-                    UPDATE users SET login_status='AUTH WAITING', token=l_token_hash, domain=l_domain, updated_date=current_timestamp WHERE id=l_user_id;
+                    UPDATE users SET login_status='AUTH WAITING', token=l_token_hash, updated_date=current_timestamp WHERE id=l_user_id;
                 END IF;
                 
-                l_sendmail_link:=pck_core.getRestUrl || 'authenticate/' || pWebsiteId || '?request=magic&user=' || l_user_id || '&verify=' || l_token || '&domain=' || NVL(l_domain,'NO');
+                l_sendmail_link:=pck_core.getRestUrl || 'authenticate/' || pWebsiteId || '?request=magic&user=' || l_user_id || '&verify=' || l_token;
                 l_sendmail_body:=pck_email.emailTemplate(l_request_type, l_url, l_sendmail_link);
 
             WHEN 'passcode' THEN
@@ -261,11 +243,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_passcode_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_passcode,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
 
                 IF (l_user_id=0) THEN
-                    INSERT INTO users (email, login_status, passcode, domain) 
-                    VALUES (l_email, 'AUTH WAITING', l_passcode_hash, l_domain)
+                    INSERT INTO users (email, login_status, passcode) 
+                    VALUES (l_email, 'AUTH WAITING', l_passcode_hash)
                     RETURNING id INTO l_user_id;
                 ELSE
-                    UPDATE users SET login_status='AUTH WAITING', passcode=l_passcode_hash, domain=l_domain, updated_date=current_timestamp WHERE id=l_user_id;
+                    UPDATE users SET login_status='AUTH WAITING', passcode=l_passcode_hash, updated_date=current_timestamp WHERE id=l_user_id;
                 END IF;
 
                 l_sendmail_body:=pck_email.emailTemplate(l_request_type, l_url, l_passcode);
@@ -332,11 +314,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_publish_live_button VARCHAR2(1000);
         n PLS_INTEGER;
 
-        FUNCTION addButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pEnv IN VARCHAR2 DEFAULT null) RETURN VARCHAR2 IS
+        FUNCTION addButton(pRoute IN VARCHAR2, pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pEnv IN VARCHAR2 DEFAULT null) RETURN VARCHAR2 IS
             l_class VARCHAR2(30);
         BEGIN
             l_class:=LOWER(REPLACE(pLabel,' ','-'));
-            RETURN ('<li><button type="button" class="button ' || l_class || '"' ||
+            RETURN ('<button type="button" role="menuitem" tabindex="-1" class="' || l_class || '"' ||
                     ' data-endpoint="' || pUriTemplate || '"' ||
                     ' data-method="' ||pMethod || '"' ||
                     CASE WHEN pEnv IS NOT NULL THEN
@@ -344,8 +326,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     END ||
                     ' data-reports="' || l_reports || '"' ||
                     '>' || 
+                    '<svg viewBox="0 0 512 512"><use href="#' || pRoute || '"/></svg>' ||
                     pLabel || 
-                    '</button></li>');
+                    '</button>');
         END;
 
     BEGIN
@@ -381,18 +364,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_reports:='visits|table;trends|graph;performance|graph;engagement|table;location|table;browser|table';
             END IF;
             IF (l_test_site) THEN
-                l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label, CASE WHEN C.route='publish-website' THEN 'TEST' END);
+                l_menulist:=l_menulist || addButton(C.route, C.uri_template, C.method, C.label, CASE WHEN C.route='publish-website' THEN 'TEST' END);
             ELSIF (C.priority=1) THEN
-                l_menulist:=l_menulist || addButton(C.uri_template, C.method, C.label);
+                l_menulist:=l_menulist || addButton(C.route, C.uri_template, C.method, C.label);
             END IF;
             IF (l_netlify_site_id_custom IS NOT NULL AND C.route='publish-website') THEN
-                l_publish_live_button:=addButton(C.uri_template, C.method, 'Publish Live Site', 'LIVE');
+                l_publish_live_button:=addButton(C.route, C.uri_template, C.method, 'Publish Live Site', 'LIVE');
             END IF;
         END LOOP;
 
         IF (l_test_site) THEN
             l_menulist:=l_menulist || 
-            '<li><a class="button" data-button-variant="nav-item" href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a></li>' ||
+            '<a href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a>' ||
             l_publish_live_button;
         END IF;
 
@@ -535,52 +518,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     END;
 
     /*
-    ** CREATE WEBSITE FOR AUTHENTICATED VISITOR 
-    */
-    FUNCTION createWebsite(pWebsiteId IN website.id%type, pEmail IN users.email%type, pUserId IN users.id%type, pEncKey IN user_ords_clients.client_secret%type, 
-                pcldCloudName IN users.cld_cloud_name%type, pCldUploadPreset IN users.cld_upload_preset%type) RETURN VARCHAR2 IS
-        l_url VARCHAR2(1000);
-        l_issuer VARCHAR2(15);
-        l_scope VARCHAR2(7);
-        l_new_token_domain VARCHAR2 (4000);
-        l_new_refresh_domain VARCHAR2 (4000);
-        --l_new_refresh_domain_hash refresh_token.token_issued%type;
-    BEGIN
-        -- create website on hosting platform returning its URL
-        pck_hosting.createWebsite(pWebsiteId, pUserid, pEmail, l_url);
-
-        -- issue JWT tokens to be attached to URL
-        l_issuer:='ORDS.'|| seq_website.currval;
-        l_scope:=getScope(seq_website.currval,pEmail);
-        l_new_token_domain:=apex_jwt.ENCODE (
-            p_iss       =>l_issuer,
-            p_sub       => pEmail,
-            p_aud       => l_scope,
-            p_jti       => pUserId,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => ACCESS_TOKEN_EXP,
-            p_signature_key => UTL_RAW.cast_to_raw (pEncKey)
-        ); 
-        l_new_refresh_domain:=apex_jwt.ENCODE (
-            p_iss       => l_issuer,
-            p_sub       => pEmail,
-            p_aud       => l_scope,
-            p_jti       => pUserId,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => REFRESH_TOKEN_EXP,
-            p_other_claims => '"cld_cloud_name":' || apex_json.stringify(pCldCloudName) || ',"cld_upload_preset":' || apex_json.stringify(pCldUploadPreset),
-            p_signature_key => UTL_RAW.cast_to_raw (pEncKey)
-        );
-
-        -- attach tokens as URL search parameters in order to auto-login the requesting user 
-        l_url:=l_url || '?refresh=' || l_new_refresh_domain || '&token=' || l_new_token_domain;
-        
-        --l_new_refresh_domain_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh_domain,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
-
-        RETURN (l_url);
-    END;
-
-    /*
     ** USER AUTHENTICATED SUCCESSFULLY 
     ** - CREATE FINGERPRINT
     ** - ISSUE NEW PAIR OF TOKENS TO RETURN TO CLIENT
@@ -656,7 +593,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     **  - FOR VERIFIED PASSCODE, RETURN JWT ACCESS AND REFRESH TOKENS
     **  - FOR VERIFIED TOKEN, MESSAGE IS SENT IN NEW WINDOWS TAB
     */
-    PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pDomain IN VARCHAR2, pStatus OUT NUMBER) IS
+    PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER) IS
         l_email users.email%type;
         l_domain users.domain%type;
         l_cld_cloud_name users.cld_cloud_name%type;
@@ -721,32 +658,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                             RETURN;
                 END;
                 
-                IF (pDomain='NO') THEN
-                    htp.p('<h1 style="font-family:system-ui;font-size:2rem;color:rebeccapurple">Authenticated Successfully</h1>');
-                ELSE
-                    l_url:=createWebsite(pWebsiteId, l_email, pUserid, l_jwt_enc_key, l_cld_cloud_name, l_cld_upload_preset);
-                    l_url_base:=SUBSTR(l_url,1,INSTR(l_url,'?')-1);
-                    l_sendmail_body:=pck_email.emailTemplate('website', l_url_base);
-                    pck_email.sendmail(l_email, 'Link to your website ' || l_url_base, l_sendmail_body);
-                    htp.p('<div style="display:grid;place-items:center;block-size:30dvh">');
-                    htp.p('<h1 style="font-family:system-ui;font-size:5vmin;color:rebeccapurple">WEBSITE CREATED</h1>');
-                    htp.p('<a style="font-family:system-ui;font-size:5vmin;align-self:start;color:rebeccapurple;text-decoration:underline;text-underline-offset:25%;text-decoration-thickness:15%;" href="' || l_url || '">' || l_url_base || '</a>');
-                    htp.p('</div>');
-                END IF;
+                htp.p('<h1 style="font-family:system-ui;font-size:2rem;color:rebeccapurple">Authenticated Successfully</h1>');
             
             WHEN 'passcode' THEN
-                IF (pDomain='NO') THEN
-                    issueJWTTokens(pWebsiteId, l_email, pUserId, l_cld_cloud_name, l_cld_upload_preset);
-                ELSE
-                    l_url:=createWebsite(pWebsiteId, l_email, pUserid, l_jwt_enc_key, l_cld_cloud_name, l_cld_upload_preset);
-                    l_url_base:=SUBSTR(l_url,1,INSTR(l_url,'?')-1);
-                    l_sendmail_body:=pck_email.emailTemplate('website', l_url_base);
-                    pck_email.sendmail(l_email, 'Link to your website ' || l_url_base, l_sendmail_body);
-                    APEX_JSON.open_object;
-                    APEX_JSON.write ('success', TRUE);
-                    APEX_JSON.write ('url', l_url);
-                    APEX_JSON.close_object;
-                END IF;
+                issueJWTTokens(pWebsiteId, l_email, pUserId, l_cld_cloud_name, l_cld_upload_preset);
         END CASE;
 
         UPDATE users SET login_status='AUTH OK', last_login_date=current_timestamp, last_login_provider='JWT' WHERE id=pUserId;
