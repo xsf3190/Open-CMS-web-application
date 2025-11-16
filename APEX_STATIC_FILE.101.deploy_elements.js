@@ -66,6 +66,12 @@ export const initDialog = (data) => {
     output_dialog.showModal();
 }
 
+/*
+** INJECT IMPORTMAP IF USER SIGNALS INTENT TO EXECUTE ES MODULE
+*/
+const importmap = async () => {
+    
+}
 
 /*
  * DROPDOWN MENU ACTIONS
@@ -114,7 +120,14 @@ class MenuNavigationHandler {
     if (!module_name) return;
 
     if (!document.querySelector("head > [type='importmap']")) {
-        await importmap();
+       const bodydata = document.body.dataset;
+        console.log("Create importmap for " + bodydata.importmap);
+        const response = await fetch(bodydata.importmap);
+        const data = await response.json();
+        const im = document.createElement('script');
+        im.type = 'importmap';
+        im.textContent = JSON.stringify(data);
+        document.head.appendChild(im);
     }
 
     module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
@@ -122,6 +135,7 @@ class MenuNavigationHandler {
     .catch((error) => {
         console.error(error);
         console.error("Failed to load " + module_name);
+        return;
     });
     module.init(event.target);
   }
