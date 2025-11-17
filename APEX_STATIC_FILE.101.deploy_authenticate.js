@@ -20,16 +20,6 @@ const dialog_close = login_dialog.querySelector(".close");
 let endpoint, intervalId;
 
 export const init = (element) => {
-    if (element.textContent==="Log Out") {
-        sessionStorage.clear();
-        localStorage.clear();
-        email.classList.add("visually-hidden");
-        dropdown.querySelectorAll("li:nth-child(n+4)").forEach((item) => {
-            item.remove();
-        });
-        login_btn.textContent = "Log In";
-        return;
-    }
     endpoint = element.dataset.endpoint;
     form.reset();
     emailError.textContent = "";
@@ -247,9 +237,6 @@ validate_passcode.addEventListener("click", (e) => {
             validate_passcode.previousElementSibling.classList.add("visually-hidden");
         })
         .catch((error) => {
-            if (domain) {
-                loader.classList.add("visually-hidden");
-            }
             validate_msg.textContent = error;
             validate_msg.style.color = "red";
         });
