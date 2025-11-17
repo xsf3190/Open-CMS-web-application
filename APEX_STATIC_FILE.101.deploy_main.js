@@ -38,6 +38,7 @@ dialog_close.addEventListener("click", closeHandler);
 let aud = "";
 const jwt = localStorage.getItem("refresh");
 if (jwt) {
+    dropdown.replaceChildren();
     dropdown.insertAdjacentHTML('beforeend',localStorage.getItem("menulist"));
     const array = jwt.split(".");
     const parse = JSON.parse(atob(array[1]));
