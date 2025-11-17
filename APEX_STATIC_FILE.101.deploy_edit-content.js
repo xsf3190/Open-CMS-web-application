@@ -5,6 +5,7 @@
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
+let words;
 
 export const init = async (element) => {
     let CK_CSS, CK_JS;
@@ -363,6 +364,7 @@ export const init = async (element) => {
         wordCount: {
             onUpdate: stats => {
                 wordcount.textContent = `Word count: ${ stats.words }`;
+                words = stats.words;
             }
         },
         content: "main",
@@ -453,9 +455,8 @@ const page_id = Number(document.body.dataset.articleid);
 const saveData = async ( data, endpoint, id ) => {
 
     // callAPI(endpoint,'PUT', {body_html: data, word_count: wordcount.textContent, id: id})
-    callAPI(endpoint,'PUT', {body_html: data, id: id})
+    callAPI(endpoint,'PUT', {body_html: data, id: id, words: words})
         .then((data) => {
-            // editor_status.textContent = data.message;
             console.log(data.message);
             if (!pages_set.has(page_id)) {
                 pages_set.add(page_id);
