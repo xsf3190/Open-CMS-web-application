@@ -55,7 +55,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             l_json:= new JSON_OBJECT_T;
             l_json.put('success',true);
             l_json.put('header', '<small>Problem publishing website</small>');
-            l_json.put('article', '<h4>Someone else is currently deploying on this shared platform</h4>');
+            l_json.put('article', '<p>Someone else is currently deploying on this shared platform</p>');
             l_json.put('footer', '<small>Try again later</small>');
             l_json.put('stop', TRUE);
             apex_util.prn(l_json.to_clob,false);
