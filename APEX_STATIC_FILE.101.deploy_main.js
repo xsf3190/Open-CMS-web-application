@@ -33,7 +33,7 @@ const closeHandler = (e) => {
 dialog_close.addEventListener("click", closeHandler);
 
 /*
-** SET DROPDOWN ELEMENTS AND EVENT HANDLERS IF LOGGED IN
+** GET DROPDOWN MENU FROM LOCALSTORAGE IF USER LOGGED IN
 */
 let aud = "";
 const jwt = localStorage.getItem("refresh");
@@ -42,7 +42,6 @@ if (jwt) {
     dropdown.insertAdjacentHTML('beforeend',localStorage.getItem("menulist"));
     const array = jwt.split(".");
     const parse = JSON.parse(atob(array[1]));
-    // login_btn.textContent = parse.sub;
     aud = parse.aud;
     console.log("Refresh token exists. User is logged in as " + aud);
 }
