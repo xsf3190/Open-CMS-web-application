@@ -479,9 +479,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT REGEXP_SUBSTR(word_count,'(\d)+') word_count, body_html, id
+        SELECT words, body_html, id
           INTO l_word_count, l_html, l_id
-          FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (word_count, body_html CLOB, id));
+          FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (body_html CLOB, id, words));
 
         CASE l_id
             WHEN 'header' THEN
