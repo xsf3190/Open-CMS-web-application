@@ -2,7 +2,7 @@
 /* LOGIN HANDLER - AUTHENTICATION BY EMAIL USING LINK OR PASSCODE */
 /* ************************************************************** */
 
-import { login_dialog, login_btn, dropdown, bodydata, MenuNavigationHandler } from "deploy_elements";
+import { login_dialog, dropdown, bodydata, MenuNavigationHandler } from "deploy_elements";
 
 const form = login_dialog.querySelector("form");
 const emailInput = form.querySelector("[name='email']");
