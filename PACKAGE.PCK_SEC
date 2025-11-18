@@ -32,25 +32,108 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     g_session_user_id NUMBER;
     g_website_id NUMBER;
     --
+    --
+    PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE getMenulist(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
-    PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER);
+    FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data;
     --
-    PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    --
+    PROCEDURE logout(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE refreshOrdsEndpoints(pWebsiteId IN website.id%type);
     --
-    FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data;
-    --
     PROCEDURE updateCpuUsed(pUserid IN users.id%type, pCpuUsedStart IN users.cpu_used%type);
+    --
+    PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER);
     --
 END PCK_SEC;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
+
+    PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+        l_article LONG;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        l_article:=
+        '<table>' ||
+            '<caption>Platform Usage</caption>' ||
+            '<tr><th>Domain Name</th><th>Last Published Editor</th><th>Last Published Live</th><th>Pages</th><th>Words</th><th>Images</th></tr>';
+
+        FOR C IN (
+            SELECT w.domain_name, w.netlify_last_published, w.netlify_last_published_custom, 
+                    (SELECT COUNT(*) FROM website_article wa WHERE wa.website_id=w.id) nb_pages,
+                    (SELECT SUM(a.word_count) FROM website_article wa, article a WHERE wa.website_id=w.id AND a.id=wa.article_id) nb_words,
+                    (SELECT COUNT(*) FROM website_article wa, asset_used a WHERE wa.website_id=w.id AND a.article_id=wa.article_id) nb_images
+              FROM website w
+             WHERE w.user_id=l_session_data.user_id
+             ORDER BY 1
+        ) LOOP
+            l_article:=l_article ||
+            '<tr><td>' || C.domain_name || '</td><td>' || 
+                TO_CHAR(C.netlify_last_published,'dd.mm.yyyy hh24:mi') || '</td><td>' || 
+                TO_CHAR(C.netlify_last_published_custom,'dd.mm.yyyy hh24:mi') || '</td><td>' || 
+                C.nb_pages || '</td><td>' || 
+                C.nb_words || '</td><td>' || 
+                C.nb_images || '</td><td>' || 
+                '</tr>';
+        END LOOP;
+        l_article:=l_article ||
+        '</table>';
+
+        l_article:=l_article ||
+        '<button type="button" class="button logout">Log Out</button>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header', '<small>User Details</small>');
+        l_json.put('article', l_article);
+        l_json.put('footer', '<span aria-live="polite"></span>');
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+    END;
+
+    PROCEDURE logout(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+        l_dropdown LONG;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        /* Delete refresh tokens */
+        l_dropdown:=
+        '<button role="menuitem" tabindex="-1" type="button">' ||
+            '<span>&#127793;</span>' ||
+            'Ecology' ||
+        '</button>' ||
+        '<button role="menuitem" tabindex="-1" type="button" class="login-btn" data-endpoint="authenticate/ID">' ||
+            '<svg viewBox="0 0 512 512"><use href="#userinfo"/></svg>' ||
+            'Log In' ||
+        '</button>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('dropdown',l_dropdown);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+    END;
+
 
     /* 
     ** TEMPORARY SOLUTION TO POPULATE ENDPOINT TABLES
@@ -192,7 +275,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_sendmail_body LONG;
         l_sendmail_link VARCHAR2(500);
         l_return_message VARCHAR2(100);
-        
+        l_json JSON_OBJECT_T;
     BEGIN
         SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id
           INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id
@@ -260,12 +343,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         ELSE
             l_return_message:='Link sent to your inbox';
         END IF;
-        
-        APEX_JSON.open_object;
-        APEX_JSON.write ('success', TRUE);
-        APEX_JSON.write ('message', l_return_message);
-        APEX_JSON.write ('userid', l_user_id);
-        APEX_JSON.close_object;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('message',l_return_message);
+        l_json.put('userid',l_user_id);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
@@ -349,14 +432,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         refreshOrdsEndpoints(pWebsiteId);
 
         FOR C IN (
-            SELECT o.label, o.uri_template, SUBSTR(o.uri_template,1,INSTR(o.uri_template,'/')-1) route, o.method, o.priority
+            SELECT CASE WHEN o.label='userinfo' THEN pEmail ELSE o.label END label, o.uri_template, SUBSTR(o.uri_template,1,INSTR(o.uri_template,'/')-1) route, o.method, o.priority
               FROM api_endpoint a, role r, ords_endpoints o
              WHERE a.website_id=pWebsiteId 
                AND a.role_id=r.id 
                AND r.name=pScope
                AND a.template_id=o.template_id
-            --    AND INSTR(o.uri_template,'authenticate')=0
-             ORDER BY DECODE(route,'publish-website',1,'visits',2,'edit-content',3,'edit-pages',4,5)
+               AND INSTR(o.uri_template,'authenticate')=0
+             ORDER BY DECODE(route,'userinfo',0,'publish-website',1,'visits',2,'edit-content',3,'edit-pages',4,5)
         )
         LOOP
             l_reports:=NULL;
