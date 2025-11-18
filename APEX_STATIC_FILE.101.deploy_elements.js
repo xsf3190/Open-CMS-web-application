@@ -3,8 +3,6 @@ export const bodydata = document.body.dataset;
 
 export const dropdown = document.getElementById("menulist");
 export const email = dropdown.querySelector(".email");
-export const expires = dropdown.querySelector(".expires");
-export const login_btn = dropdown.querySelector(".login-btn");
 export const login_dialog = document.querySelector("dialog.login-email");
 export const output_dialog = document.querySelector("dialog.output");
 export const dialog_header = output_dialog.querySelector("header");
@@ -64,13 +62,6 @@ export const initDialog = (data) => {
     dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
     
     output_dialog.showModal();
-}
-
-/*
-** INJECT IMPORTMAP IF USER SIGNALS INTENT TO EXECUTE ES MODULE
-*/
-const importmap = async () => {
-    
 }
 
 /*
