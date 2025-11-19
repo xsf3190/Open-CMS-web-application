@@ -1,11 +1,4 @@
 /*
-** INJECT IMPORTMAP IF USER SIGNALS INTENT TO EXECUTE ES MODULE
-*/
-const importmap = async () => {
-    
-}
-
-/*
  * DROPDOWN MENU ACTIONS
  * Applies keyboard interaction as described in https://www.w3.org/WAI/ARIA/apg/patterns/menubar/.
  * Also ensures that menu is closed when a menu option is activated (on click or enter).
