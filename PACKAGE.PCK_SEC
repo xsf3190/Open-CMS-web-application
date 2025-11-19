@@ -32,6 +32,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     g_session_user_id NUMBER;
     g_website_id NUMBER;
     --
+    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2) RETURN VARCHAR2;
     --
     PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -115,11 +116,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         /* Delete refresh tokens */
         l_dropdown:=
         '<button role="menuitem" tabindex="-1" type="button">' ||
-            '<span>&#127793;</span>' ||
+            '<span aria-hidden="true">&#127793;</span>' ||
             'Ecology' ||
         '</button>' ||
         '<button role="menuitem" tabindex="-1" type="button" class="login-btn" data-endpoint="authenticate/ID">' ||
-            '<svg viewBox="0 0 512 512"><use href="#userinfo"/></svg>' ||
+            '<span style="color:blue" aria-hidden="true">&#128100;</span>' ||
             'Log In' ||
         '</button>';
 
@@ -385,35 +386,44 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         RETURN (NVL(l_scope,'visitor'));
     END;
 
+    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2) RETURN VARCHAR2 IS
+        TYPE tt_editor_symbols IS RECORD(
+            symbol VARCHAR2(10),
+            color  VARCHAR2(20)
+        );
+        /*
+        ** Table of REST endpoints and corresponding icons / colors
+        */
+        TYPE t_editor_symbols IS TABLE OF tt_editor_symbols INDEX BY VARCHAR2(30);
+        l_editor_symbols t_editor_symbols:=t_editor_symbols(
+            'publish-website'=>tt_editor_symbols('&#127760;','darkgreen'), 
+            'userinfo'=>tt_editor_symbols('&#127760;','blue'),
+            'visits'=>tt_editor_symbols('&#9729;','red'),
+            'edit-content'=>tt_editor_symbols('&#9998;','crimson'),
+            'edit-codepen'=>tt_editor_symbols('&#9917;','crimson'),
+            'edit-pages'=>tt_editor_symbols('&#8943;','brown'),
+            'change-url'=>tt_editor_symbols('&#9883;','brown'),
+            'link-domain'=>tt_editor_symbols('&#9884;','brown'),
+            'create-website'=>tt_editor_symbols('&#9884;','brown')
+        );
+        l_route VARCHAR2(30):=SUBSTR(pUriTemplate,1,INSTR(pUriTemplate,'/')-1);
+    BEGIN
+        RETURN ('<button type="button" role="menuitem" tabindex="-1"' ||
+                ' data-endpoint="' || pUriTemplate || '"' ||
+                ' data-method="' ||pMethod || '"' ||
+                -- ' data-reports="' || l_reports || '"' ||
+                '>' || 
+                '<span aria-hidden="true" style="color:' || l_editor_symbols(l_route).color || '">' || l_editor_symbols(l_route).symbol || '</span>' ||
+                pLabel || 
+                '</button>');
+    END;
+
     /*
     ** BUILD LIST OF MENU ITEMS FOR GIVEN SCOPE AND URL
     */
     FUNCTION getMenulist(pWebsiteId IN website.id%type, pScope IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_menulist LONG;
-        l_reports LONG;
-        l_test_site BOOLEAN:=FALSE;
-        l_domain_name website.domain_name%type;
-        l_netlify_site_id_custom website.netlify_site_id_custom%type;
-        l_publish_live_button VARCHAR2(1000);
-        n PLS_INTEGER;
-
-        FUNCTION addButton(pRoute IN VARCHAR2, pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pEnv IN VARCHAR2 DEFAULT null) RETURN VARCHAR2 IS
-            l_class VARCHAR2(30);
-        BEGIN
-            l_class:=LOWER(REPLACE(pLabel,' ','-'));
-            RETURN ('<button type="button" role="menuitem" tabindex="-1" class="' || l_class || '"' ||
-                    ' data-endpoint="' || CASE WHEN INSTR(pUriTemplate,'authenticate')>0 THEN REPLACE('authenticate','user-info') ELSE pUriTemplate END || '"' ||
-                    ' data-method="' ||pMethod || '"' ||
-                    CASE WHEN pEnv IS NOT NULL THEN
-                    ' data-env="' || pEnv || '"'
-                    END ||
-                    ' data-reports="' || l_reports || '"' ||
-                    '>' || 
-                    '<svg viewBox="0 0 512 512"><use href="#' || pRoute || '"/></svg>' ||
-                    pLabel || 
-                    '</button>');
-        END;
-
+        l_editor_site BOOLEAN:=FALSE;
     BEGIN
         /*
         ** SITE IS "TEST" WHEN
@@ -422,45 +432,42 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         ** 3. URL CONTAINS "codepen.io"
         */
 
-        SELECT domain_name, netlify_site_id_custom
-          INTO l_domain_name, l_netlify_site_id_custom
-          FROM website
-         WHERE id=pWebsiteId;
-
-        l_test_site:=pck_hosting.getEnvFromURL(pUrl)='TEST';
+        l_editor_site:=pck_hosting.getEnvFromURL(pUrl)='TEST';
 
         refreshOrdsEndpoints(pWebsiteId);
 
         FOR C IN (
-            SELECT CASE WHEN o.label='userinfo' THEN pEmail ELSE o.label END label, o.uri_template, SUBSTR(o.uri_template,1,INSTR(o.uri_template,'/')-1) route, o.method, o.priority
+            SELECT CASE WHEN o.label='userinfo' THEN pEmail ELSE o.label END label, o.uri_template, o.method, o.priority
               FROM api_endpoint a, role r, ords_endpoints o
              WHERE a.website_id=pWebsiteId 
                AND a.role_id=r.id 
                AND r.name=pScope
                AND a.template_id=o.template_id
                AND INSTR(o.uri_template,'authenticate')=0
-             ORDER BY DECODE(route,'userinfo',0,'publish-website',1,'visits',2,'edit-content',3,'edit-pages',4,5)
+             ORDER BY CASE 
+                        WHEN INSTR(o.uri_template,'userinfo')>0 THEN 0 
+                        WHEN INSTR(o.uri_template,'publish-website')>0 THEN 1
+                        WHEN INSTR(o.uri_template,'visits')>0 THEN 2
+                        ELSE 3
+                      END
         )
         LOOP
-            l_reports:=NULL;
-            IF (C.route='visits') THEN
-                l_reports:='visits|table;trends|graph;performance|graph;engagement|table;location|table;browser|table';
-            END IF;
-            IF (l_test_site) THEN
-                l_menulist:=l_menulist || addButton(C.route, C.uri_template, C.method, C.label, CASE WHEN C.route='publish-website' THEN 'TEST' END);
+            -- l_reports:=NULL;
+            -- IF (C.route='visits') THEN
+            --     l_reports:='visits|table;trends|graph;performance|graph;engagement|table;location|table;browser|table';
+            -- END IF;
+            IF (l_editor_site) THEN
+                l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
             ELSIF (C.priority=1) THEN
-                l_menulist:=l_menulist || addButton(C.route, C.uri_template, C.method, C.label);
-            END IF;
-            IF (l_netlify_site_id_custom IS NOT NULL AND C.route='publish-website') THEN
-                l_publish_live_button:=addButton(C.route, C.uri_template, C.method, 'Publish Live Site', 'LIVE');
+                l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
             END IF;
         END LOOP;
 
-        IF (l_test_site) THEN
-            l_menulist:=l_menulist || 
-            '<a href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a>' ||
-            l_publish_live_button;
-        END IF;
+        -- IF (l_test_site) THEN
+        --     l_menulist:=l_menulist || 
+        --     '<a href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a>' ||
+        --     l_publish_live_button;
+        -- END IF;
 
         RETURN (l_menulist);
     END;
