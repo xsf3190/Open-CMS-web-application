@@ -1,10 +1,9 @@
-export const metrics = [];
-
 const bodydata = document.body.dataset;
 const dropdown = document.querySelector("#menulist");
 const dialog_close = document.querySelector("dialog.output .close");
 const vitalsQueue = new Set();
 const narrow_viewport = window.matchMedia("(width <= 600px)");
+const metrics = [];
 
 if (narrow_viewport.matches) {
     const nav = document.querySelector("nav");
@@ -189,7 +188,7 @@ if (pages_edited_set.has(Number(document.body.dataset.articleid))) {
 const observer = new PerformanceObserver((list) => {
     list.getEntries().forEach((entry) => {
         if (metrics.some( ({name}) => name===entry.name)) return;
-        metrics.push({entryType: entry.entryType, name:entry.name, transferSize:entry.transferSize, contentType: entry.contentType});        
+        metrics.push({entryType: entry.entryType, name:entry.name, transferSize:entry.transferSize, contentType: entry.contentType, initiatorType: entry.initiatorType});        
     })
 });
 observer.observe({ type: "resource", buffered: true });
@@ -201,6 +200,12 @@ observer.observe({ type: "navigation", buffered: true });
 const addToVitalsQueue = ({name,value,rating}) => {
     console.log(name,value);
     vitalsQueue.add({name:name,value:value,rating:rating});
+    if (name==="LCP") {
+        if (!sessionStorage.getItem(name)) {
+            sessionStorage.setItem(name,value);
+            sessionStorage.setItem("metrics",JSON.stringify(metrics));
+        }
+    }
 };
 
 /*
@@ -214,6 +219,6 @@ onCLS(addToVitalsQueue);
 onINP(addToVitalsQueue);
 
 /*
-** GET WEB-vitAls TO EMIT
+** FORCE WEB-VITALS TO EMIT
 */
 document.body.click();
