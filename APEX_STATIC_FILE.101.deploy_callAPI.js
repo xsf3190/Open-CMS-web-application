@@ -1,4 +1,4 @@
-import { bodydata, dropdown, login_btn, output_dialog } from "deploy_elements";
+import { bodydata, output_dialog } from "deploy_elements";
 
 let access_token = sessionStorage.getItem("token");
 let refresh_token = localStorage.getItem("refresh");
@@ -40,12 +40,10 @@ const replaceTokens = (data) => {
 ** FORCE LOG OUT WHEN REFRESH TOKEN EXPIRED
 */
 const forceLogout = () => {
+    console.log("force Logout");
     sessionStorage.clear();
     localStorage.clear();
-    dropdown.querySelectorAll("li:nth-child(n+4)").forEach((item) => {
-        item.remove();
-    });
-    login_btn.textContent = "Log In";
+    window.location.reload();
 }
 
 /* 
