@@ -1,16 +1,135 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_VISITS" AS
     --
+    PROCEDURE daily_job;
+    --
+    PROCEDURE ecology(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    --
     PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN VARCHAR2, pOffset IN NUMBER, pStatus OUT NUMBER);
     --
     PROCEDURE uploadPageVisit(pBodyText IN CLOB);
-    --
-    PROCEDURE daily_job;
     --
 END;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
 
     ROWS_PER_PAGE CONSTANT PLS_INTEGER:=10;
+
+    /*
+    **  prOCEDURE CALLED BY PUBLIC REST ENDPOINT
+    */
+    PROCEDURE ecology(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_json JSON_OBJECT_T;
+        l_body_text CLOB:=pBodyText;
+        TYPE tt_metrics IS RECORD (
+            entryType VARCHAR2(10), 
+            name VARCHAR2(200), 
+            transferSize NUMBER, 
+            contentType VARCHAR2(50),
+            initiatorType VARCHAR2(50)
+        );
+        TYPE t_metrics IS TABLE OF tt_metrics;
+        l_metrics t_metrics;
+
+        TYPE t_resources IS TABLE OF NUMBER INDEX BY VARCHAR2(5);
+        l_resources t_resources:=t_resources(
+            'html'=>0,
+            'css'=>0,
+            'js'=>0,
+            'json'=>0,
+            'woff2'=>0,
+            'img'=>0
+        );
+        l_lcp NUMBER;
+        l_index VARCHAR2(5);
+        l_article LONG;
+        l_total NUMBER:=0;
+        l_75P NUMBER;
+        n PLS_INTEGER;
+    BEGIN
+    pck_core.log(l_body_text);
+        
+        SELECT entryType, name, transferSize, contentType, initiatorType
+          BULK COLLECT INTO l_metrics
+          FROM JSON_TABLE(l_body_text, '$.metrics[*]' COLUMNS (entryType, name, transferSize, contentType, initiatorType))
+         WHERE initiatorType NOT IN ('fetch','beacon');
+
+        SELECT ROUND(lcp/1000,1)
+          INTO l_lcp
+          FROM JSON_TABLE(l_body_text, '$' COLUMNS (lcp));
+        
+
+        FOR i IN 1..l_metrics.COUNT LOOP
+            IF (l_metrics(i).contentType='text/html' OR LOWER(l_metrics(i).entryType)='navigation') THEN
+                l_resources('html'):=l_resources('html') + l_metrics(i).transferSize;
+            ELSIF (l_metrics(i).initiatorType='img') THEN
+                l_resources('img'):=l_resources('img') + l_metrics(i).transferSize;
+            ELSE
+                n:=INSTR(l_metrics(i).name,'.',-1);
+                IF (n>0) THEN
+                    l_index:=SUBSTR(l_metrics(i).name,n+1);
+                    l_resources(l_index):=l_resources(l_index) + l_metrics(i).transferSize;
+                END IF;
+            END IF;
+        END LOOP;
+
+        l_article:=
+        '<p>The amount of data downloaded to visit web sites contributes significantly to global carbon emissions.</p>' ||
+        '<p>Every 2 years a comprehensive analysis of some 16 million web sites is conducted by the HTTP Archive. Details of the last survey can be viewed at <a href="https://almanac.httparchive.org/en/2024">Web Almanac</a></p>' ||
+        '<p>The chart below compares percentile values from the survey with how much data your browser downloaded to view this page.</p>' ||
+        '<div style="overflow-x:auto;font-size:90%;margin-inline:auto" tabindex="0" role="group" aria-labelledby="table-caption">' ||
+            '<table class="data-table" style="margin-inline:auto">' ||
+                '<caption id="table-caption">Ecological impact comparison</caption>' ||
+                '<tr><th>Resource</th><th>You</th><th>P10</th><th>P25</th><th>P50</th><th>P75</th><th>P90</th></tr>';
+
+        l_index:=l_resources.FIRST;
+        WHILE l_index IS NOT NULL LOOP
+            IF (l_resources(l_index)>0) THEN
+                l_article:=l_article ||
+                '<tr><td>' || CASE WHEN l_index='woff2' THEN 'Fonts' WHEN l_index='img' THEN 'Images' ELSE UPPER(l_index) END || '</td><td style="text-align:right">' || TO_CHAR(ROUND(l_resources(l_index)/1024)) || ' KB</td></tr>';
+                l_total:=l_total+l_resources(l_index);
+            END IF;
+            l_index:=l_resources.NEXT(l_index);
+        END LOOP;
+        l_total:=ROUND(l_total/1024);
+        l_75P:=ROUND((l_total/3667)*100,1);
+        l_article:=l_article ||
+                '<tr><td><strong>TOTAL</strong></td>' || 
+                    '<td style="text-align:right"><strong>' || l_total || ' KB</strong></td>' || 
+                    '<td style="text-align:right"><strong>465 KB</strong></td>' || 
+                    '<td style="text-align:right"><strong>995 KB</strong></td>' || 
+                    '<td style="text-align:right"><strong>1,926 KB</strong></td>' || 
+                    '<td style="text-align:right"><strong>3,667 KB</strong></td>' || 
+                    '<td style="text-align:right"><strong>7,257 KB</strong></td>' || 
+                '</tr>' ||
+                '<tr><td></td>' || 
+                    '<td></td>' || 
+                    '<td style="text-align:right"><i>' || ROUND((l_total/465)*100) || '%</i></td>' || 
+                    '<td style="text-align:right"><i>' || ROUND((l_total/995)*100) || '%</i></td>' || 
+                    '<td style="text-align:right"><i>' || ROUND((l_total/1926)*100) || '%</i></td>' || 
+                    '<td style="text-align:right"><i>' || l_75P || '%</i></td>' || 
+                    '<td style="text-align:right"><i>' || ROUND((l_total/7257)*100,1) || '%</i></td>' || 
+                '</tr>';
+
+        l_article:=l_article ||
+            '</table>' ||
+        '</div>' ||
+        '<p>The chart shows that you downloaded ' || l_total || ' KB which is ' || l_75P || '% of the weight of most pages on the internet, that is 3,667 KB at the 75th percentile.</p>' ||
+        '<p>The environmental impact of internet usage can be vastly reduced by smaller page weights.</p>' ||
+        '<p>The platform that built this web site aims to achieve maximum 100 KB pages that can be engaged with in less than 2 seconds (it took ' || l_lcp || ' seconds for you to engage with this page)</p>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header', '<h4>Ecology Report</h4>');
+        l_json.put('article', l_article);
+        l_json.put('footer', '<span></span>');
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+    END;
+
     /*
      **  Procedure invoked by POST to REST end point "page-visit".
      **  Upload page visit details sent by javascript from deployed website pages
