@@ -32,27 +32,9 @@ const closeHandler = (e) => {
 dialog_close.addEventListener("click", closeHandler);
 
 /*
-** GET DROPDOWN MENU FROM LOCALSTORAGE IF USER LOGGED IN
+** ALWAYS GET MOST RECENTLY EDITED CONTENT IF OWNER LOGGED IN 
 */
-let aud = "";
-const jwt = localStorage.getItem("refresh");
-if (jwt) {
-    dropdown.replaceChildren();
-    dropdown.insertAdjacentHTML('beforeend',localStorage.getItem("menulist"));
-    const array = jwt.split(".");
-    const parse = JSON.parse(atob(array[1]));
-    aud = parse.aud;
-    console.log("Refresh token exists. User is logged in as " + aud);
-}
-
-// Initialize menu dropdown
-import { MenuNavigationHandler } from "/javascript/deploy_menulist.min.js";
-new MenuNavigationHandler(dropdown);
-
-/*
-** INJECT IMPORTMAP IF USER SIGNALS INTENT TO EXECUTE ES MODULE
-*/
-const importmap = async () => {
+async function load_edited_page() {
     console.log("Create importmap for " + bodydata.importmap);
 
     const response = await fetch(bodydata.importmap);
@@ -61,7 +43,41 @@ const importmap = async () => {
     im.type = 'importmap';
     im.textContent = JSON.stringify(data);
     document.head.appendChild(im);
+
+    const module_name = "deploy_edited-content";
+    const module = await import(module_name)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+    });
+    module.init();
 }
+
+/*
+** GET DROPDOWN MENU FROM LOCALSTORAGE IF USER LOGGED IN
+** LOGOUT IF NOT LATEST MENU VERSION (I.E. <button>)
+*/
+let aud = "";
+const jwt = localStorage.getItem("refresh");
+if (jwt) {
+    if (localStorage.getItem("menulist").startsWith("<button")) {
+        dropdown.replaceChildren();
+        dropdown.insertAdjacentHTML('beforeend',localStorage.getItem("menulist"));
+        const array = jwt.split(".");
+        const parse = JSON.parse(atob(array[1]));
+        aud = parse.aud;
+        console.log("Refresh token exists. User is logged in as " + aud);
+        if (window.location.host.startsWith("editor.") || window.location.host.endsWith(".netlify.app")) {
+            load_edited_page();
+        }
+    } else {
+        localStorage.clear();
+    }
+}
+
+// Initialize menu dropdown
+import { MenuNavigationHandler } from "/javascript/deploy_menulist.min.js";
+new MenuNavigationHandler(dropdown);
 
 /*
 ** SETUP COLLECTION OF METRICS. 
@@ -161,25 +177,6 @@ if ('onpagehide' in self) {
     addEventListener('pagehide', () => {
         flushQueues();
     }, { capture: true} );
-}
-
-const load_edited_page = async () => {
-    await importmap();
-    const module_name = "deploy_edited-content";
-    const module = await import(module_name)
-    .catch((error) => {
-        console.error(error);
-        console.error("Failed to load " + module_name);
-    });
-    module.init();
-}
-/*
-** INITIALIZE EDITOR IF PAGE PREVIOUSLY EDITED IN THE SESSION
-*/
-const pages_edited = JSON.parse(sessionStorage.getItem("pages_edited"));
-const pages_edited_set = new Set(pages_edited);
-if (pages_edited_set.has(Number(document.body.dataset.articleid))) {
-    load_edited_page();
 }
 
 /*
