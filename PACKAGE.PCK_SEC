@@ -113,16 +113,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_dropdown LONG;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
-        /* Delete refresh tokens */
-        l_dropdown:=
-        '<button role="menuitem" tabindex="-1" type="button">' ||
-            '<span aria-hidden="true">&#127793;</span>' ||
-            'Ecology' ||
-        '</button>' ||
-        '<button role="menuitem" tabindex="-1" type="button" class="login-btn" data-endpoint="authenticate/ID">' ||
-            '<span style="color:blue" aria-hidden="true">&#128100;</span>' ||
-            'Log In' ||
-        '</button>';
+        /* TODO: Delete refresh tokens */
+        FOR C IN (
+            SELECT o.label, o.uri_template, o.method
+              FROM ords_endpoints o
+             WHERE INSTR(o.uri_template,'authenticate')>0
+                OR INSTR(o.uri_template,'ecology')>0
+        ) LOOP
+            l_dropdown:=l_dropdown ||
+            pck_sec.addMenuButton(C.uri_template, C.method, C.label);
+        END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
@@ -394,17 +394,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         /*
         ** Table of REST endpoints and corresponding icons / colors
         */
+
         TYPE t_editor_symbols IS TABLE OF tt_editor_symbols INDEX BY VARCHAR2(30);
         l_editor_symbols t_editor_symbols:=t_editor_symbols(
-            'publish-website'=>tt_editor_symbols('&#127760;','darkgreen'), 
-            'userinfo'=>tt_editor_symbols('&#127760;','blue'),
-            'visits'=>tt_editor_symbols('&#9729;','red'),
-            'edit-content'=>tt_editor_symbols('&#9998;','crimson'),
-            'edit-codepen'=>tt_editor_symbols('&#9917;','crimson'),
-            'edit-pages'=>tt_editor_symbols('&#8943;','brown'),
+            'authenticate'=>tt_editor_symbols('&#x1F464;','blue'),
             'change-url'=>tt_editor_symbols('&#9883;','brown'),
+            'create-website'=>tt_editor_symbols('&#43;','brown'),
+            'ecology'=>tt_editor_symbols('&#127807;',''),
+            'edit-codepen'=>tt_editor_symbols('&#9917;','crimson'),
+            'edit-content'=>tt_editor_symbols('&#9998;','crimson'),
+            'edit-pages'=>tt_editor_symbols('&#8943;','brown'),
             'link-domain'=>tt_editor_symbols('&#9884;','brown'),
-            'create-website'=>tt_editor_symbols('&#9884;','brown')
+            'message'=>tt_editor_symbols('&#9993;','brown'),
+            'publish-website'=>tt_editor_symbols('&#127760;','darkgreen'), 
+            'userinfo'=>tt_editor_symbols('&#x1F464;','blue'),
+            'visits'=>tt_editor_symbols('&#x2637;','rebeccapurple')
         );
         l_route VARCHAR2(30):=SUBSTR(pUriTemplate,1,INSTR(pUriTemplate,'/')-1);
     BEGIN
@@ -468,7 +472,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         --     '<a href="' || pck_core.getRestUrl || 'download-website/' || pWebsiteId || '" download="' || l_domain_name || '.zip">Download Site</a>' ||
         --     l_publish_live_button;
         -- END IF;
-
         RETURN (l_menulist);
     END;
 
