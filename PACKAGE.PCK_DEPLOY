@@ -282,6 +282,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_img_src t_img_src:=t_img_src();
 
     BEGIN
+    
         n:=NVL(regexp_count(pBodyHtml,l_img_regex),0);
 
         /* BUILD COLLECTION OF CLOUDINARY IMAGES FOUND IN HTML */
@@ -332,6 +333,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     l_sizes:='(width >= ' || l_max_width_px || ') ' || TO_CHAR(ROUND(l_img_width_pct * l_max_width_px)) || 'px,' || l_img_width || 'vw';
                 ELSE
                     /* OTHERWISE USE INTRINSIC SIZE FROM IMG URL */
+                    -- pck_core.log(l_img_src(i).img_src);
                     n1:=INSTR(l_img_src(i).img_src,'/',1,4);
                     n2:=INSTR(l_img_src(i).img_src,'/',1,5);
                     l_img_width:=SUBSTR(l_img_src(i).img_src,n1+3,n2-n1-3);
