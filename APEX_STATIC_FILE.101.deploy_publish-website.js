@@ -10,8 +10,6 @@ let intervalId;
 
 export const init = (e) => {
 
-    sessionStorage.removeItem("pages_edited");
-
     callAPI(endpoint,"POST",{env:e.dataset.env})
         .then( (data) => {
             initDialog(data);
