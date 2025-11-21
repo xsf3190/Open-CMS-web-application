@@ -578,7 +578,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END;
 
         /* 
-        ** SEND TO NETLIFY LIST OF SHA1 OF EACH FILE IN THE DEPLOYMENT 
+        ** 1. SEND TO NETLIFY A LIST OF SHA1 OF EACH FILE IN THE DEPLOYMENT 
+        ** 2. UPLOAD THOSE FILES INDICATED BY NETLIFY AS REQUIRED 
+        ** 3. UPDATE CONTROL TABLE WEBSITE_FILES TO FACILITATE FUTURE DEPLOYMENTS
         */
         PROCEDURE sendNetlifyDeploy IS
             l_json JSON_OBJECT_T;
@@ -870,43 +872,30 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
         END LOOP;
 
+        /*
+        **  6. START DEPLOYMENT NOW THAT ALL WEBSITE FILES HAVE BEEN PREPARED
+        */
         sendNetlifyDeploy;
 
         /*
-        **  DOGFACE DEPLOYMENT IF USER HAS DOGFACE API KEY AND ESMLIBRARY = 'TEST'
+        ** AT THIS POINT NETLIFY DEPLOYMENT COMPLETE
+        ** - UPDATE RELEVANT DEPLOYED_DATE IN ALL WEBSITE ARTICLES 
+        ** - UPDATE RELEVANT LAST_PUBLISHED_DATE FOR THE WEBSITE 
         */
-        /*
-        SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM users WHERE id=pUserid AND dogface_api_key IS NOT NULL);
-        n:=0;
-        IF (n=1 AND pEsmLibrary='test') THEN
-            SELECT json_arrayagg(
-                    json_object(KEY 'path' VALUE '/henk.florentmeijer.com/' || file_name, KEY 'hash' VALUE md5)
-                returning clob) 
-            INTO l_dogface_requested
-            FROM website_files
-            WHERE website_id=pWebsiteid;
+        UPDATE article 
+           SET deployed_date=CASE WHEN pEnv='TEST' THEN current_timestamp ELSE deployed_date END,
+               deployed_date_custom=CASE WHEN pEnv='LIVE' THEN current_timestamp ELSE deployed_date_custom END
+         WHERE id IN
+            (
+                SELECT id FROM article
+                CONNECT BY PRIOR id=parent_id
+                START WITH id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteid)
+            );
 
-            pck_api.callDogfaceAPI(pUserId=>pUserId, pEndpoint=>'need-for-upload', pMethod=>'POST', pBody=>l_dogface_requested, pBodyBlob=>l_dogface_empty_blob, pData=>l_dogface_required);
-
-            FOR C IN (
-                SELECT df.md5, wf.sha1, wf.file_name 
-                  FROM website_files wf, 
-                        JSON_TABLE(l_dogface_required, '$[*]' 
-                        COLUMNS (md5 varchar2 path '$')) df
-                 WHERE df.md5=wf.md5
-                   AND instr(wf.file_name,'font')=0
-            ) LOOP
-                --IF (C.file_name<>'_headers') THEN
-                    l_dogface_endpoint:=C.md5 || '/henk.florentmeijer.com/' || C.file_name;
-                    IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
-                        pck_api.callDogfaceAPI(pUserId=>pUserId, pMethod=>'PUT', pEndpoint=>l_dogface_endpoint, pBody=>l_deploy_files(C.sha1).file_content, pBodyBlob=>l_dogface_empty_blob, pData=>l_clob);
-                    ELSE
-                        pck_api.callDogfaceAPI(pUserId=>pUserId, pMethod=>'PUT', pEndpoint=>l_dogface_endpoint, pBody=>l_dogface_empty_clob, pBodyBlob=>l_deploy_files(C.sha1).file_content_b, pData=>l_clob);
-                    END IF;
-                --END IF;
-            END LOOP;
-        END IF;
-        */
+        UPDATE website
+           SET netlify_last_published=CASE WHEN pEnv='TEST' THEN current_timestamp ELSE netlify_last_published END,
+               netlify_last_published_custom=CASE WHEN pEnv='TEST' THEN current_timestamp ELSE netlify_last_published_custom END
+         WHERE id=pWebsiteId;
 
         EXCEPTION
             WHEN OTHERS THEN
