@@ -46,7 +46,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_75P NUMBER;
         n PLS_INTEGER;
     BEGIN
-    pck_core.log(l_body_text);
         
         SELECT entryType, name, transferSize, contentType, initiatorType
           BULK COLLECT INTO l_metrics
