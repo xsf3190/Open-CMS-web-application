@@ -26,7 +26,7 @@ export const init = () => {
     callAPI("userinfo/:ID","GET")
         .then((data) => {
             initDialog(data);
-            dialog_article.addEventListener("click", selectHandler);
+            dialog_footer.addEventListener("click", selectHandler);
         })
         .catch((error) => {
             handleError(error);
