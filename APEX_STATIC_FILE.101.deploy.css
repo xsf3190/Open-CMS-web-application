@@ -801,19 +801,20 @@ summary {
   & >* {
     appearance: none;
     background: none;
-    border: none;
+    border-block-end: 1px solid grey;
     border-radius: 0;
     color: black;
-    font-size: 0.875rem;
-    padding: 0.75rem 1rem;
+    inline-size: 100%;
+    font-size: var(--step--1);
+    padding: 2vmin 1rem;
     text-align: left;
     display: flex;
     gap: 0.5em;
     align-items: center;
     text-decoration: none;
-    
-    svg {
-      height: 1em;
+
+    span {
+        inline-size: 2rem;
     }
 
     &:focus {
