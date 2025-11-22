@@ -111,8 +111,6 @@ body>footer>a {
 /* NAVIGATION STYLES */
 
 .topnav {
-  position: var(--nav-position);
-  top: 0;
   color: black;
   background-color: white;
   --flex-wrap: nowrap;
@@ -849,8 +847,6 @@ summary {
 
 
 [role="menu"]:popover-open {
-/*   display: flex; */
-
   /* End of fade-in and start of fade-out */
   transition-duration: 120ms;
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
@@ -871,7 +867,7 @@ summary {
 /* PLACE POPOVER TOP RIGHT OF VIEWPORT IF BROWSER NOT SUPPORTING ANCHOR API */
 @supports not (position-anchor: --anchor) {
   [popover]:popover-open {
-    right: 0;
+    inset:2.25rem 0.5rem auto auto;
   }
 }
 
