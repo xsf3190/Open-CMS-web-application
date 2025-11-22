@@ -484,11 +484,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<meta name="author" content="restartnet.com">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
 
-                    '<link rel="stylesheet" href="/css/website-styles.min.css">'; /* TO CHANGE */
-                    FOR C1 IN (SELECT deploy_filename FROM css ORDER BY link_order) LOOP
-                        pBody:=pBody ||
-                        '<link rel="stylesheet" href="' || C1.deploy_filename || '">';
-                    END LOOP;
+                    '<link rel="stylesheet" href="/css/website-styles.min.css">' ||
+                    '<link rel="stylesheet" href="/css/core-styles.min.css">' ||
+                    '<link rel="stylesheet" href="/css/ckeditor.min.css">';
 
                     pBody:=pBody ||
                     '<link rel="icon" href="' || pFavicon || '">' ||
@@ -760,7 +758,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         /*
         **  3. Build CSS files
         */
-        pck_css.deploy_core_css;   /* TEMPORARY FIX */
+        -- pck_css.deploy_core_css; 
         
         FOR C IN (
             WITH source AS
@@ -768,6 +766,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 SELECT deploy_filename, content_minified, updated_date
                   FROM css
                  UNION ALL
+                SELECT '/css/core-styles.min.css' AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+                  FROM apex_application_static_files 
+                 WHERE application_id=101
+                   AND file_name='deploy.min.css'
+                UNION ALL
                 SELECT '/css/website-styles.min.css', css, css_updated_date
                   FROM website
                  WHERE id=pWebsiteid
@@ -894,7 +897,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         UPDATE website
            SET netlify_last_published=CASE WHEN pEnv='TEST' THEN current_timestamp ELSE netlify_last_published END,
-               netlify_last_published_custom=CASE WHEN pEnv='TEST' THEN current_timestamp ELSE netlify_last_published_custom END
+               netlify_last_published_custom=CASE WHEN pEnv='LIVE' THEN current_timestamp ELSE netlify_last_published_custom END
          WHERE id=pWebsiteId;
 
         EXCEPTION
@@ -905,7 +908,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
     /*
     **  DELETE OLD DEPLOYMENTS FROM NETLIFY SYSTEM
-    **  DELETE UNUSED ASSETS - EXPERIMENTAL
     */
     PROCEDURE runDelete(pUserId IN users.id%type, pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type) IS
         l_clob CLOB;
