@@ -43,6 +43,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_site_id website.netlify_site_id%type;
         l_site_id_custom website.netlify_site_id_custom%type;
         l_json JSON_OBJECT_T;
+        l_error VARCHAR2(200);
     BEGIN
         /* 
         ** Check no other session currently deploying - simultaneous deployments not allowed on Netlify free plan 
@@ -61,6 +62,38 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         SELECT NVL(env,'TEST') INTO l_env FROM JSON_TABLE(pBodyText, '$' COLUMNS(env));
+
+        /*
+        ** CHECK DEPLOY REQUEST IS VALID
+        */
+        FOR C IN (
+            SELECT MAX(a.updated_date) last_updated_date, MAX(w.netlify_last_published) last_published_editor, MAX(w.netlify_last_published_custom) last_published_live
+            FROM article a, website w
+            WHERE w.id=pWebsiteId
+            AND a.id IN
+                        (
+                            SELECT id FROM article
+                            CONNECT BY PRIOR id=parent_id
+                            START WITH id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteId)
+                        )
+        ) LOOP
+            IF (l_env='TEST' AND C.last_updated_date<C.last_published_editor) THEN
+                l_error:='<p>Editor site already published with latest content</p>';
+            END IF;
+            IF (l_env='LIVE' AND C.last_published_live>C.last_published_editor) THEN
+                l_error:='<p>Live site already published with latest content</p>';
+            END IF;
+            IF (l_error IS NOT NULL) THEN
+                l_json:= new JSON_OBJECT_T;
+                l_json.put('success',true);
+                l_json.put('header', '<p>Cannot Publish for following reason:</p>');
+                l_json.put('article', l_error);
+                l_json.put('footer', '');
+                l_json.put('stop', TRUE);
+                apex_util.prn(l_json.to_clob,false);
+                RETURN;
+            END IF;
+        END LOOP;
 
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId RETURNING netlify_site_id, netlify_site_id_custom INTO l_site_id, l_site_id_custom;
         
