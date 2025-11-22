@@ -55,17 +55,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             '</body>';
 
             FOR C1 IN (
-                SELECT link_order, content
-                  FROM
-                        (
-                            SELECT link_order, NVL(content,content_minified) content
-                              FROM css
-                             UNION ALL
-                            SELECT 0, REPLACE(css,'/fonts','https://' || l_session_data.url || '/fonts')
-                              FROM website
-                             WHERE id=pWebsiteid
-                        )
-                ORDER BY link_order
+                SELECT REPLACE(css,'/fonts','https://' || l_session_data.url || '/fonts') content
+                  FROM website
+                 WHERE id=pWebsiteid
+                 UNION ALL
+                SELECT apex_util.blob_to_clob(file_content)
+                  FROM apex_application_static_files 
+                 WHERE application_id=101
+                   AND file_name='deploy.css'
+                 UNION ALL
+                SELECT NVL(content,content_minified) content
+                  FROM css 
             ) LOOP
                 l_css:=l_css || C1.content;
             END LOOP;
