@@ -247,7 +247,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         /*
         ** WAIT FOR DEPLOYMENT OF ES-MODULES TO COMPLETE
         */
-        pck_hosting.waitDeployment(pWebsiteid=>l_website_id, pUserid=>l_user_id, pWaitSeconds=>10);
+        pck_hosting.waitDeployment(pWebsiteid=>l_website_id, pUserid=>l_user_id, pWaitSeconds=>100);
 
         /*
         ** DELETE OLD DEPLOYMENTS OF ES-MODULES.NETLIFY.APP
