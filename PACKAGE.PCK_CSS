@@ -2,8 +2,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
     PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type);
     --
-    PROCEDURE deploy_core_css;
-    --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
@@ -201,19 +199,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
          WHERE id=pWebsiteid
            AND (dbms_lob.compare(css,l_css)<>0 OR css IS NULL);
 
-    END;
-
-    PROCEDURE deploy_core_css IS
-    BEGIN
-        FOR C IN (
-            SELECT CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date, apex_util.blob_to_clob(file_content) file_content
-              FROM apex_application_static_files s
-                 WHERE s.file_name='deploy.min.css'
-                   AND s.application_id=101
-        ) LOOP
-            UPDATE css SET content_minified=C.file_content, updated_date=C.updated_date
-              WHERE name='core-styles';
-        END LOOP;
     END;
 
 end;
