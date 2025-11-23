@@ -16,6 +16,56 @@ if (narrow_viewport.matches) {
     }
 }
 
+let aud = "";
+const jwt = localStorage.getItem("refresh");
+
+async function load_modules() { 
+    const importmap = bodydata.jslib + "importmap.json";
+    console.log("Create importmap " + importmap);
+    const response = await fetch(importmap);
+    const data = await response.json();
+    const im = document.createElement('script');
+    im.type = 'importmap';
+    im.textContent = JSON.stringify(data);
+    document.head.appendChild(im);
+
+    let module_name = "deploy_menulist"
+    const menu = await import(module_name)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+        return;
+    });
+    new menu.MenuNavigationHandler(dropdown);
+
+    if (jwt) {
+        if (window.location.host.startsWith("editor.") || window.location.host.endsWith(".netlify.app")) {
+            module_name = "deploy_edited-content";
+            const module = await import(module_name)
+            .catch((error) => {
+                console.error(error);
+                console.error("Failed to load " + module_name);
+                return;
+            });
+            module.init();
+        }
+    }
+
+    module_name = "deploy_web_vitals5";
+    const cwv = await import("deploy_web_vitals5")
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+        return;
+    });
+    cwv.onTTFB(addToVitalsQueue);
+    cwv.onFCP(addToVitalsQueue);
+    cwv.onLCP(addToVitalsQueue);
+    cwv.onCLS(addToVitalsQueue);
+    cwv.onINP(addToVitalsQueue);
+}
+load_modules();
+
 /* 
 ** TRACK PAGES VISITED IN SESSION 
 */
@@ -32,33 +82,10 @@ const closeHandler = (e) => {
 dialog_close.addEventListener("click", closeHandler);
 
 /*
-** ALWAYS GET MOST RECENTLY EDITED CONTENT IF OWNER LOGGED IN 
-*/
-async function load_edited_page() {
-    console.log("Create importmap for " + bodydata.importmap);
-
-    const response = await fetch(bodydata.importmap);
-    const data = await response.json();
-    const im = document.createElement('script');
-    im.type = 'importmap';
-    im.textContent = JSON.stringify(data);
-    document.head.appendChild(im);
-
-    const module_name = "deploy_edited-content";
-    const module = await import(module_name)
-    .catch((error) => {
-        console.error(error);
-        console.error("Failed to load " + module_name);
-    });
-    module.init();
-}
-
-/*
 ** GET DROPDOWN MENU FROM LOCALSTORAGE IF USER LOGGED IN
 ** LOGOUT IF NOT LATEST MENU VERSION (I.E. <button>)
 */
-let aud = "";
-const jwt = localStorage.getItem("refresh");
+
 if (jwt) {
     if (localStorage.getItem("menulist").startsWith("<button")) {
         dropdown.replaceChildren();
@@ -67,17 +94,10 @@ if (jwt) {
         const parse = JSON.parse(atob(array[1]));
         aud = parse.aud;
         console.log("Refresh token exists. User is logged in as " + aud);
-        if (window.location.host.startsWith("editor.") || window.location.host.endsWith(".netlify.app")) {
-            load_edited_page();
-        }
     } else {
         localStorage.clear();
     }
 }
-
-// Initialize menu dropdown
-import { MenuNavigationHandler } from "/javascript/deploy_menulist.min.js";
-new MenuNavigationHandler(dropdown);
 
 /*
 ** SETUP COLLECTION OF METRICS. 
@@ -204,16 +224,6 @@ const addToVitalsQueue = ({name,value,rating}) => {
         }
     }
 };
-
-/*
-** START CORE WEB VITALS COLLECTION USING SELF-HOSTED GOOGLE LIBRARY
-*/
-import { onTTFB, onFCP, onLCP, onCLS, onINP } from "/javascript/deploy_web_vitals5.min.js";
-onTTFB(addToVitalsQueue);
-onFCP(addToVitalsQueue);
-onLCP(addToVitalsQueue);
-onCLS(addToVitalsQueue);
-onINP(addToVitalsQueue);
 
 /*
 ** FORCE WEB-VITALS TO EMIT
