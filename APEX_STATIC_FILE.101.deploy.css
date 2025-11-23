@@ -144,6 +144,7 @@ nav a:where(:hover, :focus) {
 nav ul {
   --flex-wrap: wrap;
   --flex-horizontal-alignment: space-apart;
+  list-style: none;
   max-width: var(--max-width);
   display: flex;
   gap: 1rem;
