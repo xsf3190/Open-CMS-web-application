@@ -37,9 +37,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_files JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
         l_clob CLOB;
-        
 
-        FUNCTION check_deploy RETURN BOOLEAN IS
+        PROCEDURE check_deploy IS
             l_errors PLS_INTEGER:=0;
         BEGIN
             FOR C IN (
@@ -54,15 +53,65 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (l_errors>0) THEN
                 RAISE_APPLICATION_ERROR(-20000,'updateCommonModules FAILED. ONE OR MORE SHA1 REQUIRED.');
             END IF;
-            RETURN(l_errors=0);
+        END;
+
+        PROCEDURE deploy(pWebsiteid IN website.id%type, pDomainName IN website.domain_name%type, pSiteid IN website.netlify_site_id%type) IS
+            TYPE tt_deploy IS RECORD (
+                path website_files.path%type,
+                sha1 website_files.sha1%type
+            );
+            TYPE t_deploy IS TABLE OF tt_deploy;
+            l_deploy t_deploy;
+
+            l_deploy_css PLS_INTEGER:=0;
+            l_deploy_js PLS_INTEGER:=0;
+        BEGIN
+            SELECT path, sha1
+              BULK COLLECT INTO l_deploy
+              FROM website_files
+             WHERE website_id=pWebsiteid
+               AND site_id=pSiteid;
+
+            FOR i IN 1..l_deploy.COUNT LOOP
+                IF (l_deploy(i).path=l_ref_css_path AND l_deploy(i).sha1<>l_ref_css_sha1) THEN
+                    l_deploy_css:=1;
+                    l_deploy(i).sha1:=l_ref_css_sha1;
+                END IF;
+                IF (l_deploy(i).path=l_ref_js_path AND l_deploy(i).sha1<>l_ref_js_sha1) THEN
+                    l_deploy_js:=1;
+                    l_deploy(i).sha1:=l_ref_js_sha1;
+                END IF;
+            END LOOP;
+
+            IF (l_deploy_js+l_deploy_css=0) THEN
+                dbms_output.put_line(pDomainName || ' - common modules all up to date');
+                RETURN;
+            END IF;
+
+            dbms_output.put_line('START DEPLOY ' || pDomainName);
+            l_files:=new JSON_OBJECT_T;
+            FOR i IN 1..l_deploy.COUNT LOOP
+                l_files.put(l_deploy(i).path, l_deploy(i).sha1);
+            END LOOP;
+            l_json:=new JSON_OBJECT_T;
+            l_json.put('files',l_files);
+            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || pSiteid || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+            check_deploy;
+
+            IF (l_deploy_css=1) THEN
+                UPDATE website_files SET sha1=l_ref_css_sha1, deployed_date=current_timestamp WHERE website_id=pWebsiteid AND site_id=pSiteid AND path=l_ref_css_path;
+            END IF;
+            IF (l_deploy_js=1) THEN
+                UPDATE website_files SET sha1=l_ref_js_sha1, deployed_date=current_timestamp WHERE website_id=pWebsiteid AND site_id=pSiteid AND path=l_ref_js_path;
+            END IF;
         END;
     BEGIN
         /* 
-        ** Process requires reference "LIVE" website modules - MUST BE WELL TESTED
+        ** Process requires reference "LIVE" website modules
         */
         WITH reference AS 
         (
-            SELECT w.domain_name, wf.path, wf.sha1, wf.deployed_date, MAX(wf.deployed_date) OVER (PARTITION BY wf.path) max_deployed_date
+            SELECT wf.path, wf.sha1, wf.deployed_date, MAX(wf.deployed_date) OVER (PARTITION BY wf.path) max_deployed_date
             FROM website_files wf, website w
             WHERE wf.path IN (l_ref_css_path,l_ref_js_path) 
             AND wf.website_id=w.id
@@ -77,54 +126,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         dbms_output.put_line(l_ref_js_path || ':' || l_ref_js_sha1);
 
         FOR C IN (
-            SELECT w.id, w.domain_name, w.netlify_site_id, w.netlify_site_id_custom,
-                    MAX(DECODE(wf.path,l_ref_css_path,CASE WHEN wf.sha1<>l_ref_css_sha1 THEN 1 ELSE 0 END)) build_css, MAX(DECODE(wf.path,l_ref_js_path,CASE WHEN wf.sha1<>l_ref_js_sha1 THEN 1 ELSE 0 END)) build_js
-              FROM website w, website_files wf
+            SELECT w.id, w.domain_name, w.netlify_site_id, w.netlify_site_id_custom
+              FROM website w
              WHERE w.id=NVL(pWebsiteid,w.id)
-               AND w.id=wf.website_id
-               AND w.netlify_site_id=wf.site_id
-               AND wf.path IN (l_ref_css_path,l_ref_js_path)
-             GROUP BY w.id, w.domain_name, w.netlify_site_id, w.netlify_site_id_custom
         ) LOOP
-            IF (C.build_css+C.build_js=0) THEN
-                CONTINUE;
-            END IF;
-            l_files:=new JSON_OBJECT_T;
-            FOR C1 IN (
-                SELECT  wf.path, wf.sha1
-                  FROM website_files wf
-                 WHERE wf.website_id=C.id
-                   AND wf.site_id=C.netlify_site_id
-            ) LOOP
-                IF (C1.path=l_ref_css_path AND C.build_css=1) THEN
-                    l_files.put(C1.path, l_ref_css_sha1);
-                ELSIF (C1.path=l_ref_js_path AND C.build_js=1) THEN
-                    l_files.put(C1.path, l_ref_js_sha1);
-                ELSE
-                    l_files.put(C1.path, C1.sha1);
-                END IF;
-            END LOOP;
-            /* DEPLOY TEST WEBSITE FIRST */
-            l_json:=new JSON_OBJECT_T;
-            l_json.put('files',l_files);
-            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
-            IF (check_deploy()) THEN
-                IF (C.build_css=1) THEN
-                    UPDATE website_files SET sha1=l_ref_css_sha1, deployed_date=current_timestamp WHERE website_id=C.id AND site_id=C.netlify_site_id AND path=l_ref_css_path;
-                ELSIF (C.build_js=1) THEN
-                    UPDATE website_files SET sha1=l_ref_js_sha1, deployed_date=current_timestamp WHERE website_id=C.id AND site_id=C.netlify_site_id AND path=l_ref_js_path;
-                END IF;
-                /* DEPLOY LIVE WEBSITE IF EXISTS */
-                IF (C.netlify_site_id_custom IS NOT NULL) THEN
-                    pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id_custom || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
-                    IF (check_deploy()) THEN
-                        IF (C.build_css=1) THEN
-                            UPDATE website_files SET sha1=l_ref_css_sha1, deployed_date=current_timestamp WHERE website_id=C.id AND site_id=C.netlify_site_id_custom AND path=l_ref_css_path;
-                        ELSIF (C.build_js=1) THEN
-                            UPDATE website_files SET sha1=l_ref_js_sha1, deployed_date=current_timestamp WHERE website_id=C.id AND site_id=C.netlify_site_id_custom AND path=l_ref_js_path;
-                        END IF;
-                    END IF;
-                END IF;
+            deploy(C.id, C.domain_name, C.netlify_site_id);
+            IF (C.netlify_site_id_custom IS NOT NULL) THEN
+                deploy(C.id, C.domain_name, C.netlify_site_id_custom);
             END IF;
         END LOOP;
     END;
@@ -275,7 +283,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         l_nav:=
         '<nav aria-label="Main">' ||
-            '<ul role="list">';
+            '<ul>';
         FOR C IN (
             SELECT navigation_label, collection_type, article_id, ROW_NUMBER() OVER (ORDER BY display_order) rn
               FROM website_article 
@@ -526,7 +534,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_footer website_article.footer_html%type;
         l_collection CLOB;
         l_clob CLOB;
-        l_importmap VARCHAR2(200);
+        l_jslib VARCHAR2(200);
 
         n PLS_INTEGER;
         n1 PLS_INTEGER;
@@ -572,7 +580,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 buildPageCollection(pCollectionType, pArticleid, l_collection);
             END IF;
 
-            l_importmap:='https://es-modules.netlify.app/' || LOWER(pEsmLibrary) || '/importmap.json';
+            l_jslib:='https://es-modules.netlify.app/' || LOWER(pEsmLibrary) || '/';
 
             /*
             ** FAVICON SVG MUST BE PURE XML WITH NO <STYLE> OR COMMENTS AND ESCAPED QUOTE AND HASH CHARACTERS
@@ -596,7 +604,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                     
                 '</head>' ||
-                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '" data-importmap="' || l_importmap || '">' || 
+                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '" data-jslib="' || l_jslib || '">' || 
                     '<div class="topnav flex-items space-between">' ||
                         pLogo || l_nav || pDropdown || 
                     '</div>' ||    
@@ -762,7 +770,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              SELECT '/javascript/' || file_name AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
                FROM apex_application_static_files 
               WHERE application_id=101
-                AND file_name IN ('deploy_start.min.js', 'deploy_main.min.js', 'deploy_web_vitals5.min.js', 'deploy_menulist.min.js')
+                AND file_name IN ('deploy_start.min.js') --, 'deploy_main.min.js', 'deploy_web_vitals5.min.js', 'deploy_menulist.min.js')
             )
             SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
