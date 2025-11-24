@@ -775,7 +775,7 @@ summary {
 }
 
 /* MENULIST */
-[role="menu"] {
+[id=menulist] {
   /* Anchor Positioning */
   position: absolute;
   position-area: end span-end;
@@ -847,7 +847,7 @@ summary {
 }
 
 
-[role="menu"]:popover-open {
+[id=menulist]:popover-open {
   /* End of fade-in and start of fade-out */
   transition-duration: 120ms;
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
@@ -857,7 +857,7 @@ summary {
 
 @starting-style {
   /* Start of fade-in */
-  [role="menu"]:popover-open {
+  [id=menulist]:popover-open {
     opacity: 0;
     transform: scale(0.8);
   }
