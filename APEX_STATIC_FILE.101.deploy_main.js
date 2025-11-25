@@ -5,6 +5,11 @@ const vitalsQueue = new Set();
 const narrow_viewport = window.matchMedia("(width <= 600px)");
 const metrics = [];
 
+
+if (!("anchorName" in document.documentElement.style)) {
+    import("https://unpkg.com/@oddbird/css-anchor-positioning");
+}
+
 if (narrow_viewport.matches) {
     const nav = document.querySelector("nav");
     const ul = nav.querySelector("ul");
