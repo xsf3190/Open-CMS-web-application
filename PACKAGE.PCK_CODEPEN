@@ -61,10 +61,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                   FROM website
                  WHERE id=pWebsiteid
                  UNION ALL
-                SELECT DECODE(file_name,'deploy.css',3,2), apex_util.blob_to_clob(file_content)
+                SELECT 2, apex_util.blob_to_clob(file_content)
                   FROM apex_application_static_files 
                  WHERE application_id=101
-                   AND file_name IN ('deploy.css', 'ckeditor.min.css')
+                   AND file_name='deploy.css'
+                UNION ALL
+                SELECT 3, apex_util.blob_to_clob(file_content)
+                  FROM apex_application_static_files 
+                 WHERE application_id=101
+                   AND file_name='ckeditor.min.css'
                 )
                 ORDER BY 1
             ) LOOP
