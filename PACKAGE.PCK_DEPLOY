@@ -31,7 +31,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE updateCommonModules(pWebsiteid IN website.id%type) IS
         l_domain_name website.domain_name%type;
         l_ref_css_path website_files.path%type:='/css/core-styles.min.css';
-        l_ref_js_path website_files.path%type :='/javascript/deploy_main.min.js';
+        l_ref_js_path website_files.path%type :='/javascript/deploy_start.min.js';
         l_ref_css_sha1 website_files.sha1%type;
         l_ref_js_sha1 website_files.sha1%type;
         l_files JSON_OBJECT_T;
@@ -517,9 +517,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pLogo IN VARCHAR2, 
         pNav IN VARCHAR2, 
         pDropdown in VARCHAR2, 
-        pEnv IN VARCHAR2, 
-        pRestUrl IN VARCHAR2, 
-        pEsmLibrary IN VARCHAR2, 
         pIntegrity IN VARCHAR2, 
         pCollectionType IN website_article.collection_type%type, 
         pCommonHeader IN website_article.header_html%type, 
@@ -534,7 +531,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_footer website_article.footer_html%type;
         l_collection CLOB;
         l_clob CLOB;
-        l_jslib VARCHAR2(200);
 
         n PLS_INTEGER;
         n1 PLS_INTEGER;
@@ -580,8 +576,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 buildPageCollection(pCollectionType, pArticleid, l_collection);
             END IF;
 
-            l_jslib:='https://es-modules.netlify.app/' || LOWER(pEsmLibrary) || '/';
-
             /*
             ** FAVICON SVG MUST BE PURE XML WITH NO <STYLE> OR COMMENTS AND ESCAPED QUOTE AND HASH CHARACTERS
             */
@@ -604,7 +598,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                     
                 '</head>' ||
-                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pRestUrl || '" data-jslib="' || l_jslib || '">' || 
+                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
                     '<div class="topnav flex-items space-between">' ||
                         pLogo || l_nav || pDropdown || 
                     '</div>' ||    
@@ -762,7 +756,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_files:= new JSON_OBJECT_T;
 
         /*
-        **  0. Build JAVASCRIPT FILES FIRST TO GET SHA256 INTEGRITY VALUE OF THE STARTER SCRIPT WHICH WE INCLUDE IN HEAD OF HTML FILES
+        **  0. BUILD JAVASCRIPT START SCRIPT FIRST TO GET ITS SHA256 INTEGRITY VALUE WHICH IS INCLUDED IN THE HEAD OF ALL HTML FILES
         */
         FOR C IN (
             WITH source AS
@@ -770,18 +764,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              SELECT '/javascript/' || file_name AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
                FROM apex_application_static_files 
               WHERE application_id=101
-                AND file_name IN ('deploy_start.min.js') --, 'deploy_main.min.js', 'deploy_web_vitals5.min.js', 'deploy_menulist.min.js')
+                AND file_name IN ('deploy_start.min.js')
             )
-            SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
+            SELECT s.deploy_filename, REPLACE(REPLACE(s.file_content,'#RESTURL#',pResturl),'#JSLIB#','https://es-modules.netlify.app/' || LOWER(w.esm_library) || '/') file_content, 
+                    s.updated_date, wf.sha1,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
-              FROM source s, website_files wf
-             WHERE wf.website_id(+)=pWebsiteid
+              FROM source s, website_files wf, website w
+             WHERE w.id=pWebsiteid
+               AND wf.website_id(+)=w.id
                AND wf.path(+)=s.deploy_filename
                AND wf.site_id(+)=pSiteid
         ) LOOP
-            IF (INSTR(C.deploy_filename,'deploy_start.min.js')>0) THEN
-                l_script_sha256:=getSha256(C.file_content);
-            END IF;
+            l_script_sha256:=getSha256(C.file_content);
+            
             IF (C.build=0) THEN
                 l_files.put(C.deploy_filename, C.sha1);
                 CONTINUE;
@@ -833,7 +828,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_common_footer:=buildCommonFooter(pWebsiteid);
                 l_favicon:=buildFavicon(pWebsiteid);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, pEnv, pRestUrl, C.esm_library, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_favicon, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_favicon, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
