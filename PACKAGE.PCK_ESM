@@ -120,7 +120,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
                 IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
                     pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
                 ELSE
-                    RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content clob and blob both null');
+                    RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content is null');
                 END IF;
             END LOOP;
 
