@@ -2,23 +2,11 @@ const bodydata = document.body.dataset;
 const dropdown = document.querySelector("#menulist");
 const dialog_close = document.querySelector("dialog.output .close");
 const vitalsQueue = new Set();
-const narrow_viewport = window.matchMedia("(width <= 600px)");
 const metrics = [];
 
 
 if (!("anchorName" in document.documentElement.style)) {
     import("https://unpkg.com/@oddbird/css-anchor-positioning");
-}
-
-if (narrow_viewport.matches) {
-    const nav = document.querySelector("nav");
-    const ul = nav.querySelector("ul");
-    if (ul.childElementCount>2) {
-        menulist.prepend(nav);
-        ul.style.flexDirection="column";
-        ul.style.alignItems="start";
-        ul.style.paddingBlockEnd="1rem";
-    }
 }
 
 let aud = "";
