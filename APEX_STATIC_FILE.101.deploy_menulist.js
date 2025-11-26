@@ -6,8 +6,17 @@
 class MenuNavigationHandler {
   constructor(menuEl) {
     this.menuEl = menuEl;
-    this.menuBtn = document.getElementById(this.menuEl.getAttribute("aria-labelledby")
-);
+    this.menuBtn = document.getElementById(this.menuEl.getAttribute("aria-labelledby"));
+    
+    const narrow_viewport = window.matchMedia("(width <= 600px)");
+    if (narrow_viewport.matches) {
+        let navitems = document.querySelectorAll("nav a");
+        navitems = [...navitems].reverse();
+        navitems.forEach((item) => {
+            this.menuEl.prepend(item);
+        });
+    }    
+
     this.menuItems = Array.from(menuEl.children);
     this.selectedItem = null;
     this.selectedItemIndex = 0;
