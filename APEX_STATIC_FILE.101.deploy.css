@@ -111,19 +111,15 @@ body>footer>a {
 /* NAVIGATION STYLES */
 
 .topnav {
-  color: black;
-  background-color: white;
   --flex-wrap: nowrap;
   --flex-gap: 1rem;
-}
-
-.topnav :first-child, .topnav :last-child {
-    align-self: flex-start;
+  padding-block-start: 0.5rem;
+  padding-inline-start: 1rem;
 }
 
 nav {
   font-family: var(--font-family-ui);
-  font-size: var(--step--2);
+  
 }
 
 nav a {
@@ -135,6 +131,7 @@ nav a {
   margin-inline-end: 0.5rem;
   padding: 0.1rem;
   text-decoration: none;
+  font-size: var(--step--2);
 }
 
 nav a:where(:hover, :focus) {
@@ -142,17 +139,25 @@ nav a:where(:hover, :focus) {
 }
 
 nav ul {
-  --flex-wrap: wrap;
-  --flex-horizontal-alignment: space-apart;
   list-style: none;
-  max-width: var(--max-width);
+  padding: 0;
+  margin: 0;
+  max-inline-size: var(--max-width);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
   gap: 1rem;
 }
 
 [aria-current="page"] {
   --border-color: var(--nav-highlight-color);
   --text-color: var(--nav-highlight-color);
+}
+
+@media (width<=600px) {
+  nav ul {
+    display:none;
+  }
 }
 
 /* 
@@ -734,25 +739,19 @@ summary {
     cursor: pointer;
 }
 
-/* POPOVER ANCHOR BUTTON */
-[popovertarget="menulist"] {
-  apearance:none;
-  background:none;
-  border:none;
-  display:flex;
-  align-items:center;
-  gap:0.5rem;
-}
-
-
 /* MENULIST HAMBURGER BUTTON SWITCHES TO CROSS WHEN ACTIVATED */
 
 [id=menulist-btn] {
     --icon-size: 32;
     --icon-bar-size: 6;
     --icon-translation-size: calc((var(--icon-size) - var(--icon-bar-size)) / 2);
+    align-self: flex-start;
     background-color: transparent;
     border: none;
+    display:flex;
+    align-items:center;
+    gap:0.5rem;
+    anchor-name: --menulist-anchor;
 }
 
 [id=menulist-btn]:has(+ *:popover-open) rect {
@@ -777,10 +776,13 @@ summary {
 /* MENULIST */
 [id=menulist] {
   /* Anchor Positioning */
-  position: absolute;
-  position-area: end span-end;
-  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
-  
+  /* position: absolute; */
+  /* position-area: end span-end; */
+  /* position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline; */
+  inset: auto;
+  top: anchor(--menulist-anchor bottom);
+  right: anchor(--menulist-anchor right);
+
   /* End of fade-out */
   opacity: 0;
   transform: scale(1);
