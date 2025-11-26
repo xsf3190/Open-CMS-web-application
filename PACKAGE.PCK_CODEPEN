@@ -46,7 +46,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             END IF;
 
             l_html:=
-            '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" data-resturl="' || pck_core.getRestUrl() || '" data-importmap="https://es-modules.netlify.app/' || LOWER(C.esm_library) || '/importmap.json">' ||
+            '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleId || '">' ||
                 '<div class="topnav flex-items space-between">' || l_logo || l_nav || l_dropdown || '</div>' ||
                 '<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>' ||
                 '<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>' ||
@@ -80,7 +80,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 SELECT apex_util.blob_to_clob(file_content) file_content
                   FROM apex_application_static_files 
                  WHERE application_id=101
-                   AND file_name='deploy_main.js'
+                   AND file_name='deploy_start.js'
             ) LOOP
                 l_javascript:=REPLACE(C1.file_content,'/javascript','https://' || l_session_data.url || '/javascript');
             END LOOP;
