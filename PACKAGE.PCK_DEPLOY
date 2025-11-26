@@ -65,6 +65,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
             l_deploy_css PLS_INTEGER:=0;
             l_deploy_js PLS_INTEGER:=0;
+            l_current_timestamp TIMESTAMP WITH TIME ZONE:=current_timestamp;
         BEGIN
             SELECT path, sha1
               BULK COLLECT INTO l_deploy
@@ -88,7 +89,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 RETURN;
             END IF;
 
-            dbms_output.put_line('START DEPLOY ' || pDomainName);
+            dbms_output.put_line('START DEPLOY ' || pDomainName || ' Site:' || pSiteid);
             l_files:=new JSON_OBJECT_T;
             FOR i IN 1..l_deploy.COUNT LOOP
                 l_files.put(l_deploy(i).path, l_deploy(i).sha1);
@@ -99,31 +100,29 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             check_deploy;
 
             IF (l_deploy_css=1) THEN
-                UPDATE website_files SET sha1=l_ref_css_sha1, deployed_date=current_timestamp WHERE website_id=pWebsiteid AND site_id=pSiteid AND path=l_ref_css_path;
+                UPDATE website_files SET sha1=l_ref_css_sha1, deployed_date=l_current_timestamp WHERE website_id=pWebsiteid AND site_id=pSiteid AND path=l_ref_css_path;
             END IF;
             IF (l_deploy_js=1) THEN
-                UPDATE website_files SET sha1=l_ref_js_sha1, deployed_date=current_timestamp WHERE website_id=pWebsiteid AND site_id=pSiteid AND path=l_ref_js_path;
+                UPDATE website_files SET sha1=l_ref_js_sha1, deployed_date=l_current_timestamp WHERE website_id=pWebsiteid AND site_id=pSiteid AND path=l_ref_js_path;
+            END IF;
+            
+            -- DELETE website_files WHERE website_id=pWebsiteid AND site_id=pSiteid AND deployed_date<l_current_timestamp;
+
+            IF (pWebsiteid IS NULL) THEN
+                COMMIT;
             END IF;
         END;
     BEGIN
         /* 
-        ** Process requires reference "LIVE" website modules
+        ** Process requires a reference website
         */
-        WITH reference AS 
-        (
-            SELECT wf.path, wf.sha1, wf.deployed_date, MAX(wf.deployed_date) OVER (PARTITION BY wf.path) max_deployed_date
-            FROM website_files wf, website w
-            WHERE wf.path IN (l_ref_css_path,l_ref_js_path) 
-            AND wf.website_id=w.id
-            AND wf.site_id=w.netlify_site_id
-        )
-        SELECT MAX(DECODE(r.path,l_ref_css_path,r.sha1)), MAX(DECODE(r.path,l_ref_js_path,r.sha1))
-        INTO l_ref_css_sha1, l_ref_js_sha1
-        FROM reference r
-        WHERE r.deployed_date=r.max_deployed_date;
-
-        dbms_output.put_line(l_ref_css_path || ':' || l_ref_css_sha1);
-        dbms_output.put_line(l_ref_js_path || ':' || l_ref_js_sha1);
+        SELECT MAX(DECODE(wf.path,l_ref_css_path,wf.sha1)), MAX(DECODE(wf.path,l_ref_js_path,wf.sha1))
+          INTO l_ref_css_sha1, l_ref_js_sha1
+          FROM website_files wf, website w
+         WHERE w.domain_name='restartnet.com' 
+           AND wf.path IN (l_ref_css_path,l_ref_js_path) 
+           AND wf.website_id=w.id
+           AND wf.site_id=w.netlify_site_id;
 
         FOR C IN (
             SELECT w.id, w.domain_name, w.netlify_site_id, w.netlify_site_id_custom
@@ -225,7 +224,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_uri_template ords_endpoints.uri_template%type;
     BEGIN
         l_html:=
-        '<button type="button" popovertarget="menulist" id="menulist-btn" style="anchor-name:--menulist-btn" aria-label="Actions menu">' ||
+        '<button type="button" popovertarget="menulist" id="menulist-btn" aria-label="Actions menu">' ||
             'Menu' ||
             '<svg height="1rem" viewBox="0 0 32 32" preserveAspectRatio="none" aria-hidden="true" focusable="false">' ||
               '<rect class="top" x="0" y="0" width="32" height="6" fill="currentColor" />' ||
@@ -266,7 +265,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         IF (l_logo IS NOT NULL) THEN
             l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
             l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
-            l_logo_styles:='style="margin-block-start:1rem;margin-inline-start:1rem;height:3rem;aspect-ratio:' || l_width || '/' || l_height || '"';
+            l_logo_styles:='height:3rem;aspect-ratio:' || l_width || '/' || l_height || '"';
         END IF;
 
         RETURN ('<span class="logo"' || l_logo_styles || '>' || l_logo || '</span>');
@@ -588,15 +587,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<title>' || l_title || '</title>' ||
                     '<meta name="author" content="restartnet.com">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
-
                     '<link rel="stylesheet" href="/css/website-styles.min.css">' ||
                     '<link rel="stylesheet" href="/css/core-styles.min.css">' ||
-                    '<link rel="stylesheet" href="/css/ckeditor.min.css">';
-
-                    pBody:=pBody ||
+                    '<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
                     '<link rel="icon" href="' || pFavicon || '">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
-                    
                 '</head>' ||
                 '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
                     '<div class="topnav flex-items space-between">' ||
@@ -669,7 +664,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY BLOB) IS
             l_sha1 website_files.sha1%type;
         BEGIN
-            dbms_output.put_line('new version: '||pFilename);
+            -- dbms_output.put_line('new version: '||pFilename);
             l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content_b:=pFileContent;
@@ -747,12 +742,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         **  1. html
         **  2. fonts
         **  3. css stylesheets
-        **  4. javascript starter and modules
+        **  4. javascript starter
         **  5. _headers file including strict Content Security Policy
-        **  6. robots.txt, sitemap.xml
+        **  6. sitemap.xml
         */
 
-        -- l_json:= new JSON_OBJECT_T;
         l_files:= new JSON_OBJECT_T;
 
         /*
@@ -776,10 +770,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wf.site_id(+)=pSiteid
         ) LOOP
             l_script_sha256:=getSha256(C.file_content);
-            
+
             IF (C.build=0) THEN
-                l_files.put(C.deploy_filename, C.sha1);
-                CONTINUE;
+                l_sha1:=LOWER(dbms_crypto.hash(src => C.file_content, typ => dbms_crypto.hash_sh1));
+                IF (l_sha1=C.sha1) THEN
+                    l_files.put(C.deploy_filename, C.sha1);
+                    EXIT;
+                END IF;
             END IF;
 
             logDeployment(pWebsiteId, pSiteId, 'Download JAVASCRIPT - '|| C.deploy_filename);
@@ -793,21 +790,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH content AS
             (
-                SELECT wa.article_id, w.esm_library, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, 
+                SELECT wa.article_id, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, 
                         GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
                    AND a.id=wa.article_id
                 UNION ALL 
-                SELECT a.id, w.esm_library, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, 
+                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, 
                         GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
                    AND a.parent_id=wa.article_id
             )
-            SELECT C.article_id, C.esm_library, C.path, C.collection_type, f.sha1, 
+            SELECT C.article_id, C.path, C.collection_type, f.sha1, 
                     CASE WHEN f.deployed_date IS NULL OR c.updated_date > f.deployed_date THEN 1 ELSE 0 END build
               FROM content c, website_files f
              WHERE f.website_id(+)=pWebsiteId
