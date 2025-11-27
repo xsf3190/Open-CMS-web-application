@@ -134,8 +134,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         END;
 
     BEGIN
-        
-
         /* pId contains website_id,article_id */
         l_website_id:=SUBSTR(pId,1,INSTR(pId,',')-1);
         l_article_id:=SUBSTR(pId,INSTR(pId,',')+1);
@@ -162,7 +160,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             RETURN;
         END IF;
 
-        FOR C IN (SELECT css, header, footer FROM website WHERE id=l_website_id) LOOP
+        FOR C IN (SELECT css FROM website WHERE id=l_website_id) LOOP
             
             SELECT apex_util.blob_to_clob(file_content)
               INTO l_deploy_css
@@ -185,75 +183,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 apex_string.push(l_updated_files,l_css);
             END IF;
 
-            /*
-            ** header and footer are the first and last elements of class "section" in l_body_html
-            */
-
-            l_header:=regexp_substr(l_body_html,'<header class="section.+?>(.+?)</header>',1,1,'n',1);
-            l_header:=regexp_replace(l_header,'<aside class="login.+?</aside>');
-            l_header:=TRIM(l_header);
-            IF (l_header IS NULL AND C.header IS NOT NULL) THEN
-                apex_string.push(l_updated_columns,'HEADER');
-                apex_string.push(l_updated_files,l_header);
-            ELSIF (dbms_lob.compare(l_header,NVL(C.header,'x'))<>0) THEN
-                apex_string.push(l_updated_columns,'HEADER');
-                apex_string.push(l_updated_files,l_header);
-            END IF;
-
-            l_footer:=regexp_substr(l_body_html,'<footer class="section.+?>(.+?)</footer>',1,1,'n',1);
-            l_footer:=TRIM(l_footer);
-            IF (l_footer IS NULL AND C.footer IS NOT NULL) THEN
-                apex_string.push(l_updated_columns,'FOOTER');
-                apex_string.push(l_updated_files,l_footer);
-            ELSIF (dbms_lob.compare(REPLACE(l_footer,chr(10)),REPLACE(NVL(C.footer,'x'),chr(10)))<>0) THEN
-                apex_string.push(l_updated_columns,'FOOTER');
-                apex_string.push(l_updated_files,l_footer);
-            END IF;
-
-            FOR i IN 1..l_updated_columns.COUNT LOOP
-                IF (i=1) THEN
-                    l_ddl:='UPDATE website SET updated_date=current_timestamp';
-                END IF;
-                CASE l_updated_columns(i)
-                    WHEN 'CSS' THEN l_ddl:=l_ddl || ',css=:B' || i;
-                    WHEN 'HEADER' THEN l_ddl:=l_ddl || ',header=:B' || i;
-                    WHEN 'FOOTER' THEN l_ddl:=l_ddl || ',footer=:B' || i;
-                END CASE;
-            END LOOP;
-
-            IF (l_ddl IS NOT NULL) THEN
-                l_ddl:=l_ddl || ' WHERE id=:B';
-                CASE l_updated_columns.COUNT
-                    WHEN 1 THEN EXECUTE IMMEDIATE l_ddl USING l_updated_files(1), l_website_id;
-                    WHEN 2 THEN EXECUTE IMMEDIATE l_ddl USING l_updated_files(1), l_updated_files(2), l_website_id;
-                    WHEN 3 THEN EXECUTE IMMEDIATE l_ddl USING l_updated_files(1), l_updated_files(2), l_updated_files(3), l_website_id;
-                END CASE;
-            END IF;
-        END LOOP;
-
-        /*
-        ** EXTRACT AND PROCESS HTML ELEMENT
-        */
-        l_main:=regexp_substr(l_body_html,'<main.+?</main>');
-        IF (INSTR(l_main,'<pre>')>0) THEN
-            apex_json.open_object;
-            apex_json.write('success', TRUE);
-            apex_json.write('message', CASE WHEN l_updated_files.COUNT>0 THEN 'UPLOADED: ' || apex_string.join(l_updated_columns,',') END || ' - ** &lt;main&gt; SKIPPED - CONTAINS &lt;PRE&gt; ELEMENT **');
-            apex_json.close_object;
-            RETURN;
-        END IF;
-        
-        /* Remove elements added in getCodepen procedure */
-        l_main:=regexp_replace(regexp_replace(regexp_replace(l_main,
-            '<ol class="featured.+?</ol>'),
-            '<main.+?>'),
-            '</main>');
-        
-        FOR C IN (SELECT body_html FROM article WHERE id=l_article_id) LOOP
-            IF (dbms_lob.compare(C.body_html,l_main)<>0) THEN
-                UPDATE article SET body_html=l_main, updated_date=current_timestamp WHERE id=l_article_id;
-                apex_string.push(l_updated_columns,'MAIN');
-            END IF;
         END LOOP;
 
         apex_json.open_object;
