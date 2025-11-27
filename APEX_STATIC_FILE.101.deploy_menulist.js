@@ -53,17 +53,6 @@ class MenuNavigationHandler {
     let module_name = event.target.dataset.endpoint;
     if (!module_name) return;
 
-    if (!document.querySelector("head > [type='importmap']")) {
-       const bodydata = document.body.dataset;
-        console.log("Create importmap for " + bodydata.importmap);
-        const response = await fetch(bodydata.importmap);
-        const data = await response.json();
-        const im = document.createElement('script');
-        im.type = 'importmap';
-        im.textContent = JSON.stringify(data);
-        document.head.appendChild(im);
-    }
-
     module_name = "deploy_" + module_name.substring(0,module_name.indexOf("/"));
     const module = await import(module_name)
     .catch((error) => {
