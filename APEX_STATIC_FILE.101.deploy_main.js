@@ -13,15 +13,6 @@ let aud = "";
 const jwt = localStorage.getItem("refresh");
 
 async function load_modules() { 
-    const importmap = bodydata.jslib + "importmap.json";
-    console.log("Create importmap " + importmap);
-    const response = await fetch(importmap);
-    const data = await response.json();
-    const im = document.createElement('script');
-    im.type = 'importmap';
-    im.textContent = JSON.stringify(data);
-    document.head.appendChild(im);
-
     let module_name = "deploy_menulist"
     const menu = await import(module_name)
     .catch((error) => {
@@ -207,10 +198,18 @@ observer.observe({ type: "navigation", buffered: true });
 /*
 ** ADD CWV METRIC TO QUEUE WHEN EMITTED
 */
+let metric_supported;
+if ('LargestContentfulPaint' in window) {
+    metric_supported = "LCP";
+} else {
+    metric_supported = "FCP";
+}
+
 const addToVitalsQueue = ({name,value,rating}) => {
     console.log(name,value);
     vitalsQueue.add({name:name,value:value,rating:rating});
-    if (name==="LCP") {
+    
+    if (name===metric_supported) {
         if (!sessionStorage.getItem(name)) {
             sessionStorage.setItem(name,value);
             sessionStorage.setItem("metrics",JSON.stringify(metrics));
