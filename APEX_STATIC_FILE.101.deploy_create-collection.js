@@ -5,13 +5,13 @@ import { callAPI, handleError } from "deploy_callAPI";
 import { output_dialog, dialog_footer, initDialog } from "deploy_elements";
 
 let endpoint;
-let collection;
+let parentid;
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
-    collection = element.dataset.collection;
+    parentid = element.dataset.parentid;
     
-    callAPI(endpoint, "GET", {collection:collection})
+    callAPI(endpoint, "GET", "?parentid=" + parentid)
     .then((data) => {
         initDialog(data);
     })
