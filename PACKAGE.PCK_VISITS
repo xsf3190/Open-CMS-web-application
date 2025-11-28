@@ -37,24 +37,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             'js'=>0,
             'json'=>0,
             'woff2'=>0,
-            'img'=>0
+            'img'=>0,
+            'map'=>0
         );
         l_lcp NUMBER;
+        l_fcp NUMBER;
         l_index VARCHAR2(5);
         l_article LONG;
         l_total NUMBER:=0;
         l_75P NUMBER;
+        l_filename VARCHAR2(200);
         n PLS_INTEGER;
     BEGIN
-        
+        -- pck_core.log(l_body_text);
         SELECT entryType, name, transferSize, contentType, initiatorType
           BULK COLLECT INTO l_metrics
           FROM JSON_TABLE(l_body_text, '$.metrics[*]' COLUMNS (entryType, name, transferSize, contentType, initiatorType))
          WHERE initiatorType NOT IN ('fetch','beacon');
 
-        SELECT ROUND(lcp/1000,1)
-          INTO l_lcp
-          FROM JSON_TABLE(l_body_text, '$' COLUMNS (lcp));
+        SELECT ROUND(lcp/1000,1),ROUND(fcp/1000,1)
+          INTO l_lcp, l_fcp
+          FROM JSON_TABLE(l_body_text, '$' COLUMNS (lcp, fcp));
         
 
         FOR i IN 1..l_metrics.COUNT LOOP
@@ -63,11 +66,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             ELSIF (l_metrics(i).initiatorType='img') THEN
                 l_resources('img'):=l_resources('img') + l_metrics(i).transferSize;
             ELSE
-                n:=INSTR(l_metrics(i).name,'.',-1);
-                IF (n>0) THEN
-                    l_index:=SUBSTR(l_metrics(i).name,n+1);
-                    l_resources(l_index):=l_resources(l_index) + l_metrics(i).transferSize;
+                n:=INSTR(l_metrics(i).name,'/',-1)+1;
+                l_filename:=SUBSTR(l_metrics(i).name,n);
+                n:=INSTR(l_filename,'.',-1);
+                IF (n=0) THEN
+                    l_index:='js'; /* oddbird anchor positioning polyfill */
+                ELSE
+                    l_index:=SUBSTR(l_filename,n+1);
                 END IF;
+                l_resources(l_index):=l_resources(l_index) + l_metrics(i).transferSize;
             END IF;
         END LOOP;
 
@@ -114,7 +121,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         '</div>' ||
         '<p>The chart shows that you downloaded ' || l_total || ' KB which is ' || l_75P || '% of the weight of most pages on the internet, that is 3,667 KB at the 75th percentile.</p>' ||
         '<p>The environmental impact of internet usage can be vastly reduced by smaller page weights.</p>' ||
-        '<p>The platform that built this web site aims to achieve maximum 100 KB pages that can be engaged with in less than 2 seconds (it took ' || l_lcp || ' seconds for you to engage with this page)</p>';
+        '<p>The platform that built this web site aims to achieve maximum 100 KB pages that can be engaged with in less than 2 seconds (it took ' || NVL(l_lcp,l_fcp) || ' seconds for you to engage with this page)</p>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
