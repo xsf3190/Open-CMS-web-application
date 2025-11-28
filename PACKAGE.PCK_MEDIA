@@ -218,13 +218,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                    AND a.article_id=wa.article_id
                    AND a.resource_type='image'
                    AND a.format<>'avif'
-                 UNION ALL
-                SELECT w.domain_name, a.id, a.cld_cloud_name, a.public_id
-                  FROM website w, asset a
-                 WHERE w.id=pWebsiteid
-                   AND w.hero_asset_id=a.id
-                   AND a.resource_type='image'
-                   AND a.format<>'avif'
             ),
             (SELECT cld_api_key, cld_api_secret, cld_upload_preset from users where id=44);
 
