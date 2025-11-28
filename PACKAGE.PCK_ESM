@@ -10,8 +10,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
     ** TO CREATE NEW ES MODULE -
     **
     ** 1. Upload and minify module in APEX
-    ** 2. insert into es_modules(module_name, deploy_envs) 
-    **    values ('deploy_edited-content.min.js', 1);
+    ** 2. insert into es_modules(module_name, deploy_envs) values ('deploy_edited-content.min.js', 1);
     */
 
     PROCEDURE buildESModules(pEsmLibrary IN VARCHAR2) IS 
