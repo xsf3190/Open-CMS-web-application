@@ -298,7 +298,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             '</li>';
         END LOOP;
         l_nav:=l_nav || 
-            '<ul>' ||
+            '</ul>' ||
         '</nav>';
 
         IF (n>1) THEN
@@ -776,6 +776,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     EXIT;
                 END IF;
             END IF;
+            /* ENSURE CORRECT INTEGRITY VALUE INCLUDED IN ALL HTML FILES */
+            DELETE website_files WHERE website_id=pWebsiteid AND site_id=pSiteid AND mime_type='html';
 
             logDeployment(pWebsiteId, pSiteId, 'Download JAVASCRIPT - '|| C.deploy_filename);
             addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
