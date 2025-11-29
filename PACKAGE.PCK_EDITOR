@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
-    PROCEDURE createCollectionForm(pWebsiteId IN website.id%type, pCollectionId IN website_article.article_id%type, pStatus OUT NUMBER);
+    PROCEDURE createCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER);
     --
     PROCEDURE createCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -32,7 +32,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /*
     ** CREATE HTML FOR FORM TO CREATE NEW COLLECTION
     */
-    PROCEDURE createCollectionForm(pWebsiteId IN website.id%type, pCollectionId IN website_article.article_id%type, pStatus OUT NUMBER) IS
+    PROCEDURE createCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_navigation_label website_article.navigation_label%type;
         l_header LONG;
@@ -42,11 +42,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT navigation_label INTO l_navigation_label FROM website_article WHERE website_id=pWebsiteId AND article_id=pCollectionId;
+        SELECT INITCAP(navigation_label) INTO l_navigation_label FROM website_article WHERE website_id=pWebsiteId AND article_id=pParentId;
 
         l_header:='<small>Create New '|| l_navigation_label || '</small>';
         l_article:=
-        '<label for="title">Enter Title</label>' ||
+         '<input type="hidden" name="parentid" value="' || pParentId || '">' ||
+         '<label for="title">Enter Title</label>' ||
         '<input type="text" name="title" value="" required>';
         l_footer:=
         '<button type="button" class="button send" data-processing="Creating new ' || l_navigation_label || ', wait a few seconds...">' ||
@@ -69,16 +70,49 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  CREATE NEW COLLECTION
+    **  CREATE NEW COLLECTION ITEM
     */
     PROCEDURE createCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
+        l_parentid article.parent_id%type;
+        l_title VARCHAR2(160);
+        l_title_slug VARCHAR2(160);
+        l_link VARCHAR2(250);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        SELECT parentid, title, apex_string_util.get_slug(title)
+          INTO l_parentid, l_title, l_title_slug
+          FROM JSON_TABLE(pBodyText, '$' COLUMNS(parentid, title));
+
+        -- pck_core.log('l_parentid:'||l_parentid||':l_title'||l_title);
+        /*
+        **  1. INSERT article for new collection item
+        **  2. Deploy editor site with new collection item
+        **  3. Return URL of new collection item
+        */
+        INSERT INTO article(id, parent_id, body_html) 
+        VALUES (seq_article.nextval, l_parentid, '<h2>' || l_title || '</h2>');
+
+        FOR C IN (
+            SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
+              FROM website w, website_article wa 
+             WHERE w.id=pWebsiteId
+               AND wa.website_id=w.id
+               AND wa.article_id=l_parentid
+        ) LOOP
+            /* Delete collection index page so it gets reconstructed in deployment */
+            DELETE website_files WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id AND path='/' || C.navigation_label_slug || '.html';
+            /* Deploy editor site with new collection item */ 
+            pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+            /* Link to new collection item */
+            l_link:='<a href="/' || C.navigation_label_slug || '/' || l_title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open new ' || C.navigation_label_slug || '</a>';
+        END LOOP;
+
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
+        l_json.put('link',l_link);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
