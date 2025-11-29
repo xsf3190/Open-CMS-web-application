@@ -215,9 +215,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             pck_api.callBrowserAPI(l_clob,l_clob2);
             FOR C1 IN (SELECT simple_software_string FROM JSON_TABLE(l_clob2 FORMAT JSON, '$.detection' COLUMNS (simple_software_string)) )
             LOOP
-                l_browser_lookup.EXTEND;
-                l_browser_lookup(l_browser_lookup.LAST).browser:=C1.simple_software_string;
-                l_browser_lookup(l_browser_lookup.LAST).user_agent:=C.user_agent;
+                IF (C1.simple_software_string IS NOT NULL) THEN
+                    l_browser_lookup.EXTEND;
+                    l_browser_lookup(l_browser_lookup.LAST).browser:=C1.simple_software_string;
+                    l_browser_lookup(l_browser_lookup.LAST).user_agent:=C.user_agent;
+                END IF;
             END LOOP;
         END LOOP;
         FORALL i IN l_browser_lookup.FIRST..l_browser_lookup.LAST
