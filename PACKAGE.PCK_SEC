@@ -32,7 +32,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     g_session_user_id NUMBER;
     g_website_id NUMBER;
     --
-    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pEnv IN VARCHAR2 DEFAULT null) RETURN VARCHAR2;
+    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pData IN VARCHAR2 DEFAULT null) RETURN VARCHAR2;
     --
     PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -387,7 +387,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         RETURN (NVL(l_scope,'visitor'));
     END;
 
-    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pEnv IN VARCHAR2 DEFAULT null) RETURN VARCHAR2 IS
+    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pData IN VARCHAR2 DEFAULT null) RETURN VARCHAR2 IS
         TYPE tt_editor_symbols IS RECORD(
             symbol VARCHAR2(10),
             color  VARCHAR2(20)
@@ -409,14 +409,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             'message'=>tt_editor_symbols('&#9993;','brown'),
             'publish-website'=>tt_editor_symbols('&#127760;','darkgreen'), 
             'userinfo'=>tt_editor_symbols('&#x1F464;','blue'),
-            'visits'=>tt_editor_symbols('&#x2637;','rebeccapurple')
+            'visits'=>tt_editor_symbols('&#x2637;','rebeccapurple'),
+            'create-collection'=>tt_editor_symbols('&#x2637;','rebeccapurple')
         );
         l_route VARCHAR2(30):=SUBSTR(pUriTemplate,1,INSTR(pUriTemplate,'/')-1);
     BEGIN
         RETURN ('<button type="button" role="menuitem" tabindex="-1"' ||
                 ' data-endpoint="' || pUriTemplate || '"' ||
                 ' data-method="' ||pMethod || '"' ||
-                CASE WHEN pEnv IS NOT NULL THEN 'data-env="' || pEnv || '"' END ||
+                CASE WHEN pData IS NOT NULL THEN pData END ||
                 '>' || 
                 '<span aria-hidden="true" style="color:' || l_editor_symbols(l_route).color || '">' || l_editor_symbols(l_route).symbol || '</span>' ||
                 pLabel || 
@@ -429,6 +430,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     FUNCTION getMenulist(pWebsiteId IN website.id%type, pScope IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_menulist LONG;
         l_editor_site BOOLEAN:=FALSE;
+        l_collections LONG;
+        n PLS_INTEGER;
     BEGIN
         /*
         ** SITE IS "TEST" WHEN
@@ -440,6 +443,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_editor_site:=pck_hosting.getEnvFromURL(pUrl)='TEST';
 
         refreshOrdsEndpoints(pWebsiteId);
+
+        FOR C IN (
+            SELECT article_id, navigation_label
+              FROM website_article 
+             WHERE website_id=pWebsiteId 
+               AND collection_type<>'N/A'
+        ) LOOp
+            l_collections:=l_collections || 
+                addMenuButton('create-collection/:ID','GET', 'New ' || INITCAP(C.navigation_label), ' data-parentid="' || C.article_id || '"');
+        END LOOP;
 
         FOR C IN (
             SELECT CASE WHEN o.label='userinfo' THEN pEmail ELSE o.label END label, o.uri_template, o.method, o.priority
@@ -460,14 +473,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                       label
         )
         LOOP
-            -- l_reports:=NULL;
-            -- IF (C.route='visits') THEN
-            --     l_reports:='visits|table;trends|graph;performance|graph;engagement|table;location|table;browser|table';
-            -- END IF;
             IF (l_editor_site) THEN
+                IF (INSTR(C.uri_template,'create-collection')>0) THEN
+                    l_menulist:=l_menulist || l_collections;
+                    CONTINUE;
+                END IF;
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
                 IF (INSTR(C.uri_template,'publish-website')>0) THEN
-                    l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, 'Publish Live Site', 'LIVE');
+                    l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, 'Publish Live Site', 'data-env="LIVE"');
                 END IF;
             ELSIF (C.priority=1) THEN
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
