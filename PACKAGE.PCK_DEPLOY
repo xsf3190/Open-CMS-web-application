@@ -974,7 +974,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  6. START DEPLOYMENT NOW THAT ALL WEBSITE FILES HAVE BEEN PREPARED
+        **  6. BUILD robots.txt TO DISCOURAGE AI CRAWLERS
+        */
+        FOR C IN (
+            WITH source AS
+            (
+             SELECT '/' || file_name AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+               FROM apex_application_static_files 
+              WHERE application_id=101
+                AND file_name='robots.txt'
+            )
+            SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
+                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.site_id(+)=pSiteid
+               AND wf.path(+)=s.deploy_filename
+        ) LOOP
+            IF (C.build=0) THEN
+                l_files.put(C.deploy_filename, C.sha1);
+            ELSE
+                logDeployment(pWebsiteId, pSiteId, 'Download robots.txt');
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
+            END IF;
+        END LOOP;
+
+        /*
+        **  START DEPLOYMENT NOW THAT ALL WEBSITE FILES HAVE BEEN PREPARED
         */
         sendNetlifyDeploy;
 
