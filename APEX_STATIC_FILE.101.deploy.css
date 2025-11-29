@@ -211,7 +211,7 @@ h3 {
 h4 {
   font-size: var(--step-1);
 }
-p, ul:not([role]), ol:not([role]) {
+p {
   font-size: var(--step-0);
   text-wrap: pretty;
 }
@@ -225,17 +225,6 @@ main h3,
 main h4 {
   text-wrap: pretty;
   font-family: var(--font-family-headings);
-}
-
-
-/* PROMOTION STYLES */
-.promotion {
-    display:grid;
-    place-items:center;
-    margin-block: 1rem;
-}
-.promotion img {
-    inline-size: var(--space-3xl);
 }
 
 /* LINK STYLES */
@@ -347,62 +336,15 @@ main a:hover {
   );
 }
 
-.grid__2col {
-  --grid-template-columns: repeat(2, 1fr);
-}
-
-.grid__4col {
-  --grid-template-columns: repeat(4, 1fr);
-}
-
-.grid__6col {
-  --grid-template-columns: repeat(6, 1fr);
-}
-
 .grid > * {
   padding: var(--grid-padding, 0.2em 0.5em);
   border-inline-start: var(--grid-border);
   border-block-end: var(--grid-border);
 }
 
-.grid-heading {
-  color: #fff;
-  background-color: var(--color-primary);
-}
-
-.grid[data-grid-variant="1"] {
-  --grid-template-columns: 10ch 1fr;
-  outline: initial;
-  align-items: baseline;
-  column-gap: 1em;
-}
-
-.grid[data-grid-variant="1"]>* {
-  --grid-padding: 1em 0;
-  border: initial;
-}
-
-.grid[data-grid-variant="1"]>*:nth-child(odd) {
-  text-align: end;
-  color: var(--color-primary-light);
-  font-size: var(--step--2);
-}
-
-.grid[data-grid-variant="1"]>*:nth-child(even) {
-  text-align: start;
-  border-block-end: var(--grid-border);
-  font-size: var(--step--1);
-}
-
 /* MORE UtILITES - NEED TO STRUCTURE THIS */
 .round-border {
   border-radius: 50%;
-}
-.curved-border {
-  border-radius: var(--space-m);
-}
-.color-yellow {
-  color: #ff0;
 }
 .icon-with-text {
   display: flex;
@@ -418,13 +360,10 @@ main a:hover {
 /* VISUALLY-HIDDEN CAN'T BE SEEN EXCEPT TO ASSISTIVE TECHNOLOGY */
 
 .visually-hidden {
-  border: 0;
-  clip: rect(0 0 0 0);
-  height: auto;
-  margin: 0;
+  clip-path: inset(50%);
   overflow: hidden;
-  padding: 0;
   position: absolute;
+  height: 1px;
   width: 1px;
   white-space: nowrap;
 }
@@ -440,9 +379,9 @@ form {
 }
 form label {
   display: block;
-  font-weight: 350;
+  font-weight: 550;
 }
-form input[type="text"], form input[type="email"], form input[type="tel"] {
+form input[type="text"], form input[type="email"] {
   inline-size: 100%;
   font: inherit;
   line-height: 2;
@@ -455,9 +394,8 @@ form input+div {
 
 form textarea {
   resize: vertical;
-  min-block-size: 7rem;
-  font-size: var(--step-0);
-  inline-size: 100%;
+  min-block-size: 5rem;
+  font-size: var(--step--2);
   line-height: 1.5;
 }
 
