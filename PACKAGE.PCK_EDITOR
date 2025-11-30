@@ -6,6 +6,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    PROCEDURE editCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER);
+    --
     PROCEDURE getDeploymentStatus(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
@@ -28,6 +30,61 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             display_order website_article.display_order%type
         );
     TYPE t_labels IS TABLE OF tt_labels;
+
+    /*
+    ** CREATE HTML FOR FORM TO EDIT COLLECTION INDEX
+    */
+    PROCEDURE editCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_navigation_label website_article.navigation_label%type;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        n PLS_INTEGER:=0;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        SELECT INITCAP(navigation_label) INTO l_navigation_label FROM website_article WHERE website_id=pWebsiteId AND article_id=pParentId;
+
+        l_header:='<small>Edit '|| l_navigation_label || ' Index</small>';
+
+        l_article:=
+        '<div style="overflow-x:auto;font-size:50%" tabindex="0" role="group" aria-labelledby="table-caption">' ||
+            '<table class="data-table">' ||
+                '<caption id="table-caption" style="text-align:left">Change excerpts / Delete posts</caption>' ||
+                '<tr><th style="text-align:left">Excerpt</th><th style="text-align:left">Update Excerpt</th><th>Delete '|| l_navigation_label || '</th></tr>';
+                
+        FOR C IN (
+            SELECT id, UPPER(title) title, excerpt FROM article WHERE parent_id=pParentId ORDER BY updated_date DESC
+        ) LOOP
+            l_article:=l_article ||
+            '<tr>' || 
+                '<td><label for="item-' || C.id || '">' || C.title|| '</label><textarea id="item-' || C.id || '">' || C.excerpt || '</textarea></td>' || 
+                '<td><button type="button" class="button update" data-id="' || C.id || '">UPDATE</button></td>' ||
+                '<td><button type="button" class="button delete" data-id="' || C.id || '">DELETE</button></td>' ||
+            '</tr>';
+        END LOOP;
+        l_article:=l_article ||
+            '</table>' ||
+        '</div>';
+
+        l_footer:=
+        '<span aria-live="polite"></span>' ||
+        '<span class="loader icon"></span>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
 
     /*
     ** CREATE HTML FOR FORM TO CREATE NEW COLLECTION
@@ -92,8 +149,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         **  2. Deploy editor site with new collection item
         **  3. Return URL of new collection item
         */
-        INSERT INTO article(id, parent_id, body_html) 
-        VALUES (seq_article.nextval, l_parentid, '<h2>' || l_title || '</h2>');
+        INSERT INTO article(id, parent_id, author_user_id, title, excerpt, body_html) 
+        VALUES (seq_article.nextval, l_parentid, l_session_data.user_id, l_title, 'This is an excerpt to be changed', '<h2>' || l_title || '</h2>');
 
         FOR C IN (
             SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
@@ -596,13 +653,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
     /* 
     **  UPDATE CONTENT RECEIVED FROM CKEDITOR. 
-    **  SET FLAG ON WEBSITE IF THE HOME PAGE HEADER OR FOOTER UPDATED
+    **  SET FLAG ON WEBSITE IF IT'S THE HOME PAGE HEADER OR FOOTER UPDATED
     */
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_word_count NUMBER;
         l_html CLOB;
         l_id VARCHAR2(6);
+        l_title article.title%type;
+        l_excerpt article.excerpt%type;
         l_json JSON_OBJECT_T;
 
         PROCEDURE setWebsiteUpdatedDate IS
@@ -635,8 +694,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 setWebsiteUpdatedDate;
 
             WHEN 'main' THEN
+                l_title:=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1))),1,100);
+                l_excerpt:=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<p>(.+?)<\/p>',1,1))),1,160);
+
                 UPDATE article 
-                   SET word_count=l_word_count, 
+                   SET word_count=l_word_count,
+                       title=l_title,
+                       excerpt=l_excerpt, 
                        body_html=l_html,
                        updated_date = current_timestamp
                  WHERE id=pArticleId;
