@@ -797,7 +797,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                    AND wa.website_id=w.id
                    AND a.id=wa.article_id
                 UNION ALL 
-                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(a.body_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1)))) || '.html' path, 
+                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(a.title) || '.html' path, 
                         GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
