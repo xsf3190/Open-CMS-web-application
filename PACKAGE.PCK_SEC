@@ -410,7 +410,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             'publish-website'=>tt_editor_symbols('&#127760;','darkgreen'), 
             'userinfo'=>tt_editor_symbols('&#x1F464;','blue'),
             'visits'=>tt_editor_symbols('&#x2637;','rebeccapurple'),
-            'create-collection'=>tt_editor_symbols('&#x2637;','rebeccapurple')
+            'create-collection'=>tt_editor_symbols('&#x2637;','rebeccapurple'),
+            'edit-collection'=>tt_editor_symbols('&#x2637;','rebeccapurple')
         );
         l_route VARCHAR2(30):=SUBSTR(pUriTemplate,1,INSTR(pUriTemplate,'/')-1);
     BEGIN
@@ -451,7 +452,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                AND collection_type<>'N/A'
         ) LOOp
             l_collections:=l_collections || 
-                addMenuButton('create-collection/:ID','GET', 'New ' || INITCAP(C.navigation_label), ' data-parentid="' || C.article_id || '"');
+                addMenuButton('create-collection/:ID','GET', 'New ' || INITCAP(C.navigation_label), ' data-parentid="' || C.article_id || '"') ||
+                addMenuButton('edit-collection/:ID','GET', 'Edit ' || INITCAP(C.navigation_label) || ' Index', ' data-parentid="' || C.article_id || '"');
         END LOOP;
 
         FOR C IN (
@@ -474,7 +476,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         )
         LOOP
             IF (l_editor_site) THEN
-                IF (INSTR(C.uri_template,'create-collection')>0) THEN
+                IF (INSTR(C.uri_template,'collection')>0) THEN
                     l_menulist:=l_menulist || l_collections;
                     CONTINUE;
                 END IF;
