@@ -82,7 +82,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                  WHERE application_id=101
                    AND file_name='deploy_start.js'
             ) LOOP
-                l_javascript:=REPLACE(C1.file_content,'/javascript','https://' || l_session_data.url || '/javascript');
+                l_javascript:=REPLACE(REPLACE(C1.file_content,'#RESTURL#',pck_core.getRestURL()),'#JSLIB#','https://es-modules.netlify.app/' || LOWER(C.esm_library) || '/');
             END LOOP;
 
         END LOOP;
