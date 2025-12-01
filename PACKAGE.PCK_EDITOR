@@ -4,9 +4,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE createCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    PROCEDURE deleteCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE editCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER);
+    PROCEDURE getCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getDeploymentStatus(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
@@ -15,6 +17,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     PROCEDURE getPages(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB);
+    --
+    PROCEDURE updateCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -34,7 +38,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /*
     ** CREATE HTML FOR FORM TO EDIT COLLECTION INDEX
     */
-    PROCEDURE editCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER) IS
+    PROCEDURE getCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_navigation_label website_article.navigation_label%type;
         l_header LONG;
@@ -52,17 +56,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article:=
         '<div style="overflow-x:auto;font-size:50%" tabindex="0" role="group" aria-labelledby="table-caption">' ||
             '<table class="data-table">' ||
-                '<caption id="table-caption" style="text-align:left">Change excerpts / Delete posts</caption>' ||
+                '<caption id="table-caption" style="text-align:left">Change excerpts / Delete ' || l_navigation_label || '</caption>' ||
                 '<tr><th style="text-align:left">Excerpt</th><th style="text-align:left">Update Excerpt</th><th>Delete '|| l_navigation_label || '</th></tr>';
                 
         FOR C IN (
             SELECT id, UPPER(title) title, excerpt FROM article WHERE parent_id=pParentId ORDER BY updated_date DESC
         ) LOOP
             l_article:=l_article ||
-            '<tr>' || 
-                '<td><label for="item-' || C.id || '">' || C.title|| '</label><textarea id="item-' || C.id || '">' || C.excerpt || '</textarea></td>' || 
-                '<td><button type="button" class="button update" data-id="' || C.id || '">UPDATE</button></td>' ||
-                '<td><button type="button" class="button delete" data-id="' || C.id || '">DELETE</button></td>' ||
+            '<tr data-id="' || C.id || '">' || 
+                '<td><label for="excerpt-' || C.id || '" style="max-inline-size:20ch">' || C.title|| '</label><textarea id="excerpt-' || C.id || '">' || C.excerpt || '</textarea></td>' || 
+                '<td><button type="button" class="button update">UPDATE</button></td>' ||
+                '<td><button type="button" class="button delete" style="--button-bg:red">DELETE</button></td>' ||
             '</tr>';
         END LOOP;
         l_article:=l_article ||
@@ -70,6 +74,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         '</div>';
 
         l_footer:=
+        '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' ||
+            'PUBLISH' ||
+        '</button>' ||
         '<span aria-live="polite"></span>' ||
         '<span class="loader icon"></span>';
 
@@ -78,6 +85,44 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json.put('header',l_header);
         l_json.put('article',l_article);
         l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+    /* 
+    **  UPDATE COLLECTION ITEM
+    */
+    PROCEDURE updateCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+        l_parentid article.parent_id%type;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+    /* 
+    **  DELETE COLLECTION ITEM
+    */
+    PROCEDURE deleteCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+        l_parentid article.parent_id%type;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
