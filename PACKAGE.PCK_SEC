@@ -450,7 +450,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
               FROM website_article 
              WHERE website_id=pWebsiteId 
                AND collection_type<>'N/A'
-        ) LOOp
+        ) LOOP
             l_collections:=l_collections || 
                 addMenuButton('create-collection/:ID','GET', 'New ' || INITCAP(C.navigation_label), ' data-parentid="' || C.article_id || '"') ||
                 addMenuButton('edit-collection/:ID','GET', 'Edit ' || INITCAP(C.navigation_label) || ' Index', ' data-parentid="' || C.article_id || '"');
@@ -477,7 +477,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         LOOP
             IF (l_editor_site) THEN
                 IF (INSTR(C.uri_template,'collection')>0) THEN
-                    l_menulist:=l_menulist || l_collections;
                     CONTINUE;
                 END IF;
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
@@ -488,6 +487,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
             END IF;
         END LOOP;
+        IF (l_editor_site AND l_collections IS NOT NULL) THEN
+            l_menulist:=l_menulist || l_collections;
+        END IF;
 
         RETURN (l_menulist);
     END;
