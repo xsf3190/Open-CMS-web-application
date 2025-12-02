@@ -404,17 +404,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             'ecology'=>tt_editor_symbols('&#127807;',''),
             'edit-codepen'=>tt_editor_symbols('&#9917;','crimson'),
             'edit-content'=>tt_editor_symbols('&#9998;','crimson'),
-            'edit-pages'=>tt_editor_symbols('&#8943;','brown'),
+            'edit-pages'=>tt_editor_symbols('&#128214;','brown'),
             'link-domain'=>tt_editor_symbols('&#9884;','brown'),
             'message'=>tt_editor_symbols('&#9993;','brown'),
             'publish-website'=>tt_editor_symbols('&#127760;','darkgreen'), 
             'userinfo'=>tt_editor_symbols('&#x1F464;','blue'),
-            'visits'=>tt_editor_symbols('&#x2637;','rebeccapurple'),
-            'create-collection'=>tt_editor_symbols('&#x2637;','rebeccapurple'),
-            'edit-collection'=>tt_editor_symbols('&#x2637;','rebeccapurple')
+            'visits'=>tt_editor_symbols('&#128202;','rebeccapurple'),
+            'page-options'=>tt_editor_symbols('&#x2637;','rebeccapurple')
         );
         l_route VARCHAR2(30):=SUBSTR(pUriTemplate,1,INSTR(pUriTemplate,'/')-1);
     BEGIN
+    pck_core.log(l_route);
         RETURN ('<button type="button" role="menuitem" tabindex="-1"' ||
                 ' data-endpoint="' || pUriTemplate || '"' ||
                 ' data-method="' ||pMethod || '"' ||
@@ -431,7 +431,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     FUNCTION getMenulist(pWebsiteId IN website.id%type, pScope IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_menulist LONG;
         l_editor_site BOOLEAN:=FALSE;
-        l_collections LONG;
         n PLS_INTEGER;
     BEGIN
         /*
@@ -444,17 +443,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_editor_site:=pck_hosting.getEnvFromURL(pUrl)='TEST';
 
         refreshOrdsEndpoints(pWebsiteId);
-
-        FOR C IN (
-            SELECT article_id, navigation_label
-              FROM website_article 
-             WHERE website_id=pWebsiteId 
-               AND collection_type<>'N/A'
-        ) LOOP
-            l_collections:=l_collections || 
-                addMenuButton('create-collection/:ID','GET', 'New ' || INITCAP(C.navigation_label), ' data-parentid="' || C.article_id || '"') ||
-                addMenuButton('edit-collection/:ID','GET', 'Edit ' || INITCAP(C.navigation_label) || ' Index', ' data-parentid="' || C.article_id || '"');
-        END LOOP;
 
         FOR C IN (
             SELECT CASE WHEN o.label='userinfo' THEN pEmail ELSE o.label END label, o.uri_template, o.method, o.priority
@@ -476,9 +464,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         )
         LOOP
             IF (l_editor_site) THEN
-                IF (INSTR(C.uri_template,'collection')>0) THEN
-                    CONTINUE;
-                END IF;
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
                 IF (INSTR(C.uri_template,'publish-website')>0) THEN
                     l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, 'Publish Live Site', 'data-env="LIVE"');
@@ -487,9 +472,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
             END IF;
         END LOOP;
-        IF (l_editor_site AND l_collections IS NOT NULL) THEN
-            l_menulist:=l_menulist || l_collections;
-        END IF;
 
         RETURN (l_menulist);
     END;
