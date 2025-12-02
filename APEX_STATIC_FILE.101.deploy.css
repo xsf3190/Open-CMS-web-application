@@ -392,21 +392,24 @@ form input+div {
     block-size: 2lh;
 }
 
-form textarea {
-  resize: vertical;
-  min-block-size: 5rem;
-  font-size: var(--step--1);
+textarea {
+  resize: none;
+  field-sizing: content;
   line-height: 1.5;
-  inline-size: min(75%, 90vw);
-  font-family: inherit;
+  padding: 0.25em 0.5em;
+  font: inherit;
 }
 
 fieldset {
+    font: inherit;
     border-radius:0.5em;
     &:has([type=checkbox]) {
         display: grid;
         grid-template-columns: 1.5em auto;
         gap: 0.5em;
+    }
+    &>legend {
+        font-weight: 550;
     }
     &>p {
         grid-column: 1 / span 2;
