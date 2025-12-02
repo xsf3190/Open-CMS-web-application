@@ -2,16 +2,19 @@
 /* EDIT COLLECTION INDEX      */
 /* ************************** */
 import { callAPI, handleError } from "deploy_callAPI";
-import { output_dialog, dialog_article, dialog_footer, initDialog } from "deploy_elements";
+import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
 
 let endpoint;
+let dml;
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
     
+    
     callAPI(endpoint, "GET")
     .then((data) => {
         initDialog(data);
+        dml = dialog_article.querySelector("[name=dml]").value;
     })
     .catch((error) => {
             handleError(error);
@@ -19,6 +22,8 @@ export const init = (element) => {
 }
 
 const changeHandler = (e) => {
+    if (dml==="insert") return;
+
     const name = e.target.getAttribute("name");
     callAPI(endpoint, "PUT", {name:name, value:e.target.value})
     .then((data) => {
@@ -43,11 +48,14 @@ const clickHandler = (e) => {
 
     isSending = true;
     live.textContent = e.target.dataset.processing;
-
-    const form = output_dialog.querySelector("form");
-    const formData = new FormData(form);
-    const formObj = Object.fromEntries(formData);
     loader.style.opacity=1;
+
+    const formObj = {dml:dml};
+    
+    if (dml==="insert") {
+        formObj["title"]=document.querySelector("[name=title]").value;
+        formObj["excerpt"]=document.querySelector("[name=excerpt]").value;
+    }
 
     callAPI(endpoint, 'POST', formObj)
         .then((data) => {
