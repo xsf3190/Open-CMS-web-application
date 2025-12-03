@@ -10,7 +10,6 @@ let dml;
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
     
-    
     callAPI(endpoint, "GET")
     .then((data) => {
         initDialog(data);
@@ -36,8 +35,15 @@ const changeHandler = (e) => {
 
 let isSending = false;
 
-const clickHandler = (e) => {
-    if (!e.target.matches(".publish")) return;
+const clickHandler = async (e) => {
+    if (e.target.classList.contains("delete")) {
+        const data = await callAPI(endpoint, 'DELETE', {});
+        console.log(data);
+        dialog_footer.querySelector(".publish").click();
+        return;
+    }
+
+    if (!e.target.classList.contains("publish")) return;
 
     if (isSending) {
         console.log("Prevent double sends");
@@ -62,8 +68,14 @@ const clickHandler = (e) => {
             isSending = false;
             loader.style.opacity=0;        
             live.replaceChildren();
-            live.insertAdjacentHTML('beforeend',data.link);
-            live.style.color = "green";
+            if (data.link) {
+                live.insertAdjacentHTML('beforeend',data.link);
+                live.style.color = "green";
+            }
+            if (data.message) {
+                live.insertAdjacentHTML('beforeend',data.message);
+                live.style.color = "red";
+            }
         })
         .catch((error) => {
             loader.style.opacity=0;
