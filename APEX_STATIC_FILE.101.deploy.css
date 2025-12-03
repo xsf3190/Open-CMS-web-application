@@ -54,6 +54,20 @@ form,
 }
 
 
+/* SKIP TO MAIN CONTENT ON ALL PAGES */
+
+.skip-link:not(:focus):not(:active) {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+main:focus {
+  outline: none;
+}
+
 img {
   max-width: 100%;
   height: auto;
