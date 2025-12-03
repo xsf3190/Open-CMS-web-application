@@ -1,7 +1,5 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
-    PROCEDURE createCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
-    --
     PROCEDURE deleteCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
@@ -13,6 +11,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getPages(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
+    --
+    PROCEDURE publishPageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB);
     --
@@ -48,6 +48,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             SELECT a.id, a.title, l.article_id_2
               FROM article a, checked l
              WHERE a.parent_id=pParentId
+               AND a.id<>pArticleid
                AND a.id=l.article_id_2(+)
              ORDER BY a.title
         ) LOOP
@@ -81,33 +82,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                AND wa.article_id=NVL(a.parent_id,a.id)
         ) LOOP
             CASE 
+                /* Updating Page Options for a selected BLOG */
                 WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
                     l_header:='<h4>'|| INITCAP(C.navigation_label) || ': ' || C.title || '</h4>';
                     l_article:=
                     '<p>Use this form to edit the excerpt and link to other ' || C.navigation_label || ' posts that may interest your viewers.' ||
                     '</p>' ||
+                    '<input type="hidden" name="dml" value="update">' ||
                     '<div>' ||
-                        '<label for="excerpt">Change excerpt</label>' ||
-                        '<textarea id="excerpt" name="excerpt">' || C.excerpt || '</textarea>' ||
+                        '<label for="excerpt">Change excerpt (maximum 160 characters)</label>' ||
+                        '<textarea id="excerpt" name="excerpt" rows="2" maxlength="160">' || C.excerpt || '</textarea>' ||
                     '</div>' ||
-                    '<fieldset>' ||
-                        '<legend>Link to other '|| C.navigation_label || 's</legend>' ||
-                        '<p><a href="#skip">Skip to next control</a></p>' ||
-                            getLinkOptions(C.parent_id, pArticleId) ||
-                    '</fieldset>' ||
+                    '<div>' ||
+                        '<fieldset>' ||
+                            '<legend>Link to other '|| C.navigation_label || 's</legend>' ||
+                            '<p><a href="#skip">Skip to next</a></p>' ||
+                                getLinkOptions(C.parent_id, pArticleId) ||
+                        '</fieldset>' ||
+                    '</div>' ||
                     '<p id="skip"></p>';
+                /* Creating new BLOG item */
                 WHEN (C.parent_id IS NULL AND C.collection_type<>'N/A') THEN
                     l_header:='<h4>Create New '|| INITCAP(C.navigation_label) || '</h4>';
                     l_article:=
                     '<p>Use this form to create a new ' || C.navigation_label ||
                     '</p>' ||
+                    '<input type="hidden" name="dml" value="insert">' ||
                     '<div>' ||
-                        '<label for="title">Enter title</label>' ||
-                        '<input id="title" value="">' ||
+                        '<label for="title">Enter title (maximum 100 characters)</label>' ||
+                        '<input type="text" maxlength="100" id="title" name="title" value="">' ||
+                    '</div>' ||
+                    '<div>' ||
+                        '<label for="excerpt">Enter excerpt (maximum 160 characters)</label>' ||
+                        '<textarea id="excerpt" name="excerpt"></textarea>' ||
                     '</div>';
                 ELSE
                     l_header:='<h4>Page Options for '|| INITCAP(C.navigation_label) || '</h4>';
-                    l_article:='<p>NOT IMPLEMENTED</p>';
+                    l_article:='<p>NOT IMPLEMENTED YET</p>';
             END CASE;
 
             l_footer:=
@@ -156,7 +167,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             CASE 
                 WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
                     IF (l_name='excerpt') THEN
-                        UPDATE article SET excerpt=l_value WHERE id=pArticleid;
+                        UPDATE article SET excerpt=l_value, updated_date=current_timestamp  WHERE id=pArticleid;
                     END IF;
                     IF (l_name='link') THEN
                         BEGIN
@@ -164,7 +175,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                             EXCEPTION WHEN DUP_VAL_ON_INDEX THEN
                                 DELETE article_link WHERE article_id_1=pArticleid AND article_id_2=l_value;
                         END;
+                        UPDATE article SET updated_date=current_timestamp WHERE id=pArticleid;
                     END IF;
+                WHEN (C.parent_id IS NULL AND C.collection_type='BLOG') THEN
+                    null;
             END CASE;
         END LOOP;
 
@@ -197,86 +211,89 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             pck_core.log_error(pStatus);
     END;
 
-    /*
-    ** CREATE HTML FOR FORM TO CREATE NEW COLLECTION
-    */
-    PROCEDURE createCollectionForm(pWebsiteId IN website.id%type, pParentId IN website_article.article_id%type, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_navigation_label website_article.navigation_label%type;
-        l_header LONG;
-        l_article CLOB;
-        l_footer LONG;
-        l_json JSON_OBJECT_T;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        SELECT INITCAP(navigation_label) INTO l_navigation_label FROM website_article WHERE website_id=pWebsiteId AND article_id=pParentId;
-
-        l_header:='<small>Create New '|| l_navigation_label || '</small>';
-        l_article:=
-         '<input type="hidden" name="parentid" value="' || pParentId || '">' ||
-         '<label for="title">Enter Title</label>' ||
-        '<input type="text" name="title" value="" required>';
-        l_footer:=
-        '<button type="button" class="button send" data-processing="Creating new ' || l_navigation_label || ', wait a few seconds...">' ||
-            'CREATE ' || UPPER(l_navigation_label) || 
-        '</button>' ||
-        '<span aria-live="polite"></span>' ||
-        '<span class="loader icon"></span>';
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('header',l_header);
-        l_json.put('article',l_article);
-        l_json.put('footer',l_footer);
-        apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=200;
-
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
-    END;
-
     /* 
-    **  CREATE NEW COLLECTION ITEM
+    **  PUBLISH FROM PAGE OPTiOS DiALOG
     */
-    PROCEDURE createCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+    PROCEDURE publishPageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
-        l_parentid article.parent_id%type;
+        l_dml VARCHAR2(6); -- [update|insert]
         l_title VARCHAR2(160);
         l_title_slug VARCHAR2(160);
+        l_excerpt article.excerpt%type;
         l_link VARCHAR2(250);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT parentid, title, apex_string_util.get_slug(title)
-          INTO l_parentid, l_title, l_title_slug
-          FROM JSON_TABLE(pBodyText, '$' COLUMNS(parentid, title));
+        SELECT dml, title, apex_string_util.get_slug(title), excerpt
+          INTO l_dml, l_title, l_title_slug, l_excerpt
+          FROM JSON_TABLE(pBodyText, '$' COLUMNS(dml, title, excerpt));
 
-        -- pck_core.log('l_parentid:'||l_parentid||':l_title'||l_title);
+        /* VALIDATION */
+        IF (l_dml='insert' AND l_title IS NULL) THEN
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('success',true);
+            l_json.put('message','TITLE MISSIING');
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+            RETURN;
+        END IF;
+
+        IF (l_dml='update') THEN
+            FOR C IN (
+                SELECT null FROM article WHERE id=pArticleId AND deployed_date>updated_date
+            ) LOOP
+                l_json:= new JSON_OBJECT_T;
+                l_json.put('success',true);
+                l_json.put('message','NOTHING NEW TO PUBLISH');
+                apex_util.prn(l_json.to_clob,false);
+                pStatus:=200;
+                RETURN;
+            END LOOP;
+        END IF;
+
         /*
         **  1. INSERT article for new collection item
         **  2. Deploy editor site with new collection item
         **  3. Return URL of new collection item
         */
-        INSERT INTO article(id, parent_id, author_user_id, title, excerpt, body_html) 
-        VALUES (seq_article.nextval, l_parentid, l_session_data.user_id, l_title, 'This is an excerpt to be changed', '<h2>' || l_title || '</h2>');
+        IF (l_dml='insert') THEN
+            INSERT INTO article(id, parent_id, author_user_id, title, excerpt, body_html) 
+            VALUES (seq_article.nextval, pArticleId, l_session_data.user_id, l_title, l_excerpt, '<h2>' || l_title || '</h2>');
 
-        FOR C IN (
-            SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
-              FROM website w, website_article wa 
-             WHERE w.id=pWebsiteId
-               AND wa.website_id=w.id
-               AND wa.article_id=l_parentid
-        ) LOOP
-            /* Delete collection index page so it gets reconstructed in deployment */
-            DELETE website_files WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id AND path='/' || C.navigation_label_slug || '.html';
-            /* Deploy editor site with new collection item */ 
-            pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
-            /* Link to new collection item */
-            l_link:='<a href="/' || C.navigation_label_slug || '/' || l_title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open new ' || C.navigation_label_slug || '</a>';
-        END LOOP;
+            FOR C IN (
+                SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
+                  FROM website w, website_article wa 
+                 WHERE w.id=pWebsiteId
+                   AND wa.website_id=w.id
+                   AND wa.article_id=pArticleId
+            ) LOOP
+                /* Delete collection index page so it gets reconstructed in deployment */
+                DELETE website_files WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id AND path='/' || C.navigation_label_slug || '.html';
+                /* Deploy editor site with new collection item */ 
+                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+                /* Link to new collection item */
+                l_link:='<a href="/' || C.navigation_label_slug || '/' || l_title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open new ' || C.navigation_label_slug || '</a>';
+            END LOOP;
+        END IF;
+        IF (l_dml='update') THEN
+            /* pArticleid is the blog item */
+            FOR C IN (
+                SELECT w.netlify_site_id, apex_string_util.get_slug(a.title) title_slug, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
+                  FROM website w, article a , website_article wa
+                 WHERE w.id=pWebsiteId
+                   AND a.id=pArticleId
+                   AND wa.website_id=w.id
+                   AND wa.article_id=a.parent_id
+            ) LOOP
+                /* Delete collection index page so it gets reconstructed in deployment */
+                DELETE website_files WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id AND path='/' || C.navigation_label_slug || '/' || C.title_slug || '.html';
+                /* Deploy editor site with new collection item */ 
+                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+                /* Link to new collection item */
+                l_link:='<a href="/' || C.navigation_label_slug || '/' || l_title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open updated ' || C.navigation_label_slug || '</a>';
+            END LOOP;
+        END IF;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
