@@ -41,8 +41,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             
             IF (l_nav IS NOT NULL) THEN
                 n:=INSTR(l_nav,pArticleid);
-                n1:=INSTR(l_nav,'>',n);
-                l_nav:=SUBSTR(l_nav,1,n1-1) || ' aria-current="page"' || SUBSTR(l_nav,n1);
+                IF (n>0) THEN
+                    n1:=INSTR(l_nav,'>',n);
+                    l_nav:=SUBSTR(l_nav,1,n1-1) || ' aria-current="page"' || SUBSTR(l_nav,n1);
+                END IF;
             END IF;
 
             l_html:=
