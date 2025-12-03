@@ -414,7 +414,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         );
         l_route VARCHAR2(30):=SUBSTR(pUriTemplate,1,INSTR(pUriTemplate,'/')-1);
     BEGIN
-    pck_core.log(l_route);
         RETURN ('<button type="button" role="menuitem" tabindex="-1"' ||
                 ' data-endpoint="' || pUriTemplate || '"' ||
                 ' data-method="' ||pMethod || '"' ||
