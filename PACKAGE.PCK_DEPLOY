@@ -527,6 +527,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_main article.body_html%type;
         l_footer website_article.footer_html%type;
         l_collection CLOB;
+        l_article_links LONG;
         l_clob CLOB;
 
         n PLS_INTEGER;
@@ -534,7 +535,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         pBody:=null;
         FOR C IN (
-            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, NVL(a.parent_id,pArticleId) nav_id, w.max_width
+            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.parent_id, w.max_width
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -542,9 +543,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND a.id=pArticleId
         ) LOOP
             IF (pNav IS NOT NULL) THEN
-                n:=INSTR(pNav,C.nav_id);
-                n1:=INSTR(pNav,'>',n);
-                l_nav:=SUBSTR(pNav,1,n1-1) || ' aria-current="page"' || SUBSTR(pNav,n1);
+                IF (C.parent_id IS NULL) THEN
+                    n:=INSTR(pNav,pArticleid);
+                    n1:=INSTR(pNav,'>',n);
+                    l_nav:=SUBSTR(pNav,1,n1-1) || ' aria-current="page"' || SUBSTR(pNav,n1);
+                ELSE
+                    l_nav:=pNav;
+                END IF;
             END IF;
 
             l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
@@ -552,8 +557,37 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             
             l_clob:=C.header_html || C.body_html || C.footer_html;
             pck_fonts.getCharsUsed(pArticleId, l_clob);
+
+            IF (C.parent_id IS NOT NULL) THEN
+                n:=0;
+                FOR C1 IN (
+                    SELECT a.id, a.title, a.excerpt, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug, apex_string_util.get_slug(a.title) title_slug
+                      FROM article a, article_link al, website_article wa
+                     WHERE al.article_id_1=pArticleid
+                       AND a.id=al.article_id_2
+                       AND wa.article_id=C.parent_id
+                       AND wa.website_id=pWebsiteId
+                ) LOOP
+                    n:=n+1;
+                    IF (n=1) THEN
+                        l_article_links:=
+                        '<h2>Related Posts</h2>' ||
+                        '<p>Here are some other posts that may be of interest</p>' ||
+                        '<ul>';
+                    END IF;
+                    l_article_links:=l_article_links ||
+                            '<li>' ||
+                                '<h3><a href="/' || C1.navigation_label_slug || '/' || C1.title_slug || '">' || C1.title || '</a></h3>' ||
+                                '<p>' || C1.excerpt || '</p>' ||
+                            '</li>';
+                END LOOP;
+                IF (n>0) THEN
+                    l_article_links:=l_article_links || 
+                        '</ul>';
+                END IF;
+            END IF;
             
-            l_main:='<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
+            l_main:='<main id="main" class="ck-content flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || l_article_links || '</main>';
             
             setImgSrcset(pArticleId, C.max_width, l_main);
 
@@ -591,7 +625,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<link rel="icon" href="' || pFavicon || '">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                 '</head>' ||
-                '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
+                '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
+                    '<a href="#main" class="skip-link">Skip to main content</a>' ||
                     '<div class="topnav flex-items space-between">' ||
                         pLogo || l_nav || pDropdown || 
                     '</div>' ||    
