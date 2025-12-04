@@ -81,11 +81,15 @@ img:not([alt]) {
     border-radius: 0;
 }
 
-body>main {
+main, section {
   padding-inline: 1rem;
-  container-type: inline-size;
+  /* container-type: inline-size; */
   max-width: var(--max-width);
   margin-inline: auto;
+}
+
+main + section {
+    margin-block-start: 1em;
 }
 
 /* NORMALIZE IMAGE INLINE STYLES AND CLASSES THAT ARE INCLUDED BY CKEDITOR */
@@ -129,6 +133,10 @@ body>footer>a {
   --flex-gap: 1rem;
   padding-block-start: 0.5rem;
   padding-inline-start: 1rem;
+}
+
+.logo {
+    height: 3rem;
 }
 
 nav {
@@ -233,10 +241,7 @@ small {
   font-size:var(--step--2);
 }
 
-h1,
-main h2,
-main h3,
-main h4 {
+:where(h1,h2,h3,h4) {
   text-wrap: pretty;
   font-family: var(--font-family-headings);
 }
@@ -288,9 +293,6 @@ main a:hover {
   inline-size: 25%;
   fill: #fff;
 }
-.card :is(h2, h3, h4) {
-  text-transform: uppercase;
-}
 
 .card img {
   block-size: 16rem;
@@ -328,6 +330,7 @@ main a:hover {
 /* SIMPLE GRID  - DEFAULT IS 2 EQUAL-SIZED COLUMNS WITH NO GAP */
 
 .grid {
+  container-type: inline-size;
   max-width: var(--max-width);
   margin-inline: auto;
   --grid-gap: var(--space-s);
