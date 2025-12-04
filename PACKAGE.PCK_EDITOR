@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
-    PROCEDURE deleteCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    PROCEDURE deletePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -86,20 +86,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
                     l_header:='<h4>'|| INITCAP(C.navigation_label) || ': ' || C.title || '</h4>';
                     l_article:=
-                    '<p>Use this form to edit the excerpt and link to other ' || C.navigation_label || ' posts that may interest your viewers.' ||
-                    '</p>' ||
                     '<input type="hidden" name="dml" value="update">' ||
-                    '<div>' ||
-                        '<label for="excerpt">Change excerpt (maximum 160 characters)</label>' ||
-                        '<textarea id="excerpt" name="excerpt" rows="2" maxlength="160">' || C.excerpt || '</textarea>' ||
-                    '</div>' ||
-                    '<div>' ||
-                        '<fieldset>' ||
-                            '<legend>Link to other '|| C.navigation_label || 's</legend>' ||
-                            '<p><a href="#skip">Skip to next</a></p>' ||
-                                getLinkOptions(C.parent_id, pArticleId) ||
-                        '</fieldset>' ||
-                    '</div>' ||
+                    '<p>This form enables you to:</p>' || 
+                    '<ol>' ||
+                        '<li>Edit the excerpt that appears on the index page and in the "related Posts" section</li>' ||
+                        '<li>Create links to "related ' || C.navigation_label || ' Posts"</li>' ||
+                        '<li>Permanently delete this Post</li>' ||
+                    '</ol>' ||
+                    '<fieldset>' ||
+                        '<legend>Excerpt (maximum 160 characters)</legend>' ||
+                        '<textarea name="excerpt" style="min-width:50%" maxlength="160">' || C.excerpt || '</textarea>' ||
+                    '</fieldset>' ||
+                    '<fieldset>' ||
+                        '<legend>Link to related '|| C.navigation_label || 's</legend>' ||
+                        '<p><a href="#skip">Skip to next</a></p>' ||
+                            getLinkOptions(C.parent_id, pArticleId) ||
+                    '</fieldset>' ||
                     '<p id="skip"></p>';
                 /* Creating new BLOG item */
                 WHEN (C.parent_id IS NULL AND C.collection_type<>'N/A') THEN
@@ -126,7 +128,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 'PUBLISH' ||
             '</button>' ||
             '<span aria-live="polite"></span>' ||
-            '<span class="loader icon"></span>';
+            '<span class="loader icon"></span>' ||
+            CASE WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
+            '<button type="button" class="button delete" style="--button-bg:red">' ||
+                'DELETE ' || UPPER(C.navigation_label) ||
+            '</button>'
+            END;
         END LOOP;
 
         l_json:= new JSON_OBJECT_T;
@@ -168,14 +175,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
                     IF (l_name='excerpt') THEN
                         UPDATE article SET excerpt=l_value, updated_date=current_timestamp  WHERE id=pArticleid;
+                        UPDATE article SET updated_date=current_timestamp  WHERE id=C.parent_id;
                     END IF;
                     IF (l_name='link') THEN
+                        UPDATE article SET updated_date=current_timestamp WHERE id=pArticleid;
                         BEGIN
                             INSERT INTO article_link(article_id_1, article_id_2) VALUES (pArticleid, l_value);
                             EXCEPTION WHEN DUP_VAL_ON_INDEX THEN
                                 DELETE article_link WHERE article_id_1=pArticleid AND article_id_2=l_value;
                         END;
-                        UPDATE article SET updated_date=current_timestamp WHERE id=pArticleid;
                     END IF;
                 WHEN (C.parent_id IS NULL AND C.collection_type='BLOG') THEN
                     null;
@@ -195,12 +203,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /* 
     **  DELETE COLLECTION ITEM
     */
-    PROCEDURE deleteCollection(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+    PROCEDURE deletePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
-        l_parentid article.parent_id%type;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        UPDATE article SET updated_date=current_timestamp WHERE id = (SELECT parent_id FROM article WHERE id=pArticleid);
+        DELETE article WHERE id=pArticleid;
+
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         apex_util.prn(l_json.to_clob,false);
@@ -212,7 +223,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  PUBLISH FROM PAGE OPTiOS DiALOG
+    **  PUBLISH FROM PAGE OPTIONS DIALOG
     */
     PROCEDURE publishPageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -233,7 +244,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         IF (l_dml='insert' AND l_title IS NULL) THEN
             l_json:= new JSON_OBJECT_T;
             l_json.put('success',true);
-            l_json.put('message','TITLE MISSIING');
+            l_json.put('message','TITLE MISSING');
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
             RETURN;
@@ -268,8 +279,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                    AND wa.website_id=w.id
                    AND wa.article_id=pArticleId
             ) LOOP
-                /* Delete collection index page so it gets reconstructed in deployment */
-                DELETE website_files WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id AND path='/' || C.navigation_label_slug || '.html';
                 /* Deploy editor site with new collection item */ 
                 pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
                 /* Link to new collection item */
@@ -286,12 +295,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                    AND wa.website_id=w.id
                    AND wa.article_id=a.parent_id
             ) LOOP
-                /* Delete collection index page so it gets reconstructed in deployment */
-                DELETE website_files WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id AND path='/' || C.navigation_label_slug || '/' || C.title_slug || '.html';
-                /* Deploy editor site with new collection item */ 
+                /* Deploy editor site with updated collection item */ 
                 pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
                 /* Link to new collection item */
-                l_link:='<a href="/' || C.navigation_label_slug || '/' || l_title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open updated ' || C.navigation_label_slug || '</a>';
+                l_link:='<a href="/' || C.navigation_label_slug || '/' || C.title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open updated ' || C.navigation_label_slug || '</a>';
             END LOOP;
         END IF;
 
@@ -536,20 +543,30 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article CLOB;
         l_footer LONG;
         l_nav LONG;
+        n PLS_INTEGER;
+        n1 PLS_INTEGER;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
         l_header:='<small>Add / Delete pages, change navigation labels.</small>';
-        
-        l_nav:=pck_deploy.buildNav(pWebsiteId, pArticleId);
-        IF (l_nav IS NULL) THEN
-            FOR C IN (
-                SELECT navigation_label, collection_type FROM website_article WHERE website_id=pWebsiteId AND article_id=pArticleId
-            ) LOOP
-                l_nav:='<nav><ul role="list"><li><a href="/" aria-current="page" data-id="' || pArticleId || '" data-collection="' || C.collection_type || '">' || C.navigation_label || '</a></li></ul></nav>';
-            END LOOP;
-        END IF;
+
+        FOR C IN (
+            SELECT wa.article_id current_page, wa.collection_type, wa.navigation_label
+              FROM website_article wa, article a
+             WHERE wa.website_id=pWebsiteId
+               AND wa.article_id=NVL(a.parent_id,a.id)
+               AND a.id=pArticleId
+        ) LOOP
+            l_nav:=pck_deploy.buildNav(pWebsiteId, C.current_page);
+            IF (l_nav IS NULL) THEN
+                l_nav:='<nav><ul><li><a href="/" aria-current="page" data-id="' || pArticleId || '" data-collection="' || C.collection_type || '">' || C.navigation_label || '</a></li></ul></nav>';
+            ELSE
+                n:=INSTR(l_nav,C.current_page);
+                n1:=INSTR(l_nav,'>',n);
+                l_nav:=SUBSTR(l_nav,1,n1-1) || ' aria-current="page"' || SUBSTR(l_nav,n1);
+            END IF;
+        END LOOP;
 
         l_article:=
             l_nav ||
