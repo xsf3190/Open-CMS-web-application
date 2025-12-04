@@ -13,7 +13,7 @@ export const init = (element) => {
     callAPI(endpoint, "GET")
     .then((data) => {
         initDialog(data);
-        dml = dialog_article.querySelector("[name=dml]").value;
+        dml = dialog_article.querySelector("[name=dml]")?.value;
     })
     .catch((error) => {
             handleError(error);
@@ -24,6 +24,29 @@ const changeHandler = (e) => {
     if (dml==="insert") return;
 
     const name = e.target.getAttribute("name");
+
+    if (name==="logo") {
+        const logo = document.querySelector(".logo");
+        logo.replaceChildren();
+	    logo.insertAdjacentHTML("beforeend",e.target.value);
+        const svg = logo.querySelector("svg");
+        if (!svg) {
+            handleError("NOT VALID SVG");
+            return;
+        }
+
+        const viewBox = svg.getAttribute("viewBox")?.split(" ");
+        if (!viewBox) {
+            handleError("SVG MUST HAVE VIEWBOX");
+            return;
+        }
+        
+        const width = Number(viewBox[0]) + Number(viewBox[2]);
+        const height = Number(viewBox[1]) + Number(viewBox[3]);
+
+        logo.style.aspectRatio = width + "/" + height;
+    }
+    
     callAPI(endpoint, "PUT", {name:name, value:e.target.value})
     .then((data) => {
         console.log(data);
@@ -35,15 +58,13 @@ const changeHandler = (e) => {
 
 let isSending = false;
 
-const clickHandler = async (e) => {
-    if (e.target.classList.contains("delete")) {
-        const data = await callAPI(endpoint, 'DELETE', {});
-        console.log(data);
-        dialog_footer.querySelector(".publish").click();
+/*
+**  CLICK PUBLISH OR DELETE BUTTON
+*/
+const clickHandler = (e) => {
+    if (!e.target.classList.contains("publish") && !e.target.classList.contains("delete")) {
         return;
     }
-
-    if (!e.target.classList.contains("publish")) return;
 
     if (isSending) {
         console.log("Prevent double sends");
@@ -56,14 +77,20 @@ const clickHandler = async (e) => {
     live.textContent = e.target.dataset.processing;
     loader.style.opacity=1;
 
-    const formObj = {dml:dml};
-    
-    if (dml==="insert") {
-        formObj["title"]=document.querySelector("[name=title]").value;
-        formObj["excerpt"]=document.querySelector("[name=excerpt]").value;
+    const formObj = {};
+    let method;
+
+    if (e.target.classList.contains("publish")) {
+        formObj["dml"]=dml;
+        formObj["title"]=dialog_article.querySelector("[name=title]")?.value;
+        formObj["excerpt"]=dialog_article.querySelector("[name=excerpt]")?.value;
+        method = "POST";
+    } else {
+        method="DELETE";
+        e.target.remove();
     }
 
-    callAPI(endpoint, 'POST', formObj)
+    callAPI(endpoint, method, formObj)
         .then((data) => {
             isSending = false;
             loader.style.opacity=0;        
