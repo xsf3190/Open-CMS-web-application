@@ -136,7 +136,12 @@ body>footer>a {
 }
 
 .logo {
-    height: 3rem;
+  --logo-inline-size: 10cqi;
+  inline-size: var(--logo-inline-size);
+  block-size: auto;
+  img {
+    border-radius: 0;
+  }
 }
 
 nav {
