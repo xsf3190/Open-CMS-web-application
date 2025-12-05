@@ -75,9 +75,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         /* Form depends on type of Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt
-              FROM website_article wa, article a
-             WHERE wa.website_id=pWebsiteId 
+            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.logo, w.favicon
+              FROM website w, website_article wa, article a
+             WHERE w.id=pWebsiteId 
+               AND wa.website_id=w.id 
                AND a.id=pArticleId
                AND wa.article_id=NVL(a.parent_id,a.id)
         ) LOOP
@@ -116,11 +117,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     '</div>' ||
                     '<div>' ||
                         '<label for="excerpt">Enter excerpt (maximum 160 characters)</label>' ||
-                        '<textarea id="excerpt" name="excerpt"></textarea>' ||
+                        '<textarea id="excerpt" name="excerpt" style="min-width:50%" maxlength="160"></textarea>' ||
                     '</div>';
                 ELSE
-                    l_header:='<h4>Page Options for '|| INITCAP(C.navigation_label) || '</h4>';
-                    l_article:='<p>NOT IMPLEMENTED YET</p>';
+                    l_header:='<h4>Page Options</h4>';
+                    l_article:=
+                    '<p>Use this form to:</p>' || 
+                    '<ol>' ||
+                        '<li>Set a Logo. Must be SVG</li>' ||
+                        '<li>Set a Favicon. Either SVG or up to 2 characters</li>' ||
+                    '</ol>' ||
+                    '<fieldset>' ||
+                        '<legend>Logo (maximum 4000 characters)</legend>' ||
+                        '<textarea name="logo" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.logo || '</textarea>' ||
+                    '</fieldset>' ||
+                    '<fieldset>' ||
+                        '<legend>Favicon (maximum 4000 characters)</legend>' ||
+                        '<textarea name="favicon" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.favicon || '</textarea>' ||
+                    '</fieldset>';
             END CASE;
 
             l_footer:=
@@ -150,13 +164,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  UPDATE COLLECTION ITEM
+    **  UPDATE PAGE OPTIONS
     */
     PROCEDURE updatePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
         l_name VARCHAR2(30);
-        l_value VARCHAR2(200);
+        l_value VARCHAR2(4000);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -185,8 +199,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                                 DELETE article_link WHERE article_id_1=pArticleid AND article_id_2=l_value;
                         END;
                     END IF;
-                WHEN (C.parent_id IS NULL AND C.collection_type='BLOG') THEN
-                    null;
+                WHEN (C.parent_id IS NULL AND C.collection_type='N/A') THEN
+                    IF (l_name='logo') THEN
+                        UPDATE website SET logo=l_value, nav_updated_date=current_timestamp WHERE id=pWebsiteid;
+                    END IF;
+                    IF (l_name='favicon') THEN
+                        UPDATE website SET favicon=l_value, nav_updated_date=current_timestamp WHERE id=pWebsiteid;
+                    END IF;
             END CASE;
         END LOOP;
 
@@ -206,14 +225,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     PROCEDURE deletePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
+        l_link VARCHAR2(200);
+        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        UPDATE article SET updated_date=current_timestamp WHERE id = (SELECT parent_id FROM article WHERE id=pArticleid);
-        DELETE article WHERE id=pArticleid;
+        /* FORCE NEXT DEPLOYMENT TO REBUILD INDEX PPGE */
+        FOR C IN (
+            SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug, a.parent_id
+              FROM website w, website_article wa, article a
+             WHERE w.id=pWebsiteId
+               AND wa.website_id=w.id
+               AND wa.article_id=a.parent_id
+               AND a.id=pArticleId
+        ) LOOP
+            UPDATE article SET updated_date=current_timestamp WHERE id=C.parent_id;
+            DELETE article WHERE id=pArticleid;
+            n:=SQL%ROWCOUNT;
+            pck_core.log('DELETE ARTICLE '||pArticleid||' rowcount:'||n);
+            /* Deploy editor site with new collection item */ 
+            pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+            /* Link to new collection item */
+            l_link:='<a href="/' || C.navigation_label_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">' || C.navigation_label_slug || ' Deleted. Go to new index</a>';
+        END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
+        l_json.put('link',l_link);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -272,6 +310,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             INSERT INTO article(id, parent_id, author_user_id, title, excerpt, body_html) 
             VALUES (seq_article.nextval, pArticleId, l_session_data.user_id, l_title, l_excerpt, '<h2>' || l_title || '</h2>');
 
+            UPDATE article SET updated_date=current_timestamp WHERE id=pArticleId;
+
             FOR C IN (
                 SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
                   FROM website w, website_article wa 
@@ -299,6 +339,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
                 /* Link to new collection item */
                 l_link:='<a href="/' || C.navigation_label_slug || '/' || C.title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open updated ' || C.navigation_label_slug || '</a>';
+            END LOOP;
+        END IF;
+
+        IF (l_dml IS NULL) THEN
+            FOR C IN (
+                SELECT w.netlify_site_id
+                  FROM website w
+                 WHERE w.id=pWebsiteId
+            ) LOOP
+                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
             END LOOP;
         END IF;
 
