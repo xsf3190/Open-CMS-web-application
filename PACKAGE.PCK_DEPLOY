@@ -535,7 +535,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         pBody:=null;
         FOR C IN (
-            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.parent_id, w.max_width
+            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, w.max_width
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -555,7 +555,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
             l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
             
-            l_clob:=C.header_html || C.body_html || C.footer_html;
+            l_clob:=C.header_html || C.body_html || C.footer_html || '<p>' || C.excerpt || '</p>';
             pck_fonts.getCharsUsed(pArticleId, l_clob);
 
             IF (C.parent_id IS NOT NULL) THEN
@@ -571,9 +571,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     n:=n+1;
                     IF (n=1) THEN
                         l_article_links:=
-                        '<h2>Related Posts</h2>' ||
-                        '<p>Here are some other posts that may be of interest</p>' ||
-                        '<ul>';
+                        '<section>' ||
+                            '<h2>Related Posts</h2>' ||
+                            '<p>Here are some other posts that may be of interest</p>' ||
+                            '<ul>';
                     END IF;
                     l_article_links:=l_article_links ||
                             '<li>' ||
@@ -583,11 +584,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END LOOP;
                 IF (n>0) THEN
                     l_article_links:=l_article_links || 
-                        '</ul>';
+                        '</ul>' ||
+                    '</section>';
                 END IF;
             END IF;
             
-            l_main:='<main id="main" class="ck-content flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || l_article_links || '</main>';
+            l_main:='<main id="main" class="ck-content flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
             setImgSrcset(pArticleId, C.max_width, l_main);
 
@@ -630,7 +632,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<div class="topnav flex-items space-between">' ||
                         pLogo || l_nav || pDropdown || 
                     '</div>' ||    
-                    l_header || l_main || l_collection || l_footer || buildLoginForm || buildContentDialog ||
+                    l_header || l_main || l_collection || l_article_links || l_footer || buildLoginForm || buildContentDialog ||
                 '</body>' ||
                 '<form action="https://codepen.io/pen/define" method="POST" target="_blank"><input type="hidden" name="data" value=""></form>' ||
                 '</html>';
