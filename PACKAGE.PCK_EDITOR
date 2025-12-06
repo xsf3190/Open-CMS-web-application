@@ -125,7 +125,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     '<p>Use this form to:</p>' || 
                     '<ol>' ||
                         '<li>Set a Logo. Must be SVG</li>' ||
-                        '<li>Set a Favicon. Either SVG or up to 2 characters</li>' ||
+                        '<li>Set a Favicon. Either SVG or emoji (default is 🌿)</li>' ||
                     '</ol>' ||
                     '<fieldset>' ||
                         '<legend>Logo (maximum 4000 characters)</legend>' ||
@@ -201,10 +201,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     END IF;
                 WHEN (C.parent_id IS NULL AND C.collection_type='N/A') THEN
                     IF (l_name='logo') THEN
-                        UPDATE website SET logo=l_value, nav_updated_date=current_timestamp WHERE id=pWebsiteid;
+                        UPDATE website SET logo=l_value, logo_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
                     IF (l_name='favicon') THEN
-                        UPDATE website SET favicon=l_value, nav_updated_date=current_timestamp WHERE id=pWebsiteid;
+                        UPDATE website SET favicon=l_value, favicon_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
             END CASE;
         END LOOP;
