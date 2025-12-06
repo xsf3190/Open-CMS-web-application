@@ -26,7 +26,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         FOR C IN (
-            SELECT domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width
+            SELECT domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -35,7 +35,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         ) LOOP
             l_domain_name:=C.domain_name;
 
-            l_logo:=pck_deploy.buildLogo(pWebsiteId);
+            IF (C.logo IS NULL) THEN
+                l_logo:='<span class="logo"></span>';
+            ELSIF (LENGTHB(C.logo)>5) THEN
+                -- l_viewbox:=regexp_substr(pLogo,'viewBox="(.+?)"',1,1,null,1);
+                -- l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
+                -- l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
+                l_logo:='<span class="logo"><img src="https://' || l_session_data.url || '/images/logo.svg" alt="Image of website logo"></span>';
+            ELSE
+                l_logo:='<span class="logo">' || C.logo || '</span>';
+            END IF;
+
             l_nav:=pck_deploy.buildNav(pWebsiteId);
             l_dropdown:=pck_deploy.buildDropdown(pWebsiteId);
             
