@@ -63,6 +63,14 @@ const setFavicon = (value) => {
     }
 }
 
+const setLogoWidth = (value) => {
+    document.documentElement.style.setProperty('--logo-inline-size', value + "cqi"); 
+}
+
+const setImgBorderRadius = (value) => {
+    document.documentElement.style.setProperty('--img-border-radius', value + "px"); 
+}
+
 const changeHandler = (e) => {
     if (dml==="insert") return;
 
@@ -71,8 +79,14 @@ const changeHandler = (e) => {
     if (name==="logo") {
         setLogo(e.target.value);
     }
+    if (name==="logo-inline-size") {
+        setLogoWidth(e.target.value);
+    }
     if (name==="favicon") {
         setFavicon(e.target.value);
+    }
+    if (name==="img-border-radius") {
+        setImgBorderRadius(e.target.value);
     }
     
     callAPI(endpoint, "PUT", {name:name, value:e.target.value})
