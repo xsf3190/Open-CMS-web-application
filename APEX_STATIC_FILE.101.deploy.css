@@ -136,9 +136,9 @@ body>footer>a {
 }
 
 .logo {
-  --logo-inline-size: 10cqi;
   inline-size: var(--logo-inline-size);
   block-size: auto;
+  align-self: flex-start;
   img {
     border-radius: 0;
   }
