@@ -75,7 +75,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         /* Form depends on type of Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.logo, w.favicon
+            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.logo, w.favicon, w.logo_inline_size, w.img_border_radius
               FROM website w, website_article wa, article a
              WHERE w.id=pWebsiteId 
                AND wa.website_id=w.id 
@@ -124,16 +124,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     l_article:=
                     '<p>Use this form to:</p>' || 
                     '<ol>' ||
-                        '<li>Set a Logo. Must be SVG</li>' ||
+                        '<li>Set a Logo</li>' ||
                         '<li>Set a Favicon. Either SVG or emoji (default is 🌿)</li>' ||
+                        '<li>Set image round borders</li>' ||
                     '</ol>' ||
                     '<fieldset>' ||
-                        '<legend>Logo (maximum 4000 characters)</legend>' ||
+                        '<legend>Logo (maximum 4000 characters. SVG only)</legend>' ||
                         '<textarea name="logo" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.logo || '</textarea>' ||
+                        '<input type="range" id="logo-inline-size" name="logo-inline-size" min="10" max="22" value="' || regexp_substr(C.logo_inline_size,'\d+') || '">' ||
+                        '<label for="logo-inline-size">Adjust Width</label>' ||
                     '</fieldset>' ||
                     '<fieldset>' ||
-                        '<legend>Favicon (maximum 4000 characters)</legend>' ||
+                        '<legend>Favicon (maximum 4000 characters. SVG or emoji)</legend>' ||
                         '<textarea name="favicon" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.favicon || '</textarea>' ||
+                    '</fieldset>' ||
+                    '<fieldset>' ||
+                        '<legend>Set image round borders</legend>' ||
+                        '<input type="range" id="img-border-radius" name="img-border-radius" min="0" max="30" value="' || regexp_substr(C.img_border_radius,'\d+') || '">' ||
                     '</fieldset>';
             END CASE;
 
@@ -206,6 +213,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     IF (l_name='favicon') THEN
                         UPDATE website SET favicon=l_value, favicon_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
+                    IF (l_name='logo-inline-size') THEN
+                        UPDATE website SET logo_inline_size=l_value || 'cqi', css_updated_date=current_timestamp WHERE id=pWebsiteid;
+                    END IF;
+                    IF (l_name='img-border-radius') THEN
+                        UPDATE website SET img_border_radius=l_value || 'px', css_updated_date=current_timestamp WHERE id=pWebsiteid;
+                    END IF;
             END CASE;
         END LOOP;
 
@@ -230,7 +243,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        /* FORCE NEXT DEPLOYMENT TO REBUILD INDEX PPGE */
+        /* FORCE NEXT DEPLOYMENT TO REBUILD INDEX PAGE */
         FOR C IN (
             SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug, a.parent_id
               FROM website w, website_article wa, article a
@@ -274,6 +287,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        IF NOT (pck_deploy.CanDeploy(pWebsiteid)) THEN
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('success',true);
+            l_json.put('message','NOTHING NEW TO PUBLISH');
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+            RETURN;
+        END IF;
+
         SELECT dml, title, apex_string_util.get_slug(title), excerpt
           INTO l_dml, l_title, l_title_slug, l_excerpt
           FROM JSON_TABLE(pBodyText, '$' COLUMNS(dml, title, excerpt));
@@ -286,19 +308,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
             RETURN;
-        END IF;
-
-        IF (l_dml='update') THEN
-            FOR C IN (
-                SELECT null FROM article WHERE id=pArticleId AND deployed_date>updated_date
-            ) LOOP
-                l_json:= new JSON_OBJECT_T;
-                l_json.put('success',true);
-                l_json.put('message','NOTHING NEW TO PUBLISH');
-                apex_util.prn(l_json.to_clob,false);
-                pStatus:=200;
-                RETURN;
-            END LOOP;
         END IF;
 
         /*
@@ -342,13 +351,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             END LOOP;
         END IF;
 
+        /* PAGE OPTIONS */
         IF (l_dml IS NULL) THEN
             FOR C IN (
-                SELECT w.netlify_site_id
-                  FROM website w
+                SELECT w.netlify_site_id, CASE WHEN wa.display_order>1 THEN apex_string_util.get_slug(wa.navigation_label) END navigation_label_slug
+                  FROM website w, website_article wa 
                  WHERE w.id=pWebsiteId
+                   AND wa.website_id=w.id
+                   AND wa.article_id=pArticleId
             ) LOOP
                 pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+                l_link:='<a style="color:green; font-weight:800" href="/' || C.navigation_label_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">PUBLISHED SUCCESSFULLY</a>';
             END LOOP;
         END IF;
 
@@ -394,35 +407,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         SELECT NVL(env,'TEST') INTO l_env FROM JSON_TABLE(pBodyText, '$' COLUMNS(env));
 
         /*
-        ** CHECK DEPLOY REQUEST IS VALID
+        ** CHECK WHICH DEPLOY REQUEST IS VALID
         */
         FOR C IN (
-            SELECT MAX(a.updated_date) last_updated_date, MAX(w.netlify_last_published) last_published_editor, MAX(w.netlify_last_published_custom) last_published_live
-            FROM article a, website w
-            WHERE w.id=pWebsiteId
-            AND a.id IN
-                        (
-                            SELECT id FROM article
-                            CONNECT BY PRIOR id=parent_id
-                            START WITH id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteId)
-                        )
+                SELECT netlify_last_published, netlify_last_published_custom, netlify_site_id, netlify_site_id_custom
+                  FROM website
+                 WHERE id=pWebsiteid
         ) LOOP
-            IF (l_env='TEST' AND C.last_updated_date<C.last_published_editor) THEN
-                l_error:='<p>Editor site already published with latest content</p>';
-            END IF;
-            IF (l_env='LIVE' AND C.last_published_live>C.last_published_editor) THEN
-                l_error:='<p>Live site already published with latest content</p>';
-            END IF;
-            IF (l_error IS NOT NULL) THEN
-                l_json:= new JSON_OBJECT_T;
-                l_json.put('success',true);
-                l_json.put('header', '<p>Cannot Publish for following reason:</p>');
-                l_json.put('article', l_error);
-                l_json.put('footer', '');
-                l_json.put('stop', TRUE);
-                apex_util.prn(l_json.to_clob,false);
-                RETURN;
-            END IF;
+            CASE l_env
+                WHEN 'TEST' THEN
+                    IF (pck_deploy.canDeploy(pWebsiteid)) THEN
+                        CONTINUE;
+                    ELSIF (C.netlify_last_published>C.netlify_last_published_custom) THEN
+                        l_json:= new JSON_OBJECT_T;
+                        l_json.put('success',true);
+                        l_json.put('header', '<p>Cannot Publish for following reason:</p>');
+                        l_json.put('article', l_error);
+                        l_json.put('footer', '');
+                        l_json.put('stop', TRUE);
+                        apex_util.prn(l_json.to_clob,false);
+                        RETURN;
+                    END IF;
+            END CASE;
         END LOOP;
 
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId RETURNING netlify_site_id, netlify_site_id_custom INTO l_site_id, l_site_id_custom;
