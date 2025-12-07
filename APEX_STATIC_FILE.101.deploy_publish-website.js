@@ -3,13 +3,12 @@
 */
 
 import { callAPI, handleError } from "deploy_callAPI";
-import { output_dialog, dialog_article, initDialog } from "deploy_elements";
+import { output_dialog, dialog_article, dialog_footer, initDialog } from "deploy_elements";
 
 const endpoint = "publish-website/:ID";
 let intervalId;
 
 export const init = (e) => {
-
     callAPI(endpoint,"POST",{env:e.dataset.env})
         .then( (data) => {
             initDialog(data);
@@ -49,3 +48,36 @@ const getDeploymentStatus = () => {
             handleError(error);
         })
 }
+
+let isSending = false;
+
+const clickHandler = (e) => {
+    if (!e.target.classList.contains("publish")) {
+        return;
+    }
+    if (isSending) {
+        console.log("Prevent double clicks");
+        return;
+    }
+    const live=dialog_footer.querySelector("[aria-live]");
+    const loader = dialog_footer.querySelector(".loader");
+
+    isSending = true;
+    live.textContent = "Publishing LIVE site";
+    loader.style.opacity=1;
+
+    callAPI(endpoint, "POST", {env:"LIVE"})
+        .then(() => {
+            isSending = false;
+            loader.style.opacity=0;        
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',"<p>LIVE site successfully published</p>");
+            live.style.color = "green";
+        })
+        .catch((error) => {
+            loader.style.opacity=0;
+            handleError(error);
+        });
+}
+
+dialog_footer.addEventListener("click", clickHandler);
