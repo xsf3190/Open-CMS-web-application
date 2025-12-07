@@ -113,10 +113,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END LOOP;
 
         /* 
-        ** BUIKD :ROOT RULES 
+        ** BUILD :ROOT RULES 
         */
         FOR C IN (
-            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius
+            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius, w.logo_inline_size
               FROM website w
              WHERE w.id=pWebsiteId
             )
@@ -125,7 +125,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
 
             l_fluid_types:=getFluidTypes(C.min_font_size, C.min_width_px, C.min_scale, C.max_font_size, C.max_width_px, C.max_scale);
 
-            
             l_root_css:=l_root_css ||
             ':root {' ||
                 '-webkit-text-size-adjust: none;' ||
@@ -152,6 +151,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             l_root_css:=l_root_css || 
             '--max-width: ' || C.max_width || ';' || 
             '--img-border-radius: ' || C.img_border_radius || ';' ||
+            '--logo-inline-size: ' || C.logo_inline_size || ';' ||
             '--nav-dark-color: rgb(25, 25, 25);' ||
 	        '--nav-highlight-color: rgb(24, 54, 145);';
             /*
