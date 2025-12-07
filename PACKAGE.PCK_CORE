@@ -6,11 +6,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CORE" AS
     );
     TYPE fluid_type_t IS TABLE OF fluid_type_rt;
     --
-    FUNCTION buildBlogList( pEnv IN VARCHAR2, pWebsiteId IN website_article.website_id%type, pArticleId IN website_article.article_id%type, pClasses IN VARCHAR2 DEFAULT NULL) RETURN CLOB;
-    --
     FUNCTION buildMediaList(pWebsiteId IN website_article.website_id%type, pArticleId IN website_article.article_id%type, pIncludeLinks  IN BOOLEAN DEFAULT TRUE) RETURN CLOB;
-    --
-    FUNCTION buildProductList(pWebsiteId IN website_article.website_id%type, pArticleId IN website_article.article_id%type) RETURN CLOB;
     --
     PROCEDURE getCKEditor(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER);
     --
@@ -176,110 +172,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
     END;
 
     /*
-    ** Construct index of Blog entries
-    */
-    FUNCTION buildBlogList(pEnv IN VARCHAR2, pWebsiteId IN website_article.website_id%type, pArticleId IN website_article.article_id%type, pClasses IN VARCHAR2) RETURN CLOB IS
-        l_html CLOB;
-        l_html_list CLOB;
-        l_featured article.featured%type;
-        l_classes VARCHAR2(100);
-        l_path website_article.navigation_label%type;
-        l_href VARCHAR2(200);
-        pos PLS_INTEGER;
-        MAX_BLOGS CONSTANT PLS_INTEGER:=12;
-    BEGIN
-        IF (INSTR(pClasses,'featured')>0) THEN
-            l_featured:='YES';
-            l_classes:='featured ';
-        END IF;
-
-        SELECT apex_string_util.get_slug(navigation_label) INTO l_path FROM website_article WHERE website_id=pWebsiteId AND article_id=pArticleId;
-
-        /* Build list of all title in title order */
-        IF (l_featured is NULL) THEN
-            FOR C IN (
-                WITH ph AS (
-                  SELECT a.id, COUNT(DISTINCT p.ip_address) nb_distinct_visitors
-                    FROM article a, page_hit p
-                   WHERE a.parent_id=pArticleId
-                     AND a.id=p.article_id
-                     AND p.url='spiritresilience.com'
-                   GROUP BY a.id
-                )
-                SELECT COUNT(*) OVER () nb, ROW_NUMBER() OVER (ORDER BY ph.nb_distinct_visitors DESC NULLS LAST) rn,
-                             a.title, DECODE(pEnv,'TEST',a.deployed_date,'LIVE',a.deployed_date_custom) deployed_date
-                        FROM article a, ph
-                       WHERE a.parent_id=pArticleId
-                         AND a.id=ph.id(+)
-                       ORDER BY 2, a.title ) 
-            LOOP
-                IF (C.nb<MAX_BLOGS) THEN
-                    EXIT;
-                END IF;
-                IF (C.rn=1) THEN
-                    l_html_list:=
-                    '<details>' ||
-                        '<summary>Show titles in order of popularity</summary>' ||
-                        '<article class="grid" data-grid-variant="1">';
-                END IF;
-                l_html_list:=l_html_list || 
-                            '<span>' || TO_CHAR(NVL(C.deployed_date,current_timestamp),'fmMon dd, yyyy') || '</span>';
-                l_href:='/' || l_path || '/' || apex_string_util.get_slug(C.title);
-                l_html_list:=l_html_list || 
-                                '<a href="' || l_href || '">' || C.title || '</a>';
-                IF (C.rn=C.nb) THEN
-                    l_html:=l_html || 
-                        '</article>' ||
-                    '</details>';
-                END IF;    
-            END LOOP;
-        END IF;
-
-        FOR C IN (SELECT COUNT(*) OVER () nb, ROW_NUMBER() OVER (ORDER BY null) rn,
-                            wa.collection_date_format, art.body_html, art.title, art.excerpt, DECODE(pEnv,'TEST',art.deployed_date,'LIVE',art.deployed_date_custom) deployed_date, art.word_count, art.cover_icon_id, ass.cld_cloud_name, ass.resource_type, ass.public_id, ass.format, ass.width, ass.height, ass.alt_text
-                    FROM website_article wa, article art, asset ass
-                   WHERE wa.article_id=pArticleId
-                     AND art.parent_id=wa.article_id
-                     AND art.featured=NVL(l_featured,art.featured)
-                     AND ass.id(+)=art.cover_asset_id
-                   ORDER BY deployed_date DESC ) 
-        LOOP
-            IF (C.rn=1) THEN
-                l_html:=l_html || '<ol class="' || l_classes || ' grid grid__auto_fit' || '" role="list" >';
-            END IF;
-            l_html:=l_html || 
-            '<li class="card">';
-            IF (C.cld_cloud_name IS NOT NULL) THEN
-                l_html:=l_html || 
-                '<img src="' || pck_media.getCloudinaryUrl(C.cld_cloud_name, C.resource_type, C.public_id, C.format, C.width) || '" width="'|| C.width || '" height="' || C.height || '" alt="' || C.alt_text || '">';
-            ELSIF (C.cover_icon_id IS NOT NULL) THEN
-                l_html:=l_html || 
-                '<svg class="icon" aria-hidden="true" focusable="false"><use href="#' || C.cover_icon_id || '"></use></svg>';
-            END IF;
-            l_href:='/' || l_path || '/' || apex_string_util.get_slug(C.title);
-            l_html:=l_html || 
-                '<div class="flow">' ||
-                    '<h2>' ||
-                        '<a href="' || l_href || '">' || C.title || '</a>' ||
-                    '</h2>' ||
-                    '<p>' || CASE WHEN LENGTH(C.excerpt)<160 THEN C.excerpt ELSE SUBSTR(C.excerpt,1,INSTR(C.excerpt,' ',-1)) || '...' END  || '</p>' ||
-                '</div>' ||
-                '<small>' ||
-                    CASE WHEN NVL(C.collection_date_format,'NONE')<>'NONE' THEN
-                    '<span>' || TO_CHAR(NVL(C.deployed_date,current_timestamp),'fm'||C.collection_date_format) || '</span>'
-                    END ||
-                    '<span>' || C.word_count || ' words</span>' ||
-                '</small>' ||
-            '</li>';
-            IF (C.rn=LEAST(MAX_BLOGS,C.nb)) THEN
-                l_html:=l_html || '</ol>';
-                EXIT;
-            END IF;
-        END LOOP;
-        RETURN (l_html_list || l_html);
-    END;
-
-    /*
     ** Construct index of Media entries
     ** pIncludeLinks = FALSE for building MEDIA collection type landing page without links (Codepen)
     */
@@ -313,41 +205,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
         RETURN (l_html);
     END;
 
-    /*
-    ** Construct list of Products including image
-    */
-    FUNCTION buildProductList(pWebsiteId IN website_article.website_id%type, pArticleId IN website_article.article_id%type) RETURN CLOB IS
-        l_html CLOB;
-        l_description VARCHAR2(250);
-        pos PLS_INTEGER;
-    BEGIN
-        l_html:='<!--CMS START-->';
-        l_html:=l_html || '<ol class="product">';
-
-        FOR C IN (SELECT w.price_currency, art.id, art.body_html, art.title, ass.cld_cloud_name, ass.resource_type, ass.public_id, ass.format, ass.width, art.product_price
-                    FROM article art, asset ass, website w
-                   WHERE art.parent_id=pArticleId
-                     AND ass.id=art.cover_asset_id
-                     AND w.id=pWebsiteId
-                     ORDER BY art.display_order) 
-        LOOP
-            pos:=dbms_lob.instr(C.body_html,'</h1>',1,1)+5;
-            l_description:=SUBSTR(dbms_lob.substr(C.body_html,dbms_lob.getlength(C.body_html) - pos, pos), 1, 250);
-            l_description:=REPLACE(RTRIM(LTRIM(l_description,'<p>'),'</p>'),'&nbsp;',null);
-            l_html:=l_html || 
-            '<li>
-                <img src="' || pck_media.getCloudinaryUrl(C.cld_cloud_name, C.resource_type, C.public_id, C.format, C.width) || '">
-                <h4>' || C.title || '</h4>
-                <p>' ||  l_description || '</p>
-                <button type="button" class="buy" data-name="' || C.title|| '" data-price="' || C.product_price || '" data-currency="' || C.price_currency|| '">' || 
-                    TO_CHAR(C.product_price,'fm99999.90') || ' ' ||  C.price_currency || '<span></span></button>
-            </li>';
-        END LOOP;
-        l_html:=l_html || '</ol>';
-        l_html:=l_html || '<!--CMS END-->';
-        RETURN (l_html);
-    END;
-
+    
     /*
     **  Administrator function to transfer ownership of a specified website and all dependent table rows to a different User 
     */
