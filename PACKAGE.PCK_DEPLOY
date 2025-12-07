@@ -6,9 +6,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     FUNCTION buildLoginForm RETURN VARCHAR2;
     --
-    FUNCTION buildLogo(pWebsiteId IN website.id%type) RETURN VARCHAR2;
-    --
     FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2;
+    --
+    FUNCTION canDeploy(pWebsiteid IN website.id%type) RETURN BOOLEAN;
     --
     PROCEDURE deleteDirectory(pWebsiteId IN website.id%type, pUserId IN users.id%type);
     --
@@ -151,6 +151,30 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END; 
 
     /*
+    **  Determine whether editor (TEST) website can be deployed based on different source data last update dates
+    */  
+    FUNCTION canDeploy(pWebsiteid IN website.id%type) RETURN BOOLEAN IS
+        l_netlify_last_published TIMESTAMP WITH LOCAL TIME ZONE;
+        l_last_updated_date TIMESTAMP WITH LOCAL TIME ZONE;
+    BEGIN
+        WITH data AS
+        (
+            SELECT w.css_updated_date, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published
+            FROM website w, website_article wa, article a, website_font wf
+            WHERE w.id=pWebsiteid
+            AND wa.website_id=w.id
+            AND wa.article_id=NVL(a.parent_id,a.id)
+            AND wf.website_id=w.id
+        )
+        SELECT MAX(netlify_last_published),MAX(updated_date)
+        INTO l_netlify_last_published, l_last_updated_date
+        FROM data
+        UNPIVOT  (updated_date FOR COL IN (css_updated_date, nav_updated_date, logo_updated_date, favicon_updated_date, article_updated_date, font_updated_date));
+
+        RETURN (l_last_updated_date>l_netlify_last_published);
+    END;
+
+    /*
      **  Build Login Form
      */
     FUNCTION buildLoginForm RETURN VARCHAR2 IS
@@ -245,28 +269,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         '</div>';
 
         RETURN(l_html);
-    END;
-
-
-    FUNCTION buildLogo(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
-        l_logo website.logo%type;
-        l_viewbox VARCHAR2(50);
-        l_width PLS_INTEGER;
-        l_height PLS_INTEGER;
-        l_logo_styles VARCHAR2(100);
-    BEGIN
-        SELECT logo, regexp_substr(logo,'viewBox="(.+?)"',1,1,null,1) 
-          INTO l_logo, l_viewbox 
-          FROM website 
-         WHERE id=pWebsiteId;
-       
-        IF (l_logo IS NOT NULL) THEN
-            l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
-            l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
-            l_logo_styles:=' style="height:3rem;aspect-ratio:' || l_width || '/' || l_height || '"';
-        END IF;
-
-        RETURN ('<span class="logo"' || l_logo_styles || '>' || l_logo || '</span>');
     END;
 
     /*
@@ -795,6 +797,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         **  4. javascript starter
         **  5. _headers file including strict Content Security Policy
         **  6. sitemap.xml
+        **  7. robots.txt
         */
 
         l_files:= new JSON_OBJECT_T;
@@ -945,12 +948,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             logDeployment(pWebsiteId, pSiteId, 'Download Google Font - '|| C.deploy_filename);
             l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
             addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_font_download);
-        
         END LOOP;
         
         /*
         **  5. Build CSS files - core, ckeditor and website-specific styles
         */
+        pck_css.buildWebsiteCss(pWebsiteid); -- sets website.css_updated_date
+
         FOR C IN (
             WITH source AS
             (
