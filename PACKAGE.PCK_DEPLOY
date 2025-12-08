@@ -14,11 +14,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     PROCEDURE deployInfrastructure(pSenderEmail IN VARCHAR2 DEFAULT 'contact.form');
     --
+     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type);
+     --
+    PROCEDURE deployLiveSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type, pSiteidLive IN website.netlify_site_id_custom%type);
+    --
     PROCEDURE logDeployment(pWebsiteId IN website.id%type, pSiteId IN website_deploy.site_id%type, pMessage IN VARCHAR2, pStatus IN VARCHAR2 DEFAULT 'OK', pLogTime IN TIMESTAMP DEFAULT current_timestamp);
     --
     PROCEDURE runDelete(pUserId IN users.id%type, pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type);
     --
-    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2);
+    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2);
     --
     PROCEDURE setTerraformApikey;
     --
@@ -132,6 +136,71 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 deploy(C.id, C.domain_name, C.netlify_site_id_custom);
             END IF;
         END LOOP;
+    END;
+
+    PROCEDURE deployEditorSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type) IS
+        l_job_name VARCHAR2(30);
+    BEGIN        
+        UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId;
+        
+        DELETE website_deploy WHERE website_id=pWebsiteId AND site_id=pSiteidEditor;
+        
+        l_job_name:=dbms_scheduler.generate_job_name('DEPLOY_');
+        dbms_scheduler.create_job(
+            job_name   => l_job_name,
+            job_type   =>'STORED_PROCEDURE',
+            job_action =>'pck_deploy.runDeployment',
+            number_of_arguments=>3,
+            start_date=>systimestamp
+        );
+        dbms_scheduler.set_job_argument_value(
+            job_name => l_job_name,
+            argument_position => 1,
+            argument_value => pWebsiteId
+        );
+        dbms_scheduler.set_job_argument_value(
+            job_name => l_job_name,
+            argument_position => 2,
+            argument_value => pSiteidEditor
+        );
+        dbms_scheduler.set_job_argument_value(
+            job_name => l_job_name,
+            argument_position => 3,
+            argument_value => pck_core.getRestUrl()
+        );
+        dbms_scheduler.enable(l_job_name);
+    END;
+
+    PROCEDURE deployLiveSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type, pSiteidLive IN website.netlify_site_id_custom%type) IS
+        l_files JSON_OBJECT_T;
+        l_json JSON_OBJECT_T;
+        l_clob CLOB;
+    BEGIN
+        l_files:=new JSON_OBJECT_T;
+        FOR C IN (
+            SELECT path, sha1
+              FROM website_files
+             WHERE website_id=pWebsiteid
+               AND site_id=pSiteidEditor
+        ) LOOP
+            l_files.put(C.path, C.sha1);
+        END LOOP;
+        l_json:=new JSON_OBJECT_T;
+        l_json.put('files',l_files);
+        pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || pSiteidLive || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+        
+        /* Cancel deploy if any file required */
+        FOR C IN (
+            SELECT id, sha1 
+              FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) 
+             WHERE sha1 IS NOT NULL
+        ) LOOP
+            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/cancel', pMethod=>'POST', pData=>l_clob);
+            RAISE_APPLICATION_ERROR(-20000,'pck_deploy.deployLiveSite FAILED. ONE OR MORE SHA1 REQUIRED.');
+        END LOOP;
+        UPDATE website
+           SET netlify_last_published_custom=current_timestamp
+         WHERE id=pWebsiteId;
     END;
 
     FUNCTION getSha256(pContent IN CLOB) RETURN VARCHAR2 IS
@@ -659,7 +728,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     /*
     **  DEPLOY BY UPLOADING HTML FILE CONTENT DIRECTLY TO NETLIFY
     */
-    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pUserId IN website.user_id%type, pEnv IN VARCHAR2, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2) IS
+    PROCEDURE runDeployment(pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2) IS
         
         l_clob CLOB;
         l_files JSON_OBJECT_T;
@@ -742,7 +811,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_json:= new JSON_OBJECT_T;
             l_json.put('files',l_files);
 
-            pck_api.callNetlifyAPI(pUserId=>pUserid, pEndpoint=>'sites/' || pSiteId || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || pSiteId || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
 
             /* NEED THIS FOR ASYNC DEPLOYMENT STATUS MONITORING */
             UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=pWebsiteId;
@@ -779,7 +848,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
     BEGIN
         /* For logging when called by scheduler */
-        pck_sec.g_session_user_id:=pUserId;
         pck_sec.g_website_id:=pWebsiteId;
 
         /*
@@ -813,7 +881,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
               WHERE application_id=101
                 AND file_name IN ('deploy_start.min.js')
             )
-            SELECT s.deploy_filename, REPLACE(REPLACE(s.file_content,'#RESTURL#',pResturl),'#JSLIB#','https://es-modules.netlify.app/' || LOWER(w.esm_library) || '/') file_content, 
+            SELECT s.deploy_filename, REPLACE(REPLACE(s.file_content,'#RESTURL#',pRestUrl),'#JSLIB#','https://es-modules.netlify.app/' || LOWER(w.esm_library) || '/') file_content, 
                     s.updated_date, wf.sha1,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf, website w
@@ -996,7 +1064,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
               WHERE application_id=101
                 AND file_name='_headers.txt'
             )
-            SELECT s.deploy_filename, REPLACE(REPLACE(s.file_content,'#RESTURL#',pRestURL),'#SHA256#',l_script_sha256) file_content, s.updated_date, wf.sha1,
+            SELECT s.deploy_filename, REPLACE(REPLACE(s.file_content,'#RESTURL#',pRestUrl),'#SHA256#',l_script_sha256) file_content, s.updated_date, wf.sha1,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
@@ -1099,23 +1167,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         sendNetlifyDeploy;
 
         /*
-        ** AT THIS POINT NETLIFY DEPLOYMENT COMPLETE
+        ** AT THIS POINT NETLIFY DEPLOYMENT IS COMPLETE
         ** - UPDATE RELEVANT DEPLOYED_DATE IN ALL WEBSITE ARTICLES 
         ** - UPDATE RELEVANT LAST_PUBLISHED_DATE FOR THE WEBSITE 
         */
         UPDATE article 
-           SET deployed_date=CASE WHEN pEnv='TEST' THEN current_timestamp ELSE deployed_date END,
-               deployed_date_custom=CASE WHEN pEnv='LIVE' THEN current_timestamp ELSE deployed_date_custom END
+           SET deployed_date=current_timestamp
          WHERE id IN
             (
-                SELECT id FROM article
-                CONNECT BY PRIOR id=parent_id
-                START WITH id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteid)
+                SELECT a.id 
+                  FROM article a, website_article wa
+                 WHERE wa.website_id=pWebsiteid 
+                   AND wa.article_id=NVL(a.parent_id,a.id)
             );
 
         UPDATE website
-           SET netlify_last_published=CASE WHEN pEnv='TEST' THEN current_timestamp ELSE netlify_last_published END,
-               netlify_last_published_custom=CASE WHEN pEnv='LIVE' THEN current_timestamp ELSE netlify_last_published_custom END
+           SET netlify_last_published=current_timestamp
          WHERE id=pWebsiteId;
 
         EXCEPTION
