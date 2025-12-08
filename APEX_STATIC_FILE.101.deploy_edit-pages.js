@@ -155,7 +155,7 @@ const buttonHandler = async (e) => {
             .then((data) => {
                 console.log("data",data);
                 if (data.deploy) {
-                    dropdown.querySelector("button.publish-editor-site").click();
+                    dropdown.querySelector("[data-endpoint^=publish-website]").click();
                 }
             })
             .catch((error) => {
