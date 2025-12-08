@@ -464,9 +464,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         LOOP
             IF (l_editor_site) THEN
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
-                IF (INSTR(C.uri_template,'publish-website')>0) THEN
-                    l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, 'Publish Live Site', 'data-env="LIVE"');
-                END IF;
             ELSIF (C.priority=1) THEN
                 l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
             END IF;
