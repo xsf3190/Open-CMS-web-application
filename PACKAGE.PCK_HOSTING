@@ -267,7 +267,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
          WHERE website_id=pWebsiteid
            AND display_order=(SELECT MIN(display_order) FROM website_article WHERE website_id=pWebsiteid);
 
-        pck_deploy.runDeployment(l_new_website_id, null, 'TEST', l_netlify_site_id, pck_core.getRestUrl());
+        pck_deploy.runDeployment(l_new_website_id, l_netlify_site_id,pck_core.getResturl);
 
         IF (l_is_domain) THEN
             /* Send email to requesting user with instructions to add DNS records */
@@ -416,7 +416,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
                 l_message:='URL successfully changed';
                 UPDATE website SET domain_name=l_subdomain WHERE id=pWebsiteId;
-                pck_deploy.runDeployment(pWebsiteId, l_session_data.user_id, 'TEST', l_netlify_site_id, pck_core.getRestUrl());
+                pck_deploy.runDeployment(pWebsiteId, l_netlify_site_id, pck_core.getResturl);
             ELSIF (apex_web_service.g_status_code=422) THEN
                 l_message:='Name already taken. Try again';
                 l_valid:=FALSE;
