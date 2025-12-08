@@ -129,10 +129,11 @@ body>footer>a {
 /* NAVIGATION STYLES */
 
 .topnav {
+  --flex-vertical-alignment: flex-start;
   --flex-wrap: nowrap;
   --flex-gap: 1rem;
   padding-block-start: 0.5rem;
-  padding-inline-start: 1rem;
+  padding-inline: 0.5rem;
 }
 
 .logo {
@@ -599,6 +600,15 @@ fieldset {
 
 /* DIALOG STYLES */
 
+dialog[open] {
+  translate: 0 0;
+  transition: translate 0.7s ease-out, display 0.7s ease-out allow-discrete;
+  
+  @starting-style {
+    translate: 0 -100vh;
+  }
+}
+
 html:has(dialog[open]) {
   overflow: hidden;
 }
@@ -718,7 +728,6 @@ summary {
     --icon-size: 32;
     --icon-bar-size: 6;
     --icon-translation-size: calc((var(--icon-size) - var(--icon-bar-size)) / 2);
-    align-self: flex-start;
     background-color: transparent;
     border: none;
     display:flex;
