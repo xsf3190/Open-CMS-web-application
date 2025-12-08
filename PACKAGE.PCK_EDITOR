@@ -72,7 +72,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        /* Form depends on type of Page type - i.e. collection item, collection index, normal */
+        /* Form depends on Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
             SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.logo, w.favicon, w.logo_inline_size, w.img_border_radius
@@ -257,7 +257,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             n:=SQL%ROWCOUNT;
             pck_core.log('DELETE ARTICLE '||pArticleid||' rowcount:'||n);
             /* Deploy editor site with new collection item */ 
-            pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+            pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL);
             /* Link to new collection item */
             l_link:='<a href="/' || C.navigation_label_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">' || C.navigation_label_slug || ' Deleted. Go to new index</a>';
         END LOOP;
@@ -329,7 +329,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                    AND wa.article_id=pArticleId
             ) LOOP
                 /* Deploy editor site with new collection item */ 
-                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C.netlify_site_id, pResturl=>pck_core.getResturl);
                 /* Link to new collection item */
                 l_link:='<a href="/' || C.navigation_label_slug || '/' || l_title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open new ' || C.navigation_label_slug || '</a>';
             END LOOP;
@@ -345,7 +345,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                    AND wa.article_id=a.parent_id
             ) LOOP
                 /* Deploy editor site with updated collection item */ 
-                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C.netlify_site_id, pResturl=>pck_core.getResturl);
                 /* Link to new collection item */
                 l_link:='<a href="/' || C.navigation_label_slug || '/' || C.title_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open updated ' || C.navigation_label_slug || '</a>';
             END LOOP;
@@ -360,7 +360,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                    AND wa.website_id=w.id
                    AND wa.article_id=pArticleId
             ) LOOP
-                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pUserId=>null, pEnv=>'TEST', pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL());
+                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C.netlify_site_id, pResturl=>pck_core.getResturl);
                 l_link:='<a style="color:green; font-weight:800" href="/' || C.navigation_label_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">PUBLISHED SUCCESSFULLY</a>';
             END LOOP;
         END IF;
@@ -383,10 +383,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_session_data pck_sec.t_session_data;
         l_job_name VARCHAR2(30);
         l_env VARCHAR2(4);
-        l_site_id website.netlify_site_id%type;
-        l_site_id_custom website.netlify_site_id_custom%type;
+        l_header LONG;
+        l_article LONG;
+        l_footer LONG;
+        l_stop BOOLEAN:=FALSE;
         l_json JSON_OBJECT_T;
-        l_error VARCHAR2(200);
     BEGIN
         /* 
         ** Check no other session currently deploying - simultaneous deployments not allowed on Netlify free plan 
@@ -409,72 +410,45 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         /*
         ** CHECK WHICH DEPLOY REQUEST IS VALID
         */
+       
         FOR C IN (
                 SELECT netlify_last_published, netlify_last_published_custom, netlify_site_id, netlify_site_id_custom
                   FROM website
                  WHERE id=pWebsiteid
         ) LOOP
-            CASE l_env
-                WHEN 'TEST' THEN
-                    IF (pck_deploy.canDeploy(pWebsiteid)) THEN
-                        CONTINUE;
-                    ELSIF (C.netlify_last_published>C.netlify_last_published_custom) THEN
-                        l_json:= new JSON_OBJECT_T;
-                        l_json.put('success',true);
-                        l_json.put('header', '<p>Cannot Publish for following reason:</p>');
-                        l_json.put('article', l_error);
-                        l_json.put('footer', '');
-                        l_json.put('stop', TRUE);
-                        apex_util.prn(l_json.to_clob,false);
-                        RETURN;
-                    END IF;
-            END CASE;
+            IF (l_env='LIVE') THEN
+                pck_deploy.deployLiveSite(pWebsiteid, C.netlify_site_id, C.netlify_site_id_custom);
+            ELSIF (pck_deploy.canDeploy(pWebsiteid)) THEN
+                /* For logging when called by scheduler */
+                pck_sec.g_session_user_id:=l_session_data.user_id;
+                pck_deploy.deployEditorSite(pWebsiteid, C.netlify_site_id);
+                l_header:='<h4>PUBLISHING EDITOR SITE</h4>';
+                l_article:='<table role="presentation" style="font-family:monospace;background:#342a21;color:white"><tbody><tr><td>';
+                l_footer:='';
+            ELSIF (C.netlify_last_published>NVL(C.netlify_last_published_custom, C.netlify_last_published)) THEN
+                l_header:='<h4>PUBLISH LIVE SITE</h4>';
+                l_article:=
+                '<p>Editor site is published with all content up to date.</p>' ||
+                '<p>Click GO LIVE button</p>';
+                l_footer:=
+                '<button type="button" class="button publish">GO LIVE</button>' ||
+                '<span aria-live="polite"></span>' ||
+                '<span class="loader icon"></span>';
+                l_stop:=TRUE;
+            ELSE
+                l_header:='ALL CONTENT PUBLISHED';
+                l_article:='<p>NOTHING NEW TO PUBLISH</p>';
+                l_footer:='';
+                l_stop:=TRUE;
+            END IF;
         END LOOP;
 
-        UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId RETURNING netlify_site_id, netlify_site_id_custom INTO l_site_id, l_site_id_custom;
-        
-        DELETE website_deploy WHERE website_id=pWebsiteId AND site_id=CASE WHEN l_env='TEST' THEN l_site_id ELSE l_site_id_custom END;
-        
-        l_job_name:=dbms_scheduler.generate_job_name('DEPLOY_');
-        dbms_scheduler.create_job(
-            job_name   => l_job_name,
-            job_type   =>'STORED_PROCEDURE',
-            job_action =>'pck_deploy.runDeployment',
-            number_of_arguments=>5,
-            start_date=>systimestamp
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 1,
-            argument_value => pWebsiteId
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 2,
-            argument_value => l_session_data.user_id
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 3,
-            argument_value => l_env
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 4,
-            argument_value => CASE WHEN l_env='TEST' THEN l_site_id ELSE l_site_id_custom END
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 5,
-            argument_value => pck_core.getRestUrl()
-        );
-        dbms_scheduler.enable(l_job_name);
-
-        l_json:= new JSON_OBJECT_T;
+         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('header', '<small>Replacing website with changed content</small>');
-        l_json.put('article', '<table role="presentation" style="font-family:monospace;background:#342a21;color:white"><tbody><tr><td>' || TO_CHAR(current_timestamp AT TIME ZONE l_session_data.timezone,'hh24:mi:ss') || '</td><td>Starting deployment</td></tr></tbody></table>');
-        l_json.put('footer', 'Close window loads new website when deployment successful');
+        l_json.put('header', l_header);
+        l_json.put('article', l_article);
+        l_json.put('footer', l_footer);
+        l_json.put('stop', l_stop);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
