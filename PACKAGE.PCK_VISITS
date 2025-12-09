@@ -38,7 +38,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             'json'=>0,
             'woff2'=>0,
             'img'=>0,
-            'map'=>0
+            'map'=>0,
+            'svg'=>0
         );
         l_lcp NUMBER;
         l_fcp NUMBER;
@@ -74,6 +75,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 ELSE
                     l_index:=SUBSTR(l_filename,n+1);
                 END IF;
+                pck_core.log('l_index:'||l_index);
                 l_resources(l_index):=l_resources(l_index) + l_metrics(i).transferSize;
             END IF;
         END LOOP;
