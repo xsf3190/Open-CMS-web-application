@@ -4,6 +4,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER);
+    --
     PROCEDURE getPageOptionsForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getDeploymentStatus(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
@@ -68,6 +70,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
+        l_favicon VARCHAR2(10);
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -120,6 +123,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         '<textarea id="excerpt" name="excerpt" style="min-width:50%" maxlength="160"></textarea>' ||
                     '</div>';
                 ELSE
+                    l_favicon:=regexp_substr(C.favicon,'<text.+?>(.+?)</text>',1,1,null,1);
                     l_header:='<h4>Page Options</h4>';
                     l_article:=
                     '<p>Use this form to:</p>' || 
@@ -136,7 +140,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     '</fieldset>' ||
                     '<fieldset>' ||
                         '<legend>Favicon (maximum 4000 characters. SVG or emoji)</legend>' ||
-                        '<textarea name="favicon" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.favicon || '</textarea>' ||
+                        '<textarea name="favicon" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || NVL(l_favicon,C.favicon) || '</textarea>' ||
                     '</fieldset>' ||
                     '<fieldset>' ||
                         '<legend>Set image round borders</legend>' ||
@@ -178,6 +182,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json JSON_OBJECT_T;
         l_name VARCHAR2(30);
         l_value VARCHAR2(4000);
+        l_emoji_svg VARCHAR2(200):='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">#EMOJI#</text></svg>';
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -211,6 +216,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         UPDATE website SET logo=l_value, logo_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
                     IF (l_name='favicon') THEN
+                        /* Build svg if emoji character */
+                        IF (LENGTH(l_value)=1) THEN
+                            l_value:=REPLACE(l_emoji_svg,'#EMOJI#',l_value);
+                        END IF;
                         UPDATE website SET favicon=l_value, favicon_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
                     IF (l_name='logo-inline-size') THEN
@@ -377,18 +386,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  DEPLOY WEBSITE
+    **  GET DEPLOY WEBSITE FORM DATA
     */
-    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+    PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_job_name VARCHAR2(30);
-        l_env VARCHAR2(4);
         l_header LONG;
         l_article LONG;
         l_footer LONG;
-        l_stop BOOLEAN:=FALSE;
+        n PLS_INTEGER;
         l_json JSON_OBJECT_T;
     BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
         /* 
         ** Check no other session currently deploying - simultaneous deployments not allowed on Netlify free plan 
         */
@@ -398,14 +407,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             l_json.put('header', '<small>Problem publishing website</small>');
             l_json.put('article', '<p>Someone else is currently deploying on this shared platform</p>');
             l_json.put('footer', '<small>Try again later</small>');
-            l_json.put('stop', TRUE);
             apex_util.prn(l_json.to_clob,false);
             RETURN;
         END LOOP;
-
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        SELECT NVL(env,'TEST') INTO l_env FROM JSON_TABLE(pBodyText, '$' COLUMNS(env));
 
         /*
         ** CHECK WHICH DEPLOY REQUEST IS VALID
@@ -416,39 +420,92 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                   FROM website
                  WHERE id=pWebsiteid
         ) LOOP
-            IF (l_env='LIVE') THEN
-                pck_deploy.deployLiveSite(pWebsiteid, C.netlify_site_id, C.netlify_site_id_custom);
-            ELSIF (pck_deploy.canDeploy(pWebsiteid)) THEN
-                /* For logging when called by scheduler */
-                pck_sec.g_session_user_id:=l_session_data.user_id;
-                pck_deploy.deployEditorSite(pWebsiteid, C.netlify_site_id);
-                l_header:='<h4>PUBLISHING EDITOR SITE</h4>';
-                l_article:='<table role="presentation" style="font-family:monospace;background:#342a21;color:white"><tbody><tr><td>';
-                l_footer:='';
+            IF (pck_deploy.canDeploy(pWebsiteid)) THEN
+                l_header:='<h4>PUBLISH EDITOR SITE</h4>';
+                n:=0;
+                FOR C1 IN (
+                    SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) item
+                      FROM website w, website_article wa, article a
+                     WHERE w.id=pWebsiteid
+                       AND wa.website_id=w.id
+                       AND wa.article_id=NVL(a.parent_id,a.id)
+                       AND (w.nav_updated_date>w.netlify_last_published OR a.updated_date>w.netlify_last_published OR wa.header_html_updated>w.netlify_last_published OR wa.footer_html_updated>w.netlify_last_published)
+                    ORDER BY wa.display_order, a.title nulls FIRST
+                ) LOOP
+                    n:=n+1;
+                    IF (n=1) THEN
+                        l_article:=
+                        '<p>Content changes since last published on ' || TO_CHAR(C.netlify_last_published,'fmdd Mon yyyy, hh24:mi') || '</p>' ||
+                         '<ul>';
+                    END IF;
+                    l_article:=l_article || '<li>' || C1.item || '</li>';
+                END LOOP;
+                IF (n>0) THEN
+                    l_article:=l_article || '</ul>';
+                END IF;
+
+                l_footer:=
+                '<button type="button" class="button publish" data-env="TEST">PUBLISH</button>' ||
+                '<span aria-live="polite"></span>' ||
+                '<span class="loader icon"></span>';
             ELSIF (C.netlify_last_published>NVL(C.netlify_last_published_custom, C.netlify_last_published)) THEN
                 l_header:='<h4>PUBLISH LIVE SITE</h4>';
                 l_article:=
                 '<p>Editor site is published with all content up to date.</p>' ||
                 '<p>Click GO LIVE button</p>';
                 l_footer:=
-                '<button type="button" class="button publish">GO LIVE</button>' ||
+                '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>' ||
                 '<span aria-live="polite"></span>' ||
                 '<span class="loader icon"></span>';
-                l_stop:=TRUE;
             ELSE
                 l_header:='ALL CONTENT PUBLISHED';
                 l_article:='<p>NOTHING NEW TO PUBLISH</p>';
                 l_footer:='';
-                l_stop:=TRUE;
             END IF;
         END LOOP;
 
-         l_json:= new JSON_OBJECT_T;
+        l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('header', l_header);
         l_json.put('article', l_article);
         l_json.put('footer', l_footer);
-        l_json.put('stop', l_stop);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+    END;
+
+    /* 
+    **  DEPLOY WEBSITE
+    */
+    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_env VARCHAR2(4);
+        l_link VARCHAR2(100);
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        SELECT NVL(env,'TEST') INTO l_env FROM JSON_TABLE(pBodyText, '$' COLUMNS(env));
+
+        CASE l_env
+            WHEN 'LIVE' THEN
+                pck_deploy.deployLiveSite(pWebsiteid);
+                FOR C IN (
+                    SELECT domain_name FROM website WHERE id=pWebsiteId
+                ) LOOP 
+                    l_link:='<a href="https://' || C.domain_name || '">' || C.domain_name || ' is LIVE</a>';
+                END LOOP;
+            WHEN 'TEST' THEN
+                pck_deploy.deployEditorSite(pWebsiteid);
+                l_link:='<a href="https://' || l_session_data.url || '">Reload website</a>';
+        END CASE;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('link',l_link);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -841,7 +898,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         BEGIN
             UPDATE website 
                SET nav_updated_date=current_timestamp
-             WHERE EXISTS (
+             WHERE id=pWebsiteId
+               AND EXISTS (
                 SELECT null 
                   FROM website_article
                  WHERE website_id=pWebsiteId 
