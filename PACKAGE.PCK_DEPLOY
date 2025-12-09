@@ -14,9 +14,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     PROCEDURE deployInfrastructure(pSenderEmail IN VARCHAR2 DEFAULT 'contact.form');
     --
-     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type);
+    PROCEDURE deployEditorSite(pWebsiteid IN website.id%type);
      --
-    PROCEDURE deployLiveSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type, pSiteidLive IN website.netlify_site_id_custom%type);
+    PROCEDURE deployLiveSite(pWebsiteid IN website.id%type);
     --
     PROCEDURE logDeployment(pWebsiteId IN website.id%type, pSiteId IN website_deploy.site_id%type, pMessage IN VARCHAR2, pStatus IN VARCHAR2 DEFAULT 'OK', pLogTime IN TIMESTAMP DEFAULT current_timestamp);
     --
@@ -138,69 +138,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
     END;
 
-    PROCEDURE deployEditorSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type) IS
-        l_job_name VARCHAR2(30);
+    PROCEDURE deployEditorSite(pWebsiteid IN website.id%type) IS
     BEGIN        
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId;
-        
-        DELETE website_deploy WHERE website_id=pWebsiteId AND site_id=pSiteidEditor;
-        
-        l_job_name:=dbms_scheduler.generate_job_name('DEPLOY_');
-        dbms_scheduler.create_job(
-            job_name   => l_job_name,
-            job_type   =>'STORED_PROCEDURE',
-            job_action =>'pck_deploy.runDeployment',
-            number_of_arguments=>3,
-            start_date=>systimestamp
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 1,
-            argument_value => pWebsiteId
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 2,
-            argument_value => pSiteidEditor
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 3,
-            argument_value => pck_core.getRestUrl()
-        );
-        dbms_scheduler.enable(l_job_name);
+
+        FOR C IN (
+            SELECT netlify_site_id
+              FROM website 
+             WHERE id=pWebsiteid
+        ) LOOP
+            DELETE website_deploy WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id;
+            pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
+        END LOOP;
     END;
 
-    PROCEDURE deployLiveSite(pWebsiteid IN website.id%type, pSiteidEditor IN website.netlify_site_id%type, pSiteidLive IN website.netlify_site_id_custom%type) IS
+    PROCEDURE deployLiveSite(pWebsiteid IN website.id%type) IS
         l_files JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
         l_clob CLOB;
     BEGIN
-        l_files:=new JSON_OBJECT_T;
         FOR C IN (
-            SELECT path, sha1
-              FROM website_files
-             WHERE website_id=pWebsiteid
-               AND site_id=pSiteidEditor
+            SELECT netlify_site_id, netlify_site_id_custom
+              FROM website 
+             WHERE id=pWebsiteid
         ) LOOP
-            l_files.put(C.path, C.sha1);
+            l_files:=new JSON_OBJECT_T;
+            FOR C1 IN (
+                SELECT path, sha1
+                  FROM website_files
+                 WHERE website_id=pWebsiteid
+                   AND site_id=C.netlify_site_id
+            ) LOOP
+                l_files.put(C1.path, C1.sha1);
+            END LOOP;
+            l_json:=new JSON_OBJECT_T;
+            l_json.put('files',l_files);
+            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id_custom || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+            
+            /* Cancel deploy if any file required */
+            FOR C1 IN (
+                SELECT id, sha1 
+                  FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) 
+                 WHERE sha1 IS NOT NULL
+            ) LOOP
+                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/cancel', pMethod=>'POST', pData=>l_clob);
+                RAISE_APPLICATION_ERROR(-20000,'pck_deploy.deployLiveSite FAILED. ONE OR MORE SHA1 REQUIRED.');
+            END LOOP;
+            UPDATE website
+               SET netlify_last_published_custom=current_timestamp
+             WHERE id=pWebsiteId;
         END LOOP;
-        l_json:=new JSON_OBJECT_T;
-        l_json.put('files',l_files);
-        pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || pSiteidLive || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
-        
-        /* Cancel deploy if any file required */
-        FOR C IN (
-            SELECT id, sha1 
-              FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) 
-             WHERE sha1 IS NOT NULL
-        ) LOOP
-            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/cancel', pMethod=>'POST', pData=>l_clob);
-            RAISE_APPLICATION_ERROR(-20000,'pck_deploy.deployLiveSite FAILED. ONE OR MORE SHA1 REQUIRED.');
-        END LOOP;
-        UPDATE website
-           SET netlify_last_published_custom=current_timestamp
-         WHERE id=pWebsiteId;
     END;
 
     FUNCTION getSha256(pContent IN CLOB) RETURN VARCHAR2 IS
@@ -228,17 +215,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         WITH data AS
         (
-            SELECT w.css_updated_date, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published
-            FROM website w, website_article wa, article a, website_font wf
+            SELECT w.css_updated_date, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published, CAST(a.last_updated_on AS TIMESTAMP WITH TIME ZONE) css2_updated_date
+            FROM website w, website_article wa, article a, website_font wf, apex_application_static_files a
             WHERE w.id=pWebsiteid
             AND wa.website_id=w.id
             AND wa.article_id=NVL(a.parent_id,a.id)
             AND wf.website_id=w.id
+            AND a.application_id=101
+            AND a.file_name='deploy.min.css'
         )
         SELECT MAX(netlify_last_published),MAX(updated_date)
         INTO l_netlify_last_published, l_last_updated_date
         FROM data
-        UNPIVOT  (updated_date FOR COL IN (css_updated_date, nav_updated_date, logo_updated_date, favicon_updated_date, article_updated_date, font_updated_date));
+        UNPIVOT  (updated_date FOR COL IN (css_updated_date, nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date, css2_updated_date));
 
         RETURN (l_last_updated_date>l_netlify_last_published);
     END;
@@ -581,15 +570,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     */
     PROCEDURE buildPageBody(
         pWebsiteId IN website.id%type, 
-        pArticleid IN article.id%type, 
-        pLogo IN VARCHAR2, 
+        pArticleid IN article.id%type,
         pNav IN VARCHAR2, 
         pDropdown in VARCHAR2, 
         pIntegrity IN VARCHAR2, 
         pCollectionType IN website_article.collection_type%type, 
         pCommonHeader IN website_article.header_html%type, 
         pCommonFooter IN website_article.footer_html%type,
-        pFavicon IN VARCHAR2,
         pBody IN OUT NOCOPY CLOB
     ) IS
         l_title article_chars.first_heading%type;
@@ -610,7 +597,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         pBody:=null;
         FOR C IN (
-            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, w.max_width
+            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, w.max_width, NVL2(w.logo,'1',null) logo, NVL2(w.favicon,'1',null) favicon
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -687,15 +674,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /*
             ** CONFIGURE LOGO. ONLY SUPPORTED LOGO IS SVG WITH viewBox ATTRIBUTE OR EMOJI
             */
-            IF (pLogo IS NULL) THEN
+            IF (C.logo IS NULL) THEN
                 l_logo:='<span class="logo"></span>';
-            ELSIF (LENGTHB(pLogo)>5) THEN
+            ELSE
                 -- l_viewbox:=regexp_substr(pLogo,'viewBox="(.+?)"',1,1,null,1);
                 -- l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
                 -- l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
                 l_logo:='<span class="logo"><img src="/images/logo.svg" alt="Image of website logo"></span>';
-            ELSE
-                l_logo:='<span class="logo">' || pLogo || '</span>';
             END IF;
 
             pBody:=
@@ -710,7 +695,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<link rel="stylesheet" href="/css/website-styles.min.css">' ||
                     '<link rel="stylesheet" href="/css/core-styles.min.css">' ||
                     '<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
-                    '<link rel="icon" href="' || pFavicon || '">' ||
+                    '<link rel="icon" href="/images/favicon.svg">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                 '</head>' ||
                 '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
@@ -758,8 +743,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         /* START OF NEW */
 
         l_nav VARCHAR2(4000);
-        l_logo website.logo%type;
-        l_favicon website.favicon%type;
         l_dropdown VARCHAR2(4000);
         l_common_header website_article.header_html%type;
         l_common_footer website_article.footer_html%type;
@@ -915,9 +898,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 SELECT '/images/logo.svg' AS deploy_filename, logo AS file_content, logo_updated_date AS updated_date
                   FROM website
                  WHERE id=pWebsiteid
+                   AND logo IS NOT NULL
                  UNION ALL
-                SELECT '/images/favicon.svg', NVL(favicon,'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">&#127807;</text></svg>'), 
-                        favicon_updated_date
+                SELECT '/images/favicon.svg', favicon, favicon_updated_date
                   FROM website
                  WHERE id=pWebsiteid
             )
@@ -929,19 +912,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wf.path(+)=s.deploy_filename
                AND wf.mime_type(+)='image'
         ) LOOP
-            IF (C.deploy_filename='/images/favicon.svg') THEN
-                l_favicon:=C.deploy_filename;
-            ELSIF (C.deploy_filename='/images/logo.svg') THEN
-                l_logo:=C.file_content;
-            END IF;
-
             IF (C.build=0) THEN
                 l_files.put(C.deploy_filename, C.sha1);
                 CONTINUE;
             END IF;
 
-            logDeployment(pWebsiteId, pSiteId, 'Download IMAGE - ' || C.deploy_filename);
-            addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
+            IF (C.file_content IS NOT NULL) THEN
+                logDeployment(pWebsiteId, pSiteId, 'Download IMAGE - ' || C.deploy_filename);
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
+            END IF;
         END LOOP;
         
         /*
@@ -986,7 +965,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_common_footer:=buildCommonFooter(pWebsiteid);
                 -- l_favicon:=buildFavicon(pWebsiteid);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_favicon, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_nav, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
