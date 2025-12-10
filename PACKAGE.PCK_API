@@ -48,6 +48,12 @@ END;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS 
 
+    /* 
+    ** GLOBAL PACKAGE VARIABLES INITIALIZED ON FIRST CALL
+    */
+    NETLIFY_TOKEN users.netlify_token%type;
+    NETLIFY_ACCOUNT_SLUG users.netlify_account_slug%type;
+
     /*
     **  DOGFACE API CALLS
     */
@@ -490,26 +496,36 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     */
     PROCEDURE setNetlifyHeaders(pUserid IN users.id%type, pContentType IN VARCHAR2 DEFAULT NULL, pAccountSlug IN OUT users.netlify_account_slug%type) IS
         l_netlify_token users.netlify_token%type;
+        l_netlify_account_slug users.netlify_account_slug%type;
     BEGIN
-        /* Get user's netlify token */
-        FOR C IN (SELECT netlify_token, netlify_account_slug FROM users WHERE id=pUserId) LOOP 
-            l_netlify_token:=C.netlify_token;
-            pAccountSlug:=C.netlify_account_slug;
-        END LOOP;
+        /*
+        ** GET USER'S (OR ADMIN'S) NETLIFY TOKEM AND ACCOUNT SLUG ONLY ONCE
+        */
+        IF (NETLIFY_TOKEN IS NULL) THEN
+            /* Get user's netlify token */
+            FOR C IN (SELECT netlify_token, netlify_account_slug FROM users WHERE id=pUserId) LOOP 
+                l_netlify_token:=C.netlify_token;
+                l_netlify_account_slug:=C.netlify_account_slug;
+            END LOOP;
 
-        /* Use Administrator's token if user does not have token */
-        IF (l_netlify_token IS NULL) THEN
-            SELECT u.netlify_token, u.netlify_account_slug
-              INTO l_netlify_token, pAccountSlug
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
+            /* Use Administrator's token if user does not have token */
+            IF (l_netlify_token IS NULL) THEN
+                SELECT u.netlify_token, u.netlify_account_slug
+                  INTO l_netlify_token, l_netlify_account_slug
+                  FROM apex_workspace_apex_users w, users u 
+                 WHERE w.email=u.email
+                   AND w.is_admin='Yes'
+                   FETCH FIRST ROW ONLY;
+            END IF;
+            NETLIFY_TOKEN:=l_netlify_token;
+            NETLIFY_ACCOUNT_SLUG:=l_netlify_account_slug;
         END IF;
+
+        pAccountSlug:=NETLIFY_ACCOUNT_SLUG;
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'Authorization';
-        apex_web_service.g_request_headers(1).value := 'Bearer ' || l_netlify_token;
+        apex_web_service.g_request_headers(1).value := 'Bearer ' || NETLIFY_TOKEN;
         IF (pContentType IS NOT NULL) THEN
             apex_web_service.g_request_headers(2).name := 'Content-Type';
             apex_web_service.g_request_headers(2).value := pContentType;
