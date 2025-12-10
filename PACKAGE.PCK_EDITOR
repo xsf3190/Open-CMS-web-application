@@ -296,6 +296,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        /*
         IF NOT (pck_deploy.CanDeploy(pWebsiteid)) THEN
             l_json:= new JSON_OBJECT_T;
             l_json.put('success',true);
@@ -304,6 +305,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             pStatus:=200;
             RETURN;
         END IF;
+        */
 
         SELECT dml, title, apex_string_util.get_slug(title), excerpt
           INTO l_dml, l_title, l_title_slug, l_excerpt
@@ -509,6 +511,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
+
+        pck_sec.updateCpuUsed(pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
@@ -890,8 +894,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_word_count NUMBER;
         l_html CLOB;
         l_id VARCHAR2(6);
-        l_title article.title%type;
-        l_excerpt article.excerpt%type;
+        l_parent_id article.parent_id%type;
         l_json JSON_OBJECT_T;
 
         PROCEDURE setWebsiteUpdatedDate IS
@@ -925,16 +928,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 setWebsiteUpdatedDate;
 
             WHEN 'main' THEN
-                l_title:=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1))),1,100);
-                l_excerpt:=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<p>(.+?)<\/p>',1,1))),1,160);
-
                 UPDATE article 
                    SET word_count=l_word_count,
-                       title=l_title,
-                       excerpt=l_excerpt, 
+                       title=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1))),1,100),
+                       excerpt=NVL(excerpt, SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<p>(.+?)<\/p>',1,1))),1,160)), 
                        body_html=l_html,
                        updated_date = current_timestamp
-                 WHERE id=pArticleId;
+                 WHERE id=pArticleId
+                 RETUrNING parent_id INTO l_parent_id;
+
+                IF (l_parent_id IS NOT NULL) THEN
+                    UPDATE article
+                       SET updated_date = current_timestamp
+                     WHERE id=l_parent_id;
+                END IF;
 
                 setAssetUsed(pArticleId, l_html);
 
