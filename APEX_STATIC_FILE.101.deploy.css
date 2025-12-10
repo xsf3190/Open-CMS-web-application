@@ -272,64 +272,58 @@ main a:hover {
 
 /* CARD STYLES */
 .card {
-  --card-radius: 0.5em;
   container-type: inline-size;
-  background: rebeccapurple;
-  color: #fff;
   display: flex;
   flex-direction: column;
-  gap: 1em;
-  text-align: center;
-  border: solid 2px #fff;
-  border-radius: var(--card-radius);
-  padding: 0.5em;
-}
-.card:focus-within,
-.card:hover {
-  box-shadow: 4px 8px 8px hsl(0deg 0% 0%/0.38);
-}
-.card a:hover {
-  color:currentColor;
-}
-.icon {
-  pointer-events: none;
-}
-.card .icon {
-  margin-inline: auto;
-  inline-size: 25%;
-  fill: #fff;
-}
+  gap: 1rem;
+  border: 1px solid darkgrey;
+  border-radius: var(--img-border-radius);
+  position: relative;
+  img {
+    block-size: 25dvh;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  
+  .text {
+    padding: 0.5rem;
+    flex: 1 1 auto;
+  }
 
-.card img {
-  block-size: 16rem;
-  border-radius: var(--card-radius);
-}
-.card p {
-  hyphens: manual;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-.card h2 {
-  transition: all 0.2s ease-in-out;
-}
-.card:hover h2 {
-  transform: scale(1.05);
-  text-decoration: underline;
-}
-.card a {
+  a {
     text-decoration: none;
-    color: inherit;
-}
-.card a:visited {
-    color: inherit;
-}
-
-.card>*:last-child {
-  display: flex;
-  justify-content: space-between;
-  margin-block-start: auto;
+  }
+  
+  a::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border: 2px solid transparent; /* 3 */
+    cursor: pointer; /* 3 */
+    border-radius:var(--img-border-radius);
+    transition: border-color 200ms;
+  }
+  a:hover, a:focus {
+    text-decoration: underline;
+    text-decoration-thickness: 0.4ex;
+    text-underline-offset: 0.7ex;
+  }
+  a:hover::before, a:focus::before {
+    border-color: red;
+    text-decoration: underline;
+  }
+  
+  p {
+      margin-block-start: var(--space-s);
+  }
+  
+  footer {
+    font-size:var(--step--1);
+    display: flex;
+    padding: 0 0.5rem 0.25rem;
+    justify-content: space-between;
+  }
 }
 
 
@@ -342,8 +336,6 @@ main a:hover {
   --grid-gap: var(--space-s);
   display: grid;
   grid-template-columns: var(--grid-template-columns, 1fr 1fr);
-  outline: var(--grid-border);
-  text-align: var(--text-align, center);
   gap: var(--grid-gap);
 }
 
@@ -357,12 +349,6 @@ main a:hover {
     --grid-template-columns: repeat(auto-fit,
     minmax(min(var(--grid-min-item-size, 18rem), 100%), 1fr)
   );
-}
-
-.grid > * {
-  padding: var(--grid-padding, 0.2em 0.5em);
-  border-inline-start: var(--grid-border);
-  border-block-end: var(--grid-border);
 }
 
 /* MORE UtILITES - NEED TO STRUCTURE THIS */
