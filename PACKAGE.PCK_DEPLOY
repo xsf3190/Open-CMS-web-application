@@ -149,6 +149,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ) LOOP
             DELETE website_deploy WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id;
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
+            pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
         END LOOP;
     END;
 
@@ -184,9 +185,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/cancel', pMethod=>'POST', pData=>l_clob);
                 RAISE_APPLICATION_ERROR(-20000,'pck_deploy.deployLiveSite FAILED. ONE OR MORE SHA1 REQUIRED.');
             END LOOP;
+
             UPDATE website
                SET netlify_last_published_custom=current_timestamp
              WHERE id=pWebsiteId;
+
+            pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id_custom);
         END LOOP;
     END;
 
