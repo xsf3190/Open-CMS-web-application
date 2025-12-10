@@ -138,6 +138,7 @@ const flushQueues = () => {
             json["mobile"] = navigator.userAgentData.mobile;
         }
         json["url"] = window.location.hostname;
+        json["pathname"] = window.location.pathname;
         json["referrer"] = document.referrer;
 
         json["page_weight"] = page_weight();
