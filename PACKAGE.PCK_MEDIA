@@ -18,7 +18,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_MEDIA" IS
     --
     PROCEDURE setImageBreakpoints(pAssetId IN asset.id%type);
     --
-    PROCEDURE updateCldAsset(pWebsiteId IN website.id%type, pArticleId IN article.id%type DEFAULT NULL);
+    PROCEDURE updateCldAsset(pArticleId IN article.id%type DEFAULT NULL);
     --
     PROCEDURE uploadCldMetadata(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
 END;
@@ -172,11 +172,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     END;
 
     /*
-    ** UPDATE EXISTING CLOUDINARY ASSETS CONVERTING TO AVIF FORMAT AND 50% COMPRESSION
+    ** UPDATE EXISTING CLOUDINARY ASSETS FOR GIVEN ARTICLE_ID CONVERTING TO AVIF FORMAT WITH Q80 COMPRESSION
     */
-    PROCEDURE updateCldAsset(pWebsiteid IN website.id%type, pArticleId IN article.id%type) IS
+    PROCEDURE updateCldAsset(pArticleId IN article.id%type) IS
         TYPE tt_assets IS RECORD(
-            domain_name website.domain_name%type, 
             id asset.id%type,
             cld_cloud_name asset.cld_cloud_name%type, 
             public_id asset.public_id%type,
@@ -206,27 +205,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         --curl https://api.cloudinary.com/v1_1/cld-docs/image/upload -X POST --data 'file=https://www.example.com/sample.jpg&responsive_breakpoint=[{"create_derived":true,"bytes_step":20000,"min_width":200,"max_width":1000}]&timestamp=173719931&api_key=614335564976464&signature=a788d68f86a6f868af'
 
         
-        SELECT domain_name, id, cld_cloud_name, public_id, cld_api_key, cld_api_secret, cld_upload_preset
+        SELECT id, cld_cloud_name, public_id, cld_api_key, cld_api_secret, cld_upload_preset
           BULK COLLECT INTO l_assets
           FROM
             ( 
-                SELECT w.domain_name, a.id, a.cld_cloud_name, a.public_id
-                  FROM website w, website_article wa, asset a
-                 WHERE w.id=pWebsiteid
-                   AND wa.website_id=w.id
-                   AND wa.article_id=NVL(pArticleId,wa.article_id)
-                   AND a.article_id=wa.article_id
+                SELECT a.id, a.cld_cloud_name, a.public_id
+                  FROM asset a
+                 WHERE a.article_id=pArticleId
                    AND a.resource_type='image'
                    AND a.format<>'avif'
             ),
             (SELECT cld_api_key, cld_api_secret, cld_upload_preset from users where id=44);
 
-
-        apex_web_service.clear_request_headers;
-        apex_web_service.g_request_headers(1).name := 'Content-Type';
-        apex_web_service.g_request_headers(1).value := 'application/json';
-
         FOR i IN 1..l_assets.COUNT LOOP
+
+            IF (i=1) THEN
+                apex_web_service.clear_request_headers;
+                apex_web_service.g_request_headers(1).name := 'Content-Type';
+                apex_web_service.g_request_headers(1).value := 'application/json';
+            END IF;
 
             l_parm_names(1):='public_id';
             l_parm_values(1):=l_assets(i).public_id;
@@ -270,7 +267,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
             --pck_core.log(l_return);
 
             IF (apex_web_service.g_status_code<>200) THEN
-                pck_core.log('Got Error ' || apex_web_service.g_status_code || ' converting ' || l_assets(i).public_id || ' for domain ' || l_assets(i).domain_name);
+                pck_core.log('Got Error ' || apex_web_service.g_status_code || ' converting ' || l_assets(i).public_id);
                 pck_core.log(l_return);
                 RAISE_APPLICATION_ERROR(-20000,'Error in avif conversion - see log for details');
                 EXIT;
@@ -599,6 +596,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/raw/upload/' || C.public_id;
                 l_clob:=l_clob || 
                 '<svg width="384" height="512" viewBox="0 0 384 512"><path d="M64 48l112 0 0 88c0 39.8 32.2 72 72 72l88 0 0 240c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16L48 64c0-8.8 7.2-16 16-16zM224 67.9l92.1 92.1-68.1 0c-13.3 0-24-10.7-24-24l0-68.1zM64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-261.5c0-17-6.7-33.3-18.7-45.3L242.7 18.7C230.7 6.7 214.5 0 197.5 0L64 0zM80 104c0 13.3 10.7 24 24 24l16 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-16 0c-13.3 0-24 10.7-24 24zm0 80c0 13.3 10.7 24 24 24l32 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-32 0c-13.3 0-24 10.7-24 24zm64 56l-32 0c-17.7 0-32 14.3-32 32l0 48c0 26.5 21.5 48 48 48s48-21.5 48-48l0-48c0-17.7-14.3-32-32-32zm-16 64a16 16 0 1 1 0 32 16 16 0 1 1 0-32z"/></svg>';
+            ELSE
+                l_file_name:=C.public_id;
+                l_clob:=l_clob || 
+                '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">';
             END IF;
             l_clob:=l_clob || 
                 '<figcaption id="fig' || n || '">' || 
