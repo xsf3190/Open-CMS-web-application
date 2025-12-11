@@ -526,44 +526,55 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
 
     /*
-    ** BUILD BLOG COLLECTION
+    ** BUILD PAGE COLLECTION. ANY IMAGES ARE DECORATIVE, HENCE EMPTY ALT TEXT 
     */
     PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB) IS
+        n PLS_INTEGER:=0;
     BEGIN
-        pHtml:='<ol class="grid grid__auto_fit" role="list">';
-        FOR C IN (SELECT COUNT(*) OVER () nb, ROW_NUMBER() OVER (ORDER BY null) rn,
-                            apex_string_util.get_slug(wa.navigation_label) path, wa.collection_date_format, art.body_html, art.title, art.excerpt, art.updated_date, art.word_count, art.cover_icon_id, ass.cld_cloud_name, ass.resource_type, ass.public_id, ass.format, ass.width, ass.height, ass.alt_text
-                    FROM website_article wa, article art, asset ass
-                   WHERE wa.article_id=pArticleId
-                     AND art.parent_id=wa.article_id
-                     AND ass.id(+)=art.cover_asset_id
-                   ORDER BY art.updated_date DESC ) 
+        pHtml:='<ul class="grid grid__auto_fit" role="list">';
+        FOR C IN (
+            WITH covers AS
+               (
+                SELECT article_id, cld_cloud_name, public_id, width, height
+                  FROM
+                    (
+                    SELECT id, MIN(id) OVER (PARTITION BY article_id) min_id, article_id, cld_cloud_name, public_id, width, height
+                      FROM asset
+                     WHERE article_id IN (SELECT id FROM article WHERE parent_id=pArticleid)
+                    )
+                 WHERE id=min_id
+               )
+            SELECT apex_string_util.get_slug(wa.navigation_label) path, wa.collection_date_format, art.title, art.excerpt, art.updated_date, art.word_count, ass.cld_cloud_name, ass.public_id, ass.width, ass.height
+              FROM website_article wa, article art, covers ass
+             WHERE wa.article_id=pArticleid
+               AND art.parent_id=wa.article_id
+               AND art.id=ass.article_id(+)
+             ORDER BY art.updated_date DESC
+        ) 
         LOOP
+            n:=n+1;
             pHtml:=pHtml || 
             '<li class="card">';
             IF (C.cld_cloud_name IS NOT NULL) THEN
                 pHtml:=pHtml || 
-                '<img loading="' || CASE WHEN C.rn=1 THEN 'eager' ELSE 'lazy' END || '" src="' || pck_media.getCloudinaryUrl(C.cld_cloud_name, C.resource_type, C.public_id, C.format, C.width) || '" width="'|| C.width || '" height="' || C.height || '" alt="' || C.alt_text || '">';
-            ELSIF (C.cover_icon_id IS NOT NULL) THEN
-                pHtml:=pHtml || 
-                '<svg class="icon" aria-hidden="true" focusable="false"><use href="#' || C.cover_icon_id || '"></use></svg>';
+                '<img loading="' || CASE WHEN n=1 THEN 'eager' ELSE 'lazy' END || '" src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_400/' || C.public_id || '.avif" width="'|| C.width || '" height="' || C.height || '" alt="">';
             END IF;
             pHtml:=pHtml || 
-                '<div class="flow">' ||
+                '<div class="text">' ||
                     '<h2>' ||
                         '<a href="/' || C.path || '/' || apex_string_util.get_slug(C.title) || '">' || C.title || '</a>' ||
                     '</h2>' ||
-                    '<p>' || CASE WHEN LENGTH(C.excerpt)<160 THEN C.excerpt ELSE SUBSTR(C.excerpt,1,INSTR(C.excerpt,' ',-1)) || '...' END  || '</p>' ||
+                    '<p>' || C.excerpt || '</p>' ||
                 '</div>' ||
-                '<small>' ||
+                '<footer>' ||
                     CASE WHEN NVL(C.collection_date_format,'NONE')<>'NONE' THEN
                     '<span>' || TO_CHAR(NVL(C.updated_date,current_timestamp),'fm'||C.collection_date_format) || '</span>'
                     END ||
                     '<span>' || C.word_count || ' words</span>' ||
-                '</small>' ||
+                '</footer>' ||
             '</li>';
         END LOOP;
-        pHtml:=pHtml || '</ol>';
+        pHtml:=pHtml || '</ul>';
     END;
 
     /*
