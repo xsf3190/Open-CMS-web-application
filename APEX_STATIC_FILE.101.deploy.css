@@ -134,6 +134,10 @@ body>footer>a {
   --flex-gap: 1rem;
   padding-block-start: 0.5rem;
   padding-inline: 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: white;
 }
 
 .logo {
@@ -327,28 +331,14 @@ main a:hover {
 }
 
 
-/* SIMPLE GRID  - DEFAULT IS 2 EQUAL-SIZED COLUMNS WITH NO GAP */
+/* SIMPLE RESPONSIVE GRID  */
 
 .grid {
-  container-type: inline-size;
   max-width: var(--max-width);
   margin-inline: auto;
-  --grid-gap: var(--space-s);
   display: grid;
-  grid-template-columns: var(--grid-template-columns, 1fr 1fr);
-  gap: var(--grid-gap);
-}
-
-.grid__auto_fill {
-    --grid-template-columns: repeat(auto-fill,
-    minmax(min(var(--grid-min-item-size, 18rem), 100%), 1fr)
-  );
-}
-
-.grid__auto_fit {
-    --grid-template-columns: repeat(auto-fit,
-    minmax(min(var(--grid-min-item-size, 18rem), 100%), 1fr)
-  );
+  grid-template-columns: repeat(auto-fill,minmax(min(18rem, 100%), 1fr));
+  gap: 2rem;
 }
 
 /* MORE UtILITES - NEED TO STRUCTURE THIS */
