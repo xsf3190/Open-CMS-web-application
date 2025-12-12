@@ -531,7 +531,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB) IS
         n PLS_INTEGER:=0;
     BEGIN
-        pHtml:='<ul class="grid grid__auto_fit" role="list">';
+        pHtml:='<ul class="grid" role="list">';
         FOR C IN (
             WITH covers AS
                (
@@ -544,12 +544,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     )
                  WHERE id=min_id
                )
-            SELECT apex_string_util.get_slug(wa.navigation_label) path, wa.collection_date_format, art.title, art.excerpt, art.updated_date, art.word_count, ass.cld_cloud_name, ass.public_id, ass.width, ass.height
+            SELECT apex_string_util.get_slug(wa.navigation_label) path, art.title, art.excerpt, NVL(art.publication_date, art.updated_date) publication_date, art.word_count, ass.cld_cloud_name, ass.public_id, ass.width, ass.height
               FROM website_article wa, article art, covers ass
              WHERE wa.article_id=pArticleid
                AND art.parent_id=wa.article_id
                AND art.id=ass.article_id(+)
-             ORDER BY art.updated_date DESC
+             ORDER BY publication_date DESC
         ) 
         LOOP
             n:=n+1;
@@ -567,9 +567,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<p>' || C.excerpt || '</p>' ||
                 '</div>' ||
                 '<footer>' ||
-                    CASE WHEN NVL(C.collection_date_format,'NONE')<>'NONE' THEN
-                    '<span>' || TO_CHAR(NVL(C.updated_date,current_timestamp),'fm'||C.collection_date_format) || '</span>'
-                    END ||
+                    '<span>' || TO_CHAR(C.publication_date,'fmdd Month, yyyy') || '</span>' ||
                     '<span>' || C.word_count || ' words</span>' ||
                 '</footer>' ||
             '</li>';
