@@ -135,7 +135,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     '<fieldset>' ||
                         '<legend>Logo (maximum 4000 characters. SVG only)</legend>' ||
                         '<textarea name="logo" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.logo || '</textarea>' ||
-                        '<input type="range" id="logo-inline-size" name="logo-inline-size" min="10" max="22" value="' || regexp_substr(C.logo_inline_size,'\d+') || '">' ||
+                        '<input type="range" id="logo-inline-size" name="logo-inline-size" min="3" max="22" value="' || regexp_substr(C.logo_inline_size,'\d+') || '">' ||
                         '<label for="logo-inline-size">Adjust Width</label>' ||
                     '</fieldset>' ||
                     '<fieldset>' ||
