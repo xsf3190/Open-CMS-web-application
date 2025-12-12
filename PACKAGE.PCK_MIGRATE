@@ -1,0 +1,37 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_MIGRATE" as
+    --
+    PROCEDURE migratePublicationDate(pWebsiteid website.id%type, pNavigationLabel website_article.navigation_label%type);
+    --
+end;
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MIGRATE" as
+    --
+    PROCEDURE migratePublicationDate(pWebsiteid website.id%type, pNavigationLabel website_article.navigation_label%type) IS
+        TYPE tt_data IS RECORD(
+            id article.id%type,
+            publication_date article.publication_date%type
+        );
+        TYPE t_data IS TABLE OF tt_data INDEX BY PLS_INTEGER;
+        l_data t_data;
+        l_current_date TIMESTAMP WITH TIME ZONE:=current_timestamp;
+    BEGIN
+        SELECT a.id, a.publication_date 
+          BULK COLLECT INTO l_data
+          FROM website_article wa, article a
+         WHERE wa.website_id=pWebsiteid
+           AND wa.navigation_label=pNavigationLabel
+           AND a.parent_id=wa.article_id
+         ORDER BY 1 DESC;
+        dbms_output.put_line(l_data.COUNT);
+        /* Calculate 28 day periods at l_data.COUNT intervals starting from current_date */
+        FOR i IN 1..l_data.COUNT LOOP
+            l_data(i).publication_date:=l_current_date - ((i-1)*28);
+        END LOOP;
+
+        FORALL i IN 1..l_data.COUNT
+        UPDATE article 
+           SET publication_date=l_data(i).publication_date
+         WHERE id=l_data(i).id;
+    END; 
+end;
+/
