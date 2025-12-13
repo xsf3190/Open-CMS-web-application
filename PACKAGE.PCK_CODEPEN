@@ -19,6 +19,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_logo website.logo%type;
         l_nav VARCHAR2(4000);
         l_dropdown LONG;
+        l_collection_html CLOB;
         n PLS_INTEGER;
         n1 PLS_INTEGER;
         l_session_data pck_sec.t_session_data;
@@ -26,7 +27,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         FOR C IN (
-            SELECT domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo
+            SELECT w.domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo, wa.collection_type
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -57,11 +58,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 END IF;
             END IF;
 
+            IF (C.collection_type<>'N/A') THEN
+                pck_deploy.buildPageCollection(C.collection_type,pArticleid,l_collection_html);
+            END IF;
+
             l_html:=
             '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleId || '">' ||
                 '<div class="topnav flex-items space-between">' || l_logo || l_nav || l_dropdown || '</div>' ||
                 '<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>' ||
                 '<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>' ||
+                l_collection_html ||
                 '<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>' ||
                 pck_deploy.buildLoginForm || pck_deploy.buildContentDialog ||
             '</body>';
