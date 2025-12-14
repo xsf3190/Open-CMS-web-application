@@ -695,7 +695,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 -- l_viewbox:=regexp_substr(pLogo,'viewBox="(.+?)"',1,1,null,1);
                 -- l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
                 -- l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
-                l_logo:='<span class="logo"><img src="/images/logo.svg" alt="Image of website logo"></span>';
+                l_logo:='<span class="logo"><img src="/images/logo.svg" alt="Image of website logo" fetchpriority="high"></span>';
             END IF;
 
             pBody:=
