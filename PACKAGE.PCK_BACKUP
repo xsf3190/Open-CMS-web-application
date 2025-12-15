@@ -347,7 +347,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         
         github_backup(l_repo,n);
 
-         /* Delete log data older than 24 hours */
+        /* Delete log data older than 24 hours */
         DELETE log WHERE log_date<SYSDATE-1;
         
         IF (n>0) THEN
