@@ -107,6 +107,14 @@ const total_requests = () => {
     return metrics.length;
 }
 
+const cache = () => {
+    if (metrics.some( ({transferSize}) => transferSize<=300)) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 /*
 ** SEND PAGE VISIT METRICS TO DATABASE SERVER UNLESS LOGGED IN AS "ADMIN" OR "OWNER"
 */
@@ -143,7 +151,9 @@ const flushQueues = () => {
 
         json["page_weight"] = page_weight();
         json["total_requests"] = total_requests();
+        json["cache"] = cache();
         json['pages_visited'] = Array.from(pages_set).toString();
+        
 
         vitalsQueue.add({name:"page_weight",value:page_weight()});
         vitalsQueue.add({name:"total_requests",value:total_requests()});
@@ -163,7 +173,7 @@ const flushQueues = () => {
     if (navigator.webdriver) return;
     if (json["duration_visible"]<=1) return;
 
-    (navigator.sendBeacon && navigator.sendBeacon(bodydata.resturl+"page-visit", body)) || fetch(visit_url, {body, method: 'POST', keepalive: true});
+    (navigator.sendBeacon && navigator.sendBeacon(bodydata.resturl+"page-visit/"+bodydata.websiteid+"/"+bodydata.articleid, body)) || fetch(visit_url, {body, method: 'POST', keepalive: true});
 }
 
 
