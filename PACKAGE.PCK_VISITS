@@ -1208,6 +1208,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             pck_sec.g_session_user_id:=C.id;
         END LOOP;
 
+        /* Delete raw website visit data for non-custom urls, i.e editor sites */
+        DELETE website_article_cwv WHERE url LIKE 'editor.%' OR url LIKE '%.netlify.app';
+
         FOR C IN (SELECT id, domain_name FROM website WHERE netlify_site_id_custom IS NOT NULL) LOOP
             pck_core.log('START visit data processing for ' || C.domain_name);
             n:=uploadPageHits(C.id);
