@@ -128,6 +128,7 @@ const flushQueues = () => {
     json["website_id"] = bodydata.websiteid;
     json["article_id"] = bodydata.articleid;
     json["website_loaded"] = website_loaded;
+    json["url"] = window.location.hostname;
     json["seq"] = page_visit;
     json["webdriver"] = navigator.webdriver;
     json["aud"] = aud;
