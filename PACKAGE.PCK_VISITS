@@ -138,6 +138,114 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         pck_core.log_error(pStatus);
     END;
 
+    PROCEDURE uploadPageHit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pIPAddress IN VARCHAR2, pUserAgent IN VARCHAR2, pBodyText IN OUT NOCOPY CLOB) IS
+        l_ip_address_hash ip_lookup_hash.ip_address_hash%type;
+        l_city website_visitor.city%type;
+        l_country_code website_visitor.country_code%type;
+        l_location VARCHAR2(100);
+        l_browser browser_lookup.browser%type;
+        l_clob CLOB;
+        l_clob2 clob;
+        l_object JSON_OBJECT_T;
+        l_array JSON_ARRAY_T;    
+        l_session_id page_hit_new.session_id%type;
+        n PLS_INTEGER;
+    BEGIN
+        FOR C IN (
+            SELECT seq, referrer, pIPAddress, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
+                pUserAgent, mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, SUBSTR(pages_visited,1,100) pages_visited
+          FROM JSON_TABLE(pBodyText FORMAT JSON, '$' 
+            COLUMNS (seq, referrer, LCP, LCP_rating, CLS, CLS_rating, INP, INP_rating, FCP, FCP_rating, TTFB, TTFB_rating,
+                    mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, pages_visited))
+        ) LOOP
+            /* 
+            ** 1. Get location from IPData.co
+            **    TO BE GDPR/CCPA COMPLIANT NEVER STORE VISITOR'S IP ADDRESS 
+            */
+            l_ip_address_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pIPAddress,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+            FOR C1 IN (
+                SELECT NVL2(city,city || ',',null) || country_code location
+                  FROM ip_lookup_hash
+                 WHERE ip_address_hash=l_ip_address_hash
+             ) LOOP
+                l_location:=C1.location;
+            END LOOP;
+            IF (l_location IS NULL) THEN
+                pck_api.callIpdataAPI(null,pIPAddress,'GET',l_clob);
+                FOR C2 IN (
+                    SELECT city,country_code, NVL2(city,city || ',',null) || country_code AS location
+                      FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code,error_code,error_message))
+                ) LOOP
+                    INSERT INTO ip_lookup_hash (ip_address_hash, city, country_code)
+                    VALUES (l_ip_address_hash, C2.city, C2.country_code);
+                    l_location:=C2.location;
+                END LOOP;
+            END IF;
+            /* 
+            ** 2. BROWSER
+            */
+            FOR C1 IN (
+                SELECT browser
+                  FROM browser_lookup
+                 WHERE user_agent=pUserAgent
+             ) LOOP
+                l_browser:=C1.browser;
+            END LOOP;
+
+            IF (l_browser IS NULL) THEN
+                l_array:= new JSON_ARRAY_T;
+                l_object:=new JSON_OBJECT_T;
+                l_object.put('name','User-Agent');
+                l_object.put('value',pUserAgent);
+                l_array.append(l_object);
+                l_object:=new JSON_OBJECT_T;
+                l_object.put('headers',l_array);
+                l_clob:=l_object.stringify;
+                pck_api.callBrowserAPI(l_clob,l_clob2);
+                SELECT simple_software_string 
+                  INTO l_browser
+                  FROM JSON_TABLE(l_clob2 FORMAT JSON, '$.detection' COLUMNS (simple_software_string));
+            END IF;
+            /* 
+            ** 3. SESSION_ID : 
+            */
+            l_session_id:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pWebsiteid || C.url || C.website_loaded || pIPAddress || pUserAgent,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+
+            /*
+            **  seq=0 means first segment in session
+            */
+            SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM page_hit_new WHERE website_id=pWebsiteid AND article_id=pArticleid AND session_id=l_session_id);
+
+            IF (n=0) THEN
+                INSERT INTO page_hit_new (
+                    website_id, article_id, session_id, visit_date, url, duration_visible, first_visit,
+                     ttfb, ttfb_rating, fcp, fcp_rating, lcp, lcp_rating, cls, cls_rating, inp, inp_rating,
+                     referrer, browser, location, mobile, connection, page_weight, total_requests, aud, pathname
+                )
+                VALUES (
+                    pWebsiteid, pArticleid, l_session_id, TO_TIMESTAMP('1970-01-01','yyyy-mm-dd') + numtodsinterval(C.website_loaded,'second'), C.url, C.duration_visible, CASE WHEN C.cache='false' THEN 1 ELSE 0 END,
+                    C.ttfb, C.ttfb_rating, C.fcp, C.fcp_rating, C.lcp, C.lcp_rating, C.cls, C.cls_rating, C.inp, C.inp_rating,
+                    C.referrer, l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname
+                );
+            ELSE
+                UPDATE page_hit_new
+                   SET duration_visible=duration_visible+C.duration_visible,
+                       ttfb=NVL(ttfb,C.ttfb), ttfb_rating=NVL(ttfb_rating,C.ttfb_rating),
+                       fcp=NVL(fcp,C.fcp), fcp_rating=NVL(fcp_rating,C.fcp_rating),
+                       lcp=NVL(lcp,C.lcp), lcp_rating=NVL(lcp_rating,C.lcp_rating),
+                       cls=NVL(cls,C.cls), cls_rating=NVL(cls_rating,C.cls_rating),
+                       inp=NVL(inp,C.inp), inp_rating=NVL(inp_rating,C.inp_rating)
+                 WHERE website_id=pWebsiteid
+                   AND article_id=pArticleid
+                   AND session_id=l_session_id;
+            END IF;
+            n:=sql%rowcount;
+            pck_core.log('rowcount:'||n);
+        END LOOP;
+        
+
+    END;
+
     /*
      **  Procedure invoked by POST to REST end point "page-visit".
      **  Upload page visit details sent by javascript from deployed website pages
@@ -146,19 +254,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_bodytext CLOB:=pBodyText;
         l_ip_address website_article_cwv.ip_address%type:=OWA_UTIL.get_cgi_env ('REMOTE_ADDR');
         l_user_agent website_article_cwv.user_agent%type:=SUBSTR(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),1,255);
-        l_fingerprint website_visitor.fingerprint%type;
         n PLS_INTEGER;
+        
     BEGIN
     -- pck_core.log(pWebsiteid||':'||pArticleid);
         /*
         ** INSERT / UPDATE WEBSITE_VISITOR 
         */
-        -- l_fingerprint:=LOWER(dbms_crypto.hash(src => l_ip_address || '.' || l_user_agent, typ => dbms_crypto.hash_sh1));
-        SELECT COUNT(*) INTO n FROM website_visitor WHERE website_id=pWebsiteid AND fingerprint=l_fingerprint;
-        IF (n=0) THEN
-            -- INSERT INTO website_visitor(website_id, fingerprint, nb_visit) VALUES (pWebsiteid, l_fingerprint, 1);
-            null;
-        END IF;
+        uploadPageHit(pWebsiteid, pArticleid, l_ip_address, l_user_agent, l_bodytext);
+
         INSERT INTO website_article_cwv (
             website_id, article_id, seq, referrer, ip_address, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
             user_agent, mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, is_cache, aud, pages_visited)
