@@ -637,7 +637,14 @@ dialog button.close {
     border: none;
     background-color: white;
     padding: 0.5em;
-    align-self: start;
+    aspect-ratio: 1;
+    display: inline-flex;
+    place-content: center;
+    align-self: flex-start;
+    svg {
+        height: 70%;
+        width: auto;
+    }
 }
 
 dialog > form > header, dialog > form > footer {
