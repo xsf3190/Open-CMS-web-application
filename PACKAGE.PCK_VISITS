@@ -139,6 +139,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     END;
 
     PROCEDURE uploadPageHit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pIPAddress IN VARCHAR2, pUserAgent IN VARCHAR2, pBodyText IN OUT NOCOPY CLOB) IS
+        l_user_agent_hash browser_lookup.user_agent_hash%type;
         l_ip_address_hash ip_lookup_hash.ip_address_hash%type;
         l_city website_visitor.city%type;
         l_country_code website_visitor.country_code%type;
@@ -184,10 +185,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             /* 
             ** 2. BROWSER
             */
+            l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pUserAgent,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
             FOR C1 IN (
                 SELECT browser
                   FROM browser_lookup
-                 WHERE user_agent=pUserAgent
+                 WHERE user_agent=l_user_agent_hash
              ) LOOP
                 l_browser:=C1.browser;
             END LOOP;
@@ -202,9 +204,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 l_object.put('headers',l_array);
                 l_clob:=l_object.stringify;
                 pck_api.callBrowserAPI(l_clob,l_clob2);
-                SELECT simple_software_string 
-                  INTO l_browser
-                  FROM JSON_TABLE(l_clob2 FORMAT JSON, '$.detection' COLUMNS (simple_software_string));
+                FOR C1 IN (
+                    SELECT simple_software_string
+                      FROM JSON_TABLE(l_clob2 FORMAT JSON, '$.detection' COLUMNS (simple_software_string))
+                ) LOOP
+                    l_browser:=C1.simple_software_string;
+                    INSERT INTO browser_lookup (browser, user_agent_hash) VALUES (l_browser, l_user_agent_hash);
+                END LOOP;
             END IF;
             /* 
             ** 3. SESSION_ID : 
@@ -240,7 +246,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                    AND session_id=l_session_id;
             END IF;
             n:=sql%rowcount;
-            pck_core.log('rowcount:'||n);
+            IF (n<>1) THEN
+                pck_core.log('ERROR rowcount:'||n);
+            END IF;
         END LOOP;
         
 
