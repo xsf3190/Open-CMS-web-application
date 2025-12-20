@@ -699,10 +699,21 @@ dialog hr+span {
 
 /* STYLES FOR IMAGE SELECTION COMPONENT */
 
-.data-table {
-  font-size: var(--step--2);
-  tr + tr {
-    border-block-start: 2px solid rebeccapurple;
+.table-wrapper {
+    overflow-x: scroll;
+  table {
+    inline-size: 100%;
+    font-size: var(--step--2);
+    text-align: left;
+    border-collapse: collapse;
+  }
+  thead {
+    border-block-end: 2px solid;
+    background: whitesmoke;
+  }
+  th, td {
+    border: 1px solid lightgrey;
+	padding: 0.25em 0.75em;
   }
   img, svg {
     width: 5rem;
@@ -866,84 +877,9 @@ summary {
   }
 }
 
-/* TABLE STYLES, E.G. WEBSITE ANALYTICS */
-
-sup {
-    position: relative;
-    vertical-align: baseline;
-    font-size: 0.7em;
-    top: -0.5em;
-}
-
-table {
-  border-collapse: collapse;
-  font-size: var(--step--1);
-}
-caption {
-  padding: 0.5em;
-}
-thead {
-  background-color: rebeccapurple;;
-  color: white;
-  font-weight: 600;
-}
-th, td {
-  border: 1px solid var(--color-text);
-  padding: var(--space-3xs);
-}
-td > button {
-    margin-inline-start: 0.25em;
-}
-td.centered {
-  text-align: center;
-  font-weight: 900;
-}
-.cwv {
-    --button-padding: 0.15em 0.5em;
-    border: none;
-}
-.cwv:hover {
-    font-weight: 850;
-}
-.good {
-  background-color: chartreuse;
-  color: black;
-}
-.improve, .needs-improvement {
-  background-color: orange;
-  color: black;
-}
-.poor {
-  background: red;
-  color: white;
-}
-
-/* DEPLOYMENT STATUS */
-ol.deploy {
-    color: white;
-    background-color: #342a21;
-    font-family: monospace;
-    font-size: var(--step--1);
-    padding: 1em;
-    margin-inline-end: 1em;
-}
-
-ol.deploy span + span {
-    margin-inline-start: 1em;
-}
-
-.deploy-website {
-    background-color: rebeccapurple !important;
-    color: white !important;
-    cursor: pointer !important;
-    margin-inline-end: 1em !important;
-    padding: 0.2em 0.3em !important;
-}
-
 /*
 ** MEDIA THUMBNAILS PAGE
 */
-
 .gallery-list {
   list-style: none;
   margin: 0;
