@@ -138,7 +138,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         pck_core.log_error(pStatus);
     END;
 
-    PROCEDURE uploadPageHit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pIPAddress IN VARCHAR2, pUserAgent IN VARCHAR2, pBodyText IN OUT NOCOPY CLOB) IS
+    PROCEDURE uploadPageVisit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB) IS
         l_user_agent_hash browser_lookup.user_agent_hash%type;
         l_ip_address_hash ip_lookup_hash.ip_address_hash%type;
         l_city website_visitor.city%type;
@@ -149,12 +149,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_clob2 clob;
         l_object JSON_OBJECT_T;
         l_array JSON_ARRAY_T;    
-        l_session_id page_hit_new.session_id%type;
+        l_session_id page_hit.session_id%type;
         n PLS_INTEGER;
     BEGIN
         FOR C IN (
-            SELECT seq, referrer, pIPAddress, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
-                pUserAgent, mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, SUBSTR(pages_visited,1,100) pages_visited
+            SELECT seq, referrer, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
+                mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, SUBSTR(pages_visited,1,100) pages_visited
           FROM JSON_TABLE(pBodyText FORMAT JSON, '$' 
             COLUMNS (seq, referrer, LCP, LCP_rating, CLS, CLS_rating, INP, INP_rating, FCP, FCP_rating, TTFB, TTFB_rating,
                     mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, pages_visited))
@@ -163,7 +163,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             ** 1. Get location from IPData.co
             **    TO BE GDPR/CCPA COMPLIANT NEVER STORE VISITOR'S IP ADDRESS 
             */
-            l_ip_address_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pIPAddress,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+            l_ip_address_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
             FOR C1 IN (
                 SELECT NVL2(city,city || ',',null) || country_code location
                   FROM ip_lookup_hash
@@ -172,7 +172,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 l_location:=C1.location;
             END LOOP;
             IF (l_location IS NULL) THEN
-                pck_api.callIpdataAPI(null,pIPAddress,'GET',l_clob);
+                pck_api.callIpdataAPI(null,OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'GET',l_clob);
                 FOR C2 IN (
                     SELECT city,country_code, NVL2(city,city || ',',null) || country_code AS location
                       FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code,error_code,error_message))
@@ -185,11 +185,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             /* 
             ** 2. BROWSER
             */
-            l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pUserAgent,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+            l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
             FOR C1 IN (
                 SELECT browser
                   FROM browser_lookup
-                 WHERE user_agent=l_user_agent_hash
+                 WHERE user_agent_hash=l_user_agent_hash
              ) LOOP
                 l_browser:=C1.browser;
             END LOOP;
@@ -198,7 +198,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 l_array:= new JSON_ARRAY_T;
                 l_object:=new JSON_OBJECT_T;
                 l_object.put('name','User-Agent');
-                l_object.put('value',pUserAgent);
+                l_object.put('value',OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
                 l_array.append(l_object);
                 l_object:=new JSON_OBJECT_T;
                 l_object.put('headers',l_array);
@@ -215,15 +215,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             /* 
             ** 3. SESSION_ID : 
             */
-            l_session_id:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pWebsiteid || C.url || C.website_loaded || pIPAddress || pUserAgent,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+            l_session_id:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pWebsiteid || C.url || C.website_loaded || OWA_UTIL.get_cgi_env('HTTP_REMOTE_ADDR') || OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
 
             /*
-            **  seq=0 means first segment in session
+            **  seq=0 means first analytics segment for page
+            **  seq>0 means analytics captured when user tabs back to the page  - used to update duration on page metric plus CWV metrics emitted after page interactions (INP)
             */
-            SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM page_hit_new WHERE website_id=pWebsiteid AND article_id=pArticleid AND session_id=l_session_id);
+            SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null FROM page_hit WHERE website_id=pWebsiteid AND article_id=pArticleid AND session_id=l_session_id);
 
             IF (n=0) THEN
-                INSERT INTO page_hit_new (
+                INSERT INTO page_hit (
                     website_id, article_id, session_id, visit_date, url, duration_visible, first_visit,
                      ttfb, ttfb_rating, fcp, fcp_rating, lcp, lcp_rating, cls, cls_rating, inp, inp_rating,
                      referrer, browser, location, mobile, connection, page_weight, total_requests, aud, pathname
@@ -234,7 +235,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                     C.referrer, l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname
                 );
             ELSE
-                UPDATE page_hit_new
+                UPDATE page_hit
                    SET duration_visible=duration_visible+C.duration_visible,
                        ttfb=NVL(ttfb,C.ttfb), ttfb_rating=NVL(ttfb_rating,C.ttfb_rating),
                        fcp=NVL(fcp,C.fcp), fcp_rating=NVL(fcp_rating,C.fcp_rating),
@@ -253,160 +254,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         
 
     END;
-
-    /*
-     **  Procedure invoked by POST to REST end point "page-visit".
-     **  Upload page visit details sent by javascript from deployed website pages
-     */
-    PROCEDURE uploadPageVisit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB) IS
-        l_bodytext CLOB:=pBodyText;
-        l_ip_address website_article_cwv.ip_address%type:=OWA_UTIL.get_cgi_env ('REMOTE_ADDR');
-        l_user_agent website_article_cwv.user_agent%type:=SUBSTR(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),1,255);
-        n PLS_INTEGER;
-        
-    BEGIN
-    -- pck_core.log(pWebsiteid||':'||pArticleid);
-        /*
-        ** INSERT / UPDATE WEBSITE_VISITOR 
-        */
-        uploadPageHit(pWebsiteid, pArticleid, l_ip_address, l_user_agent, l_bodytext);
-
-        INSERT INTO website_article_cwv (
-            website_id, article_id, seq, referrer, ip_address, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
-            user_agent, mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, is_cache, aud, pages_visited)
-        SELECT website_id, article_id, seq, referrer, l_ip_address, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
-                l_user_agent, mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, SUBSTR(pages_visited,1,100) pages_visited
-          FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' 
-            COLUMNS (website_id, article_id, seq, referrer, LCP, LCP_rating, CLS, CLS_rating, INP, INP_rating, FCP, FCP_rating, TTFB, TTFB_rating,
-                    mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, webdriver, aud, pages_visited))
-          WHERE NVL(webdriver,'false')='false';  
-
-        EXCEPTION
-            WHEN OTHERS THEN
-                pck_core.log_error;
-    END;
-
-    /*
-     **  Update IP_LOOKUP table with any new IP address details. This procedure does not fail, just reports errors to avoid loss of service (e.g. upgrade to paid plan)
-     */
-    PROCEDURE uploadIpLookup(pWebsiteId IN website.id%type) IS 
-        l_clob clob;
-        TYPE t_ip_lookup IS TABLE OF ip_lookup%rowtype;
-        l_ip_lookup t_ip_lookup:=t_ip_lookup();
-        l_current_timestamp ip_lookup.created_date%type:=current_timestamp;
-    BEGIN
-        FOR C IN (SELECT DISTINCT ip_address FROM page_hit WHERE website_id=pWebsiteId MINUS SELECT ip FROM ip_lookup )
-        LOOP
-            pck_api.callIpdataAPI(null,C.ip_address,'GET',l_clob);
-            FOR C1 IN (SELECT city,country_code,postal,error_code,error_message FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code,postal,error_code,error_message)))
-            LOOP
-                l_ip_lookup.EXTEND;
-                l_ip_lookup(l_ip_lookup.LAST).ip:=C.ip_address;
-                l_ip_lookup(l_ip_lookup.LAST).city:=C1.city;
-                l_ip_lookup(l_ip_lookup.LAST).country_code:=C1.country_code;
-                l_ip_lookup(l_ip_lookup.LAST).postal:=C1.postal;
-                l_ip_lookup(l_ip_lookup.LAST).error_code:=C1.error_code;
-                l_ip_lookup(l_ip_lookup.LAST).error_message:=C1.error_message;
-                l_ip_lookup(l_ip_lookup.LAST).created_date:=l_current_timestamp;
-            END LOOP;
-        END LOOP;
-        FORALL i IN l_ip_lookup.FIRST..l_ip_lookup.LAST
-            INSERT INTO ip_lookup VALUES l_ip_lookup(i);
-    END;
-
-    /*
-     **  Google core web vital and website visit duration data is uploaded from client sessions to table website_article_cwv.
-     **  This procedure aggregates the data into the page_hit table.
-     **  Each page_hit row represents one visit from one ip address to a web page in a discrete client session.
-     */
-    FUNCTION uploadPageHits(pWebsiteId IN website.id%type) RETURN INTEGER IS
-        TYPE t_browser_lookup IS TABLE OF browser_lookup%rowtype;
-        l_browser_lookup t_browser_lookup:=t_browser_lookup();
-        l_object JSON_OBJECT_T;
-        l_array JSON_ARRAY_T;
-        l_clob clob;
-        l_clob2 clob;
-        n PLS_INTEGER;
-    BEGIN
-        FOR C IN (SELECT DISTINCT user_agent FROM website_article_cwv c WHERE website_id=pWebsiteId AND NOT EXISTS (SELECT NULL FROM browser_lookup b WHERE b.user_agent=c.user_agent))
-        LOOP
-            l_array:= new JSON_ARRAY_T;
-            l_object:=new JSON_OBJECT_T;
-            l_object.put('name','User-Agent');
-            l_object.put('value',C.user_agent);
-            l_array.append(l_object);
-            l_object:=new JSON_OBJECT_T;
-            l_object.put('headers',l_array);
-            l_clob:=l_object.stringify;
-            pck_api.callBrowserAPI(l_clob,l_clob2);
-            FOR C1 IN (SELECT simple_software_string FROM JSON_TABLE(l_clob2 FORMAT JSON, '$.detection' COLUMNS (simple_software_string)) )
-            LOOP
-                IF (C1.simple_software_string IS NOT NULL) THEN
-                    l_browser_lookup.EXTEND;
-                    l_browser_lookup(l_browser_lookup.LAST).browser:=C1.simple_software_string;
-                    l_browser_lookup(l_browser_lookup.LAST).user_agent:=C.user_agent;
-                    l_browser_lookup(l_browser_lookup.LAST).created_date:=current_timestamp;
-                END IF;
-            END LOOP;
-        END LOOP;
-        FORALL i IN l_browser_lookup.FIRST..l_browser_lookup.LAST
-            INSERT INTO browser_lookup VALUES l_browser_lookup(i);
-        
-        MERGE INTO page_hit t
-        USING (
-            SElECT 
-                website_id, article_id, website_loaded, ip_address, apex_string_util.get_domain(referrer) referrer, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating, 
-                NVL(duration_visible,0) duration_visible, NVL(browser,user_agent) browser, connection, url, pathname, mobile,
-                to_timestamp('1970-01-01','yyyy-mm-dd') + numtodsinterval(website_loaded,'second') visit_date, page_weight, total_requests, is_cache, aud, pages_visited
-            FROM
-            (
-                SELECT 
-                    website_id, article_id, ip_address, website_loaded,  
-                    MAX(CASE WHEN INSTR(referrer,url)=0 THEN referrer END) referrer, 
-                    MAX(lcp) lcp, MAX(lcp_rating) lcp_rating, MAX(cls) cls, MAX(cls_rating) cls_rating, MAX(inp) inp, MAX(inp_rating) inp_rating, MAX(fcp) fcp, MAX(fcp_rating) fcp_rating, MAX(ttfb) ttfb, MAX(ttfb_rating) ttfb_rating, 
-                    SUM(duration_visible) duration_visible, MAX(website_article_cwv.user_agent) user_agent, MAX(browser_lookup.browser) browser, MAX(connection) connection, MAX(url) url, MAX(pathname) pathname, 
-                    MAX(mobile) mobile, MAX(page_weight) page_weight, MAX(total_requests) total_requests, MAX(is_cache) is_cache,
-                    MAX(aud) aud, MAX(pages_visited) pages_visited
-                FROM website_article_cwv, browser_lookup
-                WHERE website_id=pWebsiteId
-                AND INSTR(website_article_cwv.user_agent,'Headless')=0
-                AND browser_lookup.user_agent(+)=website_article_cwv.user_agent
-                GROUP BY website_id, article_id, ip_address, website_loaded
-            )
-        ) s
-        ON (t.website_id=s.website_id AND 
-            t.article_id=s.article_id AND 
-            t.ip_address=s.ip_address AND 
-            t.website_loaded=s.website_loaded)
-        WHEN NOT MATCHED THEN
-            INSERT (website_id, article_id, ip_address, website_loaded, visit_date, referrer, duration_visible, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating, browser, connection, url, pathname, mobile, page_weight, total_requests, is_cache, aud, pages_visited)    
-            VALUES (s.website_id, s.article_id, s.ip_address, s.website_loaded, s.visit_date, s.referrer, s.duration_visible, s.lcp, s.lcp_rating, s.cls, s.cls_rating, s.inp, s.inp_rating, s.fcp, s.fcp_rating, s.ttfb, s.ttfb_rating, s.browser, s.connection, 
-                    s.url, s.pathname, s.mobile, s.page_weight, s.total_requests, s.is_cache, s.aud, s.pages_visited)
-        WHEN MATCHED THEN
-            UPDATE SET t.updated_date=current_timestamp,
-                t.duration_visible=t.duration_visible+s.duration_visible,
-                t.lcp=CASE WHEN t.lcp IS NOT NULL AND s.lcp IS NOT NULL THEN GREATEST(s.lcp,t.lcp) ELSE COALESCE(s.lcp,t.lcp) END,
-                t.lcp_rating=CASE WHEN t.lcp_rating IS NOT NULL AND s.lcp_rating IS NOT NULL THEN GREATEST(s.lcp_rating,t.lcp_rating) ELSE COALESCE(s.lcp_rating,t.lcp_rating) END,
-                t.cls=CASE WHEN t.cls IS NOT NULL AND s.cls IS NOT NULL THEN GREATEST(s.cls,t.cls) ELSE COALESCE(s.cls,t.cls) END,
-                t.cls_rating=CASE WHEN t.cls_rating IS NOT NULL AND s.cls_rating IS NOT NULL THEN GREATEST(s.cls_rating,t.cls_rating) ELSE COALESCE(s.cls_rating,t.cls_rating) END,
-                t.inp=CASE WHEN t.inp IS NOT NULL AND s.inp IS NOT NULL THEN GREATEST(s.inp,t.inp) ELSE COALESCE(s.inp,t.inp) END,
-                t.inp_rating=CASE WHEN t.inp_rating IS NOT NULL AND s.inp_rating IS NOT NULL THEN GREATEST(s.inp_rating,t.inp_rating) ELSE COALESCE(s.inp_rating,t.inp_rating) END,
-                t.fcp=CASE WHEN t.fcp IS NOT NULL AND s.fcp IS NOT NULL THEN GREATEST(s.fcp,t.fcp) ELSE COALESCE(s.fcp,t.fcp) END,
-                t.fcp_rating=CASE WHEN t.fcp_rating IS NOT NULL AND s.fcp_rating IS NOT NULL THEN GREATEST(s.fcp_rating,t.fcp_rating) ELSE COALESCE(s.fcp_rating,t.fcp_rating) END,
-                t.ttfb=CASE WHEN t.ttfb IS NOT NULL AND s.ttfb IS NOT NULL THEN GREATEST(s.ttfb,t.ttfb) ELSE COALESCE(s.ttfb,t.ttfb) END,
-                t.ttfb_rating=CASE WHEN t.ttfb_rating IS NOT NULL AND s.ttfb_rating IS NOT NULL THEN GREATEST(s.ttfb_rating,t.ttfb_rating) ELSE COALESCE(s.ttfb_rating,t.ttfb_rating) END,
-                t.url=COALESCE(t.url,s.url),
-                t.pathname=COALESCE(t.pathname,s.pathname)
-                ;
-        n:=SQL%ROWCOUNT;
-
-        DELETE website_article_cwv WHERE website_id=pWebsiteId;
-
-        uploadIpLookup(pWebsiteId);
-
-        RETURN(n);
-    END;
-
     
     FUNCTION sql2Html (pSql IN VARCHAR2, pWebsiteId IN website.id%type, pUrl IN VARCHAR2, pOffset IN NUMBER) RETURN CLOB
     IS
@@ -613,7 +460,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             '<table role="presentation">' ||
                 '<thead>' ||
                     '<tr>' ||
-                        '<th>Web Vitals</th>' ||
                         '<th>Started</th>' ||
                         '<th>Location<br>Visit No.</th>' ||
                         '<th>Engagement' || CASE WHEN l_nb_pages>1 THEN '<br>Pages Seen' END || '</th>' ||
@@ -624,46 +470,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         END IF;
 
         FOR C IN (
-            WITH website_hits as 
-            (
-                SELECT p.website_id, p.ip_address, p.visit_date, 
-                        COUNT(*) OVER() total,
-                        COUNT(DISTINCT article_id) pages_viewed,
-                        ROW_NUMBER() OVER (PARTITION BY p.ip_address ORDER BY p.visit_date) visit_count,
-                        MAX(p.referrer) referrer, 
-                        MAX(p.ttfb_rating) ttfb_rating, MAX(p.fcp_rating) fcp_rating,
-                        MAX(p.lcp_rating) lcp_rating, MAX(p.cls_rating) cls_rating, MAX(p.inp_rating) inp_rating, 
-                        MAX(p.ttfb) ttfb, MAX(p.fcp) fcp, MAX(p.lcp) lcp, MAX(p.cls) cls, MAX(p.inp) inp, 
-                        MAX(p.page_weight) page_weight, 
-                        MAX(p.total_requests) total_requests,
-                        SUM(p.duration_visible) duration_visible, 
-                        MAX(p.browser) browser, 
-                        MAX(p.connection) connection, 
-                        MAX(p.mobile) mobile
-                  FROM website w, page_hit p
-                 WHERE w.id=pWebsiteId
-                   AND p.website_id=w.id
-                   AND p.url=pUrl
-                 GROUP BY p.website_id, p.ip_address, p.visit_date
-                 ORDER BY p.visit_date DESC
-                 OFFSET pOffset ROWS
-                 FETCH FIRST ROWS_PER_PAGE ROWS ONLY
-            )
-            SELECT wh.total,
-                   '<sup' || CASE WHEN wh.visit_count=1 THEN ' style="font-weight:900;font-stretch:120%"' END || '>' || wh.visit_count || SUBSTR(TO_CHAR(TO_DATE(wh.visit_count,'j'),'jspth'),-2) || '</sup>' visit_count,
-                    wh.pages_viewed, wh.visit_date, wh.referrer, ip.city||', '||ip.country_code||' '||ip.postal location, 
-                    wh.browser, wh.connection || CASE WHEN wh.mobile='true' THEN ' (Mobile)' END connection, 
-                    wh.duration_visible, 
-                    wh.ttfb_rating, wh.fcp_rating, wh.lcp_rating, wh.cls_rating, wh.inp_rating, 
-                    TO_CHAR(ROUND(wh.ttfb/1000,2),'fm90.99') || NVL2(wh.ttfb,'s',null) ttfb, 
-                    TO_CHAR(ROUND(wh.fcp/1000,2),'fm90.99') || NVL2(wh.fcp,'s',null) fcp, 
-                    TO_CHAR(ROUND(wh.lcp/1000,2),'fm90.99') || NVL2(wh.lcp,'s',null) lcp, 
-                    ROUND(cls,2) cls, 
-                    TO_CHAR(ROUND(wh.inp/1000,2),'fm90.99') || NVL2(wh.inp,'s',null) inp,
-                    wh.page_weight,
-                    wh.total_requests
-              FROM website_hits wh, ip_lookup ip
-             WHERE ip.ip=wh.ip_address
+            SELECT  COUNT(*) OVER() total,
+                    COUNT(*) pages_viewed,
+                    MAX(visit_date) visit_date,
+                    MAX(first_visit) visit_count,
+                    MAX(p.referrer) referrer, 
+                    MAX(p.ttfb_rating) ttfb_rating, MAX(p.fcp_rating) fcp_rating,
+                    MAX(p.lcp_rating) lcp_rating, MAX(p.cls_rating) cls_rating, MAX(p.inp_rating) inp_rating, 
+                    MAX(p.ttfb) ttfb, MAX(p.fcp) fcp, MAX(p.lcp) lcp, MAX(p.cls) cls, MAX(p.inp) inp, 
+                    MAX(p.page_weight) page_weight, 
+                    MAX(p.total_requests) total_requests,
+                    SUM(p.duration_visible) duration_visible, 
+                    MAX(p.browser) browser, 
+                    MAX(p.location) location, 
+                    MAX(p.connection) connection, 
+                    MAX(p.mobile) mobile
+              FROM page_hit p
+             WHERE p.website_id=pWebsiteid
+               AND p.url=pUrl
+             GROUP BY p.session_id
+             ORDER BY visit_date DESC
+             OFFSET pOffset ROWS
+             FETCH FIRST ROWS_PER_PAGE ROWS ONLY
         ) 
         LOOP
             n:=n+1;
@@ -674,43 +502,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
 
             l_ela_time:=elapsedTime(C.duration_visible);
 
-            -- Compute overall Google Core web vitals rating
-            
-            l_rating:=
-            CASE 
-                WHEN C.lcp_rating='good' AND NVL(C.cls_rating,'good')='good' AND NVL(C.inp_rating,'good')='good' THEN 'good'
-                WHEN C.lcp_rating='needs-improvement' OR C.cls_rating='needs-improvement' OR C.inp_rating='needs-improvement' THEN 'improve'
-                WHEN C.lcp_rating='poor' OR C.cls_rating='poor' OR C.inp_rating='poor' THEN 'poor'
-                -- WHEN NVL(C.ttfb_rating,'good')='good' AND NVL(C.fcp_rating,'good')='good' THEN 'good'
-                -- WHEN C.ttfb_rating='needs-improvement' OR C.fcp_rating='needs-improvement' THEN 'improve'
-                -- WHEN C.ttfb_rating='poor' OR C.fcp_rating='poor' THEN 'poor'
-                ELSE 'N/A'
-            END;
-
-            IF (l_rating IS NOT NULL) THEN
-                l_rating_popover:=
-                '<button type="button" class="button cwv ' || l_rating ||  '" popovertarget="popover_' || n || '" style="anchor-name: --info-btn-' || n || '">' || UPPER(l_rating) || '</button>' ||
-                '<table id="popover_' || n || '" class="popover-right" popover style="position-anchor: --info-btn-' || n || '">' || 
-                    '<tr><td>Browser</td><td>' || C.browser || '</td></tr>' || 
-                    CASE WHEN C.connection IS NOT NULL THEN 
-                    '<tr><td>Connection</td><td>' || C.connection || '</td></tr>'
-                    END ||
-                    '<tr><td>Page Weight</td><td>' || apex_string_util.to_display_filesize(C.page_weight) || '</td></tr>' || 
-                    '<tr><td>Resource Requests</td><td>' || C.total_requests || '</td></tr>' || 
-                    '<tr><td>Web Vitals</td>' ||
-                        '<td>' ||
-                            '<table>' ||
-                                '<thead><tr><th>TTFB</th><th>FCP</th><th>LCP</th><th>CLS</th><th>INP</th></tr></thead>' ||
-                                '<tbody><tr><td class="' || C.TTFB_rating || '">' || C.TTFB || '</td><td class="' || C.FCP_rating || '">' || C.FCP || '</td><td class="' || C.LCP_rating || '">' || C.LCP || '</td><td class="' || C.CLS_rating || '">' || C.CLS || '</td><td class="' || C.INP_rating || '">' || C.INP || '</td></tr></tbody>' ||
-                            '</table>' ||
-                        '</td>' ||
-                    '</tr>' ||
-                '</table>';
-            END IF;
-
             l_content:=l_content ||
                 '<tr>' ||
-                    '<td class="centered">' || l_rating_popover || '</td>' ||
                     '<td>' || TO_CHAR(C.visit_date at time zone pTimeZone, 'dd-mm-yy')  || '<br>' || TO_CHAR(C.visit_date at time zone pTimeZone, 'fmhh24:fmmipm') || '</td>' ||
                     '<td>' || C.location || '<br>' || C.visit_count || '</td>' ||
                     '<td>' || l_ela_time || CASE WHEN l_nb_pages>1 THEN '<br>' || C.pages_viewed END || '</td>' ||
@@ -802,13 +595,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             WITH 
             sessions AS
             (
-            SELECT ROW_NUMBER() OVER (PARTITION BY ph.ip_address ORDER BY ph.visit_date) visit, 
+            SELECT MAX(first_visit) visit, 
                 MAX(lcp) lcp, MAX(cls) cls, MAX(inp) inp,  
                 MAX(lcp_rating) lcp_rating, MAX(cls_rating) cls_rating, MAX(inp_rating) inp_rating
               FROM page_hit ph
              WHERE ph.website_id=pWebsiteid
                AND ph.url=pUrl
-             GROUP BY ph.visit_date, ph.ip_address
+             GROUP BY ph.session_id
             ),
             dataset AS
             (
@@ -914,13 +707,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                     SELECT location,  nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
                     FROM
                         (
-                        SELECT i.country_code location, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
-                          FROM page_hit p, ip_lookup i
+                        SELECT MAX(location) location, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
+                          FROM page_hit p
                          WHERE p.website_id=pWebsiteId
                            AND p.url=pUrl
-                           AND p.ip_address=i.ip
-                         AND i.country_code IS NOT NULL
-                         GROUP BY i.country_code
+                         GROUP BY p.session_id
                         )
                         ORDER BY nb_visits DESC, location
                         OFFSET pOffset ROWS
@@ -1024,12 +815,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 ),
                 sessions AS
                 (
-                    SELECT p.navigation_label, ROW_NUMBER() OVER (PARTITION BY ph.ip_address ORDER BY ph.visit_date) visit, SUM(CASE WHEN ph.duration_visible>10 THEN 1 ELSE 0 END) engaged, MAX(ph.duration_visible) duration_visible
+                    SELECT p.navigation_label, MAX(first_visit) visit, SUM(CASE WHEN ph.duration_visible>10 THEN 1 ELSE 0 END) engaged, MAX(ph.duration_visible) duration_visible
                       FROM pages p, page_hit ph
                      WHERE ph.website_id=pWebsiteId
                        AND ph.url=pUrl
                        AND ph.article_id=p.article_id
-                     GROUP BY ph.visit_date, ph.ip_address, p.navigation_label
+                     GROUP BY ph.visit_date, p.navigation_label
                 ),
                 dataset AS
                 (
@@ -1167,11 +958,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             ),
             website_hit AS
             (
-                SELECT p.visit_date, ROW_NUMBER() OVER (PARTITION BY p.ip_address ORDER BY p.visit_date) visit_count, COUNT(*) visits, MAX(lcp) lcp, MAX(cls) cls, MAX(inp) inp
+                SELECT p.visit_date, SUM(p.first_visit) visit_count, COUNT(*) visits, MAX(lcp) lcp, MAX(cls) cls, MAX(inp) inp
                 FROM page_hit p
                 WHERE p.website_id=pWebsiteid
                 AND url=pUrl
-                GROUP BY p.ip_address, p.visit_date
+                GROUP BY p.session_id, p.visit_date
             ),
             dataset AS
             (
@@ -1289,11 +1080,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 WHEN 'browser' THEN getVisitsByBrowser(pWebsiteId, pOffset, l_session_data.url, l_count, l_article);
                 WHEN 'engagement' THEN getEngagement(pWebsiteId, pOffset, l_session_data.timezone, l_session_data.url, l_count, l_article);
                 WHEN 'trends' THEN getWebsiteTrends(pWebsiteId, l_session_data.timezone, l_session_data.url, l_article);
-                WHEN 'latest' THEN 
-                    n:=uploadPageHits(pWebsiteId);
-                    l_article:=
-                    '<h4>' || n || ' Page Views uploaded</h4>' ||
-                    '<table role="presentation"><tbody><tr></tr></tbody></table>';
             END CASE;
         END IF;
         
@@ -1322,26 +1108,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_content VARCHAR2(300);
         n PLS_INTEGER;
     BEGIN
-        /* Set Administrator user id for logging */
-        FOR C IN (
-            SELECT u.id
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY
-        ) LOOP
-            pck_sec.g_session_user_id:=C.id;
-        END LOOP;
-
         /* Delete raw website visit data for non-custom urls, i.e editor sites */
-        DELETE website_article_cwv WHERE url LIKE 'editor.%' OR url LIKE '%.netlify.app';
-
-        FOR C IN (SELECT id, domain_name FROM website WHERE netlify_site_id_custom IS NOT NULL) LOOP
-            pck_core.log('START visit data processing for ' || C.domain_name);
-            n:=uploadPageHits(C.id);
-            COMMIT;
-            pck_core.log('END visit data processing for ' || C.domain_name || ' - ' || n || ' page views');
-        END LOOP;
+        DELETE page_hit WHERE url LIKE 'editor.%' OR url LIKE '%.netlify.app';
     END;
     
 END;
