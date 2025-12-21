@@ -54,6 +54,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     NETLIFY_TOKEN users.netlify_token%type;
     NETLIFY_ACCOUNT_SLUG users.netlify_account_slug%type;
 
+    IPDATA_APIKEY users.ipdata_api_key%type;
+    
+    WHATISMYBROWSER_APIKEY users.whatismybrowser_api_key%type;
+
     /*
     **  DOGFACE API CALLS
     */
@@ -165,23 +169,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     **  WHATISMYBROWSER API
     */
     PROCEDURE callBrowserAPI(pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB) IS
-        l_whatismybrowser_api_key users.whatismybrowser_api_key%type;
         l_whatismybrowser_url VARCHAR2(100):='https://api.whatismybrowser.com/api/v3/detect';
         l_error_message LONG;
     BEGIN
         /* Get Admin user's terraform aws gateway url and api key */
-        SELECT u.whatismybrowser_api_key
-          INTO l_whatismybrowser_api_key
-          FROM users u, apex_workspace_apex_users w
-         WHERE w.email=u.email
-           AND w.is_admin='Yes'
-         ORDER BY date_created
-         FETCH FIRST ROW ONLY;
-
+        IF (WHATISMYBROWSER_APIKEY IS NULL) THEN
+            SELECT u.whatismybrowser_api_key
+              INTO WHATISMYBROWSER_APIKEY
+              FROM users u, apex_workspace_apex_users w
+             WHERE w.email=u.email
+               AND w.is_admin='Yes'
+             ORDER BY date_created
+             FETCH FIRST ROW ONLY;
+        END IF;
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'x-api-key';
-        apex_web_service.g_request_headers(1).value := l_whatismybrowser_api_key;
+        apex_web_service.g_request_headers(1).value := WHATISMYBROWSER_APIKEY;
 
         pData := apex_web_service.make_rest_request(p_url=>l_whatismybrowser_url, p_http_method=>'POST', p_body=>pBody);
 
@@ -499,7 +503,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
         l_netlify_account_slug users.netlify_account_slug%type;
     BEGIN
         /*
-        ** GET USER'S (OR ADMIN'S) NETLIFY TOKEM AND ACCOUNT SLUG ONLY ONCE
+        ** GET USER'S (OR ADMIN'S) NETLIFY TOKEN AND ACCOUNT SLUG ONLY ONCE
         */
         IF (NETLIFY_TOKEN IS NULL) THEN
             /* Get user's netlify token */
@@ -720,28 +724,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     END;    
 
     /*
-    **  IPDATA API. MUST NOT FAIL.
+    **  IPDATA API
     */
-    PROCEDURE callIpdataAPI(
-        pUserId IN users.id%type, 
-        pEndpoint IN VARCHAR2, 
-        pMethod IN VARCHAR2, 
-        pData IN OUT NOCOPY CLOB)
+    PROCEDURE callIpdataAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB)
     IS
         l_ipdata_url VARCHAR2(200):='https://api.ipdata.co/';
-        l_ipdata_api_key users.ipdata_api_key%type;
         l_error_message ip_lookup.error_message%type;
         l_error_code ip_lookup.error_code%type;
     BEGIN
-        /* Get user's ipdata api key */
-        FOR C IN (SELECT ipdata_api_key FROM users WHERE id=pUserId) LOOP 
-            l_ipdata_api_key:=C.ipdata_api_key;
-        END LOOP;
-
-        /* Use Administrator's key if user does not have token */
-        IF (l_ipdata_api_key IS NULL) THEN
+        IF (IPDATA_APIKEY IS NULL) THEN
             SELECT u.ipdata_api_key 
-              INTO l_ipdata_api_key
+              INTO IPDATA_APIKEY
               FROM apex_workspace_apex_users w, users u 
              WHERE w.email=u.email
                AND w.is_admin='Yes'
@@ -753,12 +746,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
         apex_web_service.g_request_headers(1).name := 'Content-Type';
         apex_web_service.g_request_headers(1).value := 'application/json';
 
-        l_ipdata_url:=l_ipdata_url || pEndpoint || '?api-key=' || l_ipdata_api_key || '&fields=city,country_code,postal,zip';
+        l_ipdata_url:=l_ipdata_url || pEndpoint || '?api-key=' || IPDATA_APIKEY || '&fields=city,country_code,postal,zip';
 
         pData := apex_web_service.make_rest_request(p_url=>l_ipdata_url, p_http_method=>pMethod);
-
-        l_ipdata_url:=SUBSTR(l_ipdata_url,1,INSTR(l_ipdata_url,'?')-1);
-        pck_core.log(apex_web_service.g_status_code || ' : ' || pMethod || ' - ' || l_ipdata_url);
 
         IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
             RETURN;
