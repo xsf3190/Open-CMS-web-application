@@ -175,11 +175,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 pck_api.callIpdataAPI(null,OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'GET',l_clob);
                 FOR C2 IN (
                     SELECT city,country_code, NVL2(city,city || ',',null) || country_code AS location
-                      FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code,error_code,error_message))
+                      FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code))
                 ) LOOP
                     INSERT INTO ip_lookup_hash (ip_address_hash, city, country_code)
                     VALUES (l_ip_address_hash, C2.city, C2.country_code);
                     l_location:=C2.location;
+                    pck_core.log('First time IP -> '||C2.location);
                 END LOOP;
             END IF;
             /* 
@@ -210,6 +211,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 ) LOOP
                     l_browser:=C1.simple_software_string;
                     INSERT INTO browser_lookup (browser, user_agent_hash) VALUES (l_browser, l_user_agent_hash);
+                    pck_core.log('New browser -> ' || l_browser);
                 END LOOP;
             END IF;
             /* 
@@ -457,23 +459,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             SELECT COUNT(*) INTO l_nb_pages FROM website_article WHERE website_id=pWebsiteId;
 
             l_content:=
-            '<table role="presentation">' ||
-                '<thead>' ||
-                    '<tr>' ||
-                        '<th>Started</th>' ||
-                        '<th>Location<br>Visit No.</th>' ||
-                        '<th>Engagement' || CASE WHEN l_nb_pages>1 THEN '<br>Pages Seen' END || '</th>' ||
-                        '<th>Referrer</th>' ||
-                    '</tr>' ||
-                '</thead>' ||
-                '<tbody>';
+            '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+                '<table role="presentation">' ||
+                    '<caption id="table-caption">Visits</caption>' ||
+                    '<thead>' ||
+                        '<tr>' ||
+                            '<th>When</th>' ||
+                            '<th>Location</th>' ||
+                            '<th>First</th>' ||
+                            '<th>Engagement</th>' ||
+                            '<th>Referrer</th>' ||
+                        '</tr>' ||
+                    '</thead>' ||
+                    '<tbody>';
         END IF;
 
         FOR C IN (
             SELECT  COUNT(*) OVER() total,
                     COUNT(*) pages_viewed,
                     MAX(visit_date) visit_date,
-                    MAX(first_visit) visit_count,
+                    MAX(first_visit) first_visit,
                     MAX(p.referrer) referrer, 
                     MAX(p.ttfb_rating) ttfb_rating, MAX(p.fcp_rating) fcp_rating,
                     MAX(p.lcp_rating) lcp_rating, MAX(p.cls_rating) cls_rating, MAX(p.inp_rating) inp_rating, 
@@ -500,19 +505,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             END IF;
             n:=pOffset+n;
 
-            l_ela_time:=elapsedTime(C.duration_visible);
-
             l_content:=l_content ||
                 '<tr>' ||
-                    '<td>' || TO_CHAR(C.visit_date at time zone pTimeZone, 'dd-mm-yy')  || '<br>' || TO_CHAR(C.visit_date at time zone pTimeZone, 'fmhh24:fmmipm') || '</td>' ||
-                    '<td>' || C.location || '<br>' || C.visit_count || '</td>' ||
-                    '<td>' || l_ela_time || CASE WHEN l_nb_pages>1 THEN '<br>' || C.pages_viewed END || '</td>' ||
-                    '<td>' || NVL(REPLACE(C.referrer,'.','&#173;.'),'-') || '</td>' ||
+                    '<td>' || TO_CHAR(C.visit_date at time zone pTimeZone, 'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
+                    '<td>' || C.location || '</td>' ||
+                    '<td>' || CASE WHEN C.first_visit=1 THEN '&#9989;' END || '</td>' ||
+                    '<td>' || elapsedTime(C.duration_visible) || CASE WHEN C.pages_viewed>1 THEN ' - ' || C.pages_viewed || ' pages' END || '</td>' ||
+                    '<td>' || CASE WHEN INSTR(C.referrer,pUrl)=0 THEN C.referrer END || '</td>' ||
                 '</tr>';
         END LOOP;
 
         IF (pOffset=0) THEN
-            l_content:=l_content || '</tbody></table>';
+            l_content:=l_content || '</tbody></table></div>';
         END IF;
 
         pHtml:=l_content;
@@ -1048,6 +1052,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_article CLOB;
         l_footer LONG;
         l_count NUMBER;
+        l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -1061,7 +1066,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 '<li><button class="button" type="button" data-report="engagement" data-report-type="table" data-button-variant="small">Engagement</button></li>' ||
                 '<li><button class="button" type="button" data-report="location" data-report-type="table" data-button-variant="small">Locations</button></li>' ||
                 '<li><button class="button" type="button" data-report="browser" data-report-type="table" data-button-variant="small">Browsers</button></li>' ||
-                '<li><button class="button" type="button" data-report="latest" data-report-type="table" data-button-variant="small">Latest</button></li>' ||
             '</ul>';
             l_article:=
             '<h4>Real User Monitoring</h4>' ||
@@ -1082,15 +1086,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 WHEN 'trends' THEN getWebsiteTrends(pWebsiteId, l_session_data.timezone, l_session_data.url, l_article);
             END CASE;
         END IF;
+
+        l_json:= new JSON_OBJECT_T;
         
-        apex_json.open_object; 
-        apex_json.write('success', TRUE);
-        apex_json.write('header', l_header);
-        apex_json.write('article', l_article);
-        apex_json.write('footer', l_footer);
-        apex_json.write('count', l_count);
-        apex_json.write('offset', pOffset + ROWS_PER_PAGE);
-        apex_json.close_object;
+        l_json.put('success',true);
+        l_json.put('header', l_header);
+        l_json.put('article', l_article);
+        l_json.put('footer', l_footer);
+        l_json.put('count', l_count);
+        l_json.put('offset', pOffset + ROWS_PER_PAGE);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
