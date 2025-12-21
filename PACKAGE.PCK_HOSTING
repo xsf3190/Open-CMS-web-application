@@ -213,11 +213,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             END IF;
             
             SELECT id INTO l_netlify_site_id_custom FROM JSON_TABLE(l_clob, '$' COLUMNS (id));
+            /*
             pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites/' || l_netlify_site_id_custom || '/ssl', pStatusAllowed=>422, pMethod=>'POST', pData=>l_clob);
             IF (apex_web_service.g_status_code=422) THEN
                 error('Error creating SSL certificate.');
                 RETURN;
             END IF;
+            */
 
             l_json:=new JSON_OBJECT_T;
             l_json.put('name', l_domain || '-editor');
@@ -267,7 +269,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
          WHERE website_id=pWebsiteid
            AND display_order=(SELECT MIN(display_order) FROM website_article WHERE website_id=pWebsiteid);
 
-        pck_deploy.runDeployment(l_new_website_id, l_netlify_site_id,pck_core.getResturl);
+        pck_deploy.runDeployment(l_new_website_id, l_netlify_site_id, pck_core.getResturl);
 
         IF (l_is_domain) THEN
             /* Send email to requesting user with instructions to add DNS records */
