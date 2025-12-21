@@ -564,10 +564,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
             n:=n+1;
             IF (n=1) THEN
                 l_clob:=
-                '<div style="overflow-x:auto;font-size:50%" tabindex="0" role="group" aria-labelledby="table-caption">' ||
-                    '<table class="data-table">' ||
-                        '<caption id="table-caption" style="text-align:left">Images and media files uploaded to this page</caption>' ||
-                        '<tr><th style="text-align:left">Uploaded File</th><th style="text-align:left">Where Used</th><th>Copy URL</th><th>Delete File</th></tr>';
+                '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+                    '<table>' ||
+                        '<caption id="table-caption">Images and media files uploaded to this page</caption>' ||
+                        '<tr><th>Uploaded File</th><th>Where Used</th><th>Copy URL</th><th>Delete File</th></tr>';
             END IF;
             l_clob:=l_clob ||
             '<tr><td><figure role="group" aria-labelledby="fig' || n || '">';
