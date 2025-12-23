@@ -1063,7 +1063,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 '<li><button class="button" type="button" data-report="visits" data-report-type="table" data-button-variant="small">Visits</button></li>' ||
                 '<li><button class="button" type="button" data-report="trends" data-report-type="graph" data-button-variant="small">Trends</button></li>' ||
                 '<li><button class="button" type="button" data-report="performance" data-report-type="graph" data-button-variant="small">Performance</button></li>' ||
-                '<li><button class="button" type="button" data-report="engagement" data-report-type="table" data-button-variant="small">Engagement</button></li>' ||
+               -- '<li><button class="button" type="button" data-report="engagement" data-report-type="table" data-button-variant="small">Engagement</button></li>' ||
                 '<li><button class="button" type="button" data-report="location" data-report-type="table" data-button-variant="small">Locations</button></li>' ||
                 '<li><button class="button" type="button" data-report="browser" data-report-type="table" data-button-variant="small">Browsers</button></li>' ||
             '</ul>';
