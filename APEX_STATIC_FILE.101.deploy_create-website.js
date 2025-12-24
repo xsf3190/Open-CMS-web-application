@@ -2,7 +2,7 @@
 /* CREATE NEW WEBSITE. DOMAIN NAME OPTIONAL, DEFAULTS TO RANDOMLY GENERATED NAME                             */
 /* **************************************************************************** */
 import { callAPI, handleError } from "deploy_callAPI";
-import { output_dialog, dialog_footer, initDialog } from "deploy_elements";
+import { dialog_footer, initDialog } from "deploy_elements";
 
 let endpoint;
 
@@ -33,12 +33,21 @@ const clickHandler = (e) => {
     isSending = true;
     live.textContent = e.target.dataset.processing;
 
-    const form = output_dialog.querySelector("form");
-    const formData = new FormData(form);
-    const formObj = Object.fromEntries(formData);
+    // const form = output_dialog.querySelector("form");
+    // const formData = new FormData(form);
+    // const formObj = Object.fromEntries(formData);
+    const formdata = {};
+    formdata["domain_name"] = document.getElementById("domain_name").value;
+    formdata["contact_email"] = document.getElementById("contact_email").value;
+    const pages = [];
+    document.querySelectorAll("input:checked").forEach((item) => {
+        pages.push(item.value);
+    })
+    formdata["pages"] = pages;
+
     loader.style.opacity=1;
 
-    callAPI(endpoint, 'POST', formObj)
+    callAPI(endpoint, 'POST', formdata)
         .then((data) => {
             isSending = false;
             loader.style.opacity=0;        
