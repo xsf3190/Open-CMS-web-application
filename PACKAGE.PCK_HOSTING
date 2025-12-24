@@ -131,13 +131,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_article CLOB;
         l_footer LONG;
         l_json JSON_OBJECT_T;
+        TYPE t_labels IS VARRAY(6) OF website_article.navigation_label%type;
+        l_labels t_labels:=t_labels('Home','About','Services','Products','Contact','Blog');
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        pck_core.log('l_browser_language:' || owa_util.get_cgi_env('HTTP_ACCEPT_LANGUAGE'));
 
-        l_header:='<small>Create starter website with the content of this page</small>';
+        l_header:='Create editor website';
         l_article:=
-        '<label for="domain">Enter Domain Name (leave blank creates website with random name)</label>' ||
-        '<input type="text" name="domain" value="">';
+        '<div>' ||
+            '<label for="domain">Enter Domain Name (leave blank to create website with random name)</label>' ||
+            '<input type="text" id=="domain" name="domain" value="">' ||
+        '</div>' ||
+        '<div>' ||
+            '<label for="contact_email">Owner email (authorised to change content)</label>' ||
+            '<input type="text" ="contact_email" name="contact_email" value="' || l_session_data.sub || '">' ||
+        '</div>' ||
+         '<fieldset>' ||
+            '<legend>Starter pages (can add, change and delete pages in the editor)</legend>' ||
+            '<p><a href="#skip">Skip to next</a></p>';
+            FOR i IN 1..l_labels.COUNT LOOP
+                l_article:=l_article ||
+                '<input type="checkbox" name="link' || i || '" id="link' || i || '" value="' || l_labels(i) || '"' || CASE WHEN i=1 THEN ' checked' END || '>' || 
+                '<label for="link' || i || '">' || l_labels(i) || '</label>';
+            END LOOP;
+        l_article:=l_article ||
+        '</fieldset>' ||
+        '<p id="skip"></p>';
         l_footer:=
         '<button type="button" class="button send" data-processing="Creating new website, wait a few seconds...">' ||
             'CREATE WEBSITE' ||
@@ -175,6 +195,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_new_article_id website.id%type:=seq_article.nextval;
         l_sendmail_body CLOB;
         n PLS_INTEGER;
+        l_body_text CLOB:=pBodyText;
 
         PROCEDURE error(pError IN VARCHAR2) IS
         BEGIN
@@ -186,6 +207,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         END;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        pck_core.log(l_body_text);
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('link','<span>TEMPORARILY UNAVAILABLE</span>');
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        RETURN;
 
         SELECT domain INTO l_domain FROM JSON_TABLE(pBodyText,  '$' COLUMNS (domain));
 
