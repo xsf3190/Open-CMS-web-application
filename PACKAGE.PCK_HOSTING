@@ -137,22 +137,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         pck_core.log('l_browser_language:' || owa_util.get_cgi_env('HTTP_ACCEPT_LANGUAGE'));
 
-        l_header:='Create editor website';
+        l_header:='Create new editor website';
         l_article:=
         '<div>' ||
-            '<label for="domain">Enter Domain Name (leave blank to create website with random name)</label>' ||
-            '<input type="text" id=="domain" name="domain" value="">' ||
+            '<label for="domain_name">Enter Domain Name (leave blank for website with funny auto-generated name)</label>' ||
+            '<input autofocus type="text" id="domain_name" value="">' ||
         '</div>' ||
         '<div>' ||
             '<label for="contact_email">Owner email (authorised to change content)</label>' ||
-            '<input type="text" ="contact_email" name="contact_email" value="' || l_session_data.sub || '">' ||
+            '<input type="text" id="contact_email" value="' || l_session_data.sub || '">' ||
         '</div>' ||
          '<fieldset>' ||
             '<legend>Starter pages (can add, change and delete pages in the editor)</legend>' ||
             '<p><a href="#skip">Skip to next</a></p>';
             FOR i IN 1..l_labels.COUNT LOOP
                 l_article:=l_article ||
-                '<input type="checkbox" name="link' || i || '" id="link' || i || '" value="' || l_labels(i) || '"' || CASE WHEN i=1 THEN ' checked' END || '>' || 
+                '<input type="checkbox" id="link' || i || '" value="' || l_labels(i) || '"' || CASE WHEN i=1 THEN ' checked' END || '>' || 
                 '<label for="link' || i || '">' || l_labels(i) || '</label>';
             END LOOP;
         l_article:=l_article ||
@@ -182,9 +182,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     ** CREATE NEW WEBSITE WHEN REQUESTED VIA MENULIST
     */
     PROCEDURE createWebsite(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB,  pStatus OUT NUMBER) IS
-        l_domain website.domain_name%type;
+        l_domain_name website.domain_name%type;
+        l_domain_name_exists NUMBER;
+        l_welcome_html article.body_html%type;
         l_ssl_url VARCHAR2(100);
-        l_is_domain BOOLEAN;
         l_session_data pck_sec.t_session_data;
         l_contact_email website.contact_email%type;
         l_json JSON_OBJECT_T;
@@ -194,7 +195,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_new_website_id website.id%type:=seq_website.nextval;
         l_new_article_id website.id%type:=seq_article.nextval;
         l_sendmail_body CLOB;
-        n PLS_INTEGER;
+        n PLS_INTEGER:=0;
         l_body_text CLOB:=pBodyText;
 
         PROCEDURE error(pError IN VARCHAR2) IS
@@ -208,107 +209,83 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        pck_core.log(l_body_text);
+        SELECT j.domain_name, j.contact_email, CASE WHEN w.domain_name IS NULL THEN 0 ELSE 1 END
+          INTO l_domain_name, l_contact_email, l_domain_name_exists
+          FROM JSON_TABLE(l_body_text,  '$' COLUMNS (domain_name, contact_email)) j, website w
+         WHERE j.domain_name=w.domain_name(+);
 
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('link','<span>TEMPORARILY UNAVAILABLE</span>');
-        apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=200;
-
-        RETURN;
-
-        SELECT domain INTO l_domain FROM JSON_TABLE(pBodyText,  '$' COLUMNS (domain));
-
-        SELECT COUNT(*) INTO n FROM website WHERE domain_name=l_domain;
-
-        IF (n>0) THEN
+        IF (l_domain_name_exists=1) THEN
             error('Domain already taken');
-            RETuRN;
+            RETURN;
         END IF;
 
-        l_is_domain:=l_domain IS NOT NULL;
-
-        IF (l_domain IS NULL) THEN
+        IF (l_domain_name IS NULL) THEN
+            /* FUNNY AUTO GENERATED NAME */
             pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pMethod=>'POST', pData=>l_clob);
-            SELECT id, ssl_url, name INTO l_netlify_site_id, l_ssl_url, l_domain FROM JSON_TABLE(l_clob, '$' COLUMNS (id, ssl_url, name));
-            /* l_ssl_url looks like "https://funny-name.netlify.app */
+            SELECT id, ssl_url, name INTO l_netlify_site_id, l_ssl_url, l_domain_name FROM JSON_TABLE(l_clob, '$' COLUMNS (id, ssl_url, name));
         ELSE
+            /* REQUESTED DOMAIN NAME */
             l_json:=new JSON_OBJECT_T;
-            l_json.put('name', l_domain || '-custom');
-            l_json.put('custom_domain', l_domain);
+            l_json.put('name', l_domain_name || '-custom');
+            l_json.put('custom_domain', l_domain_name);
             pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pStatusAllowed=>422, pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
             IF (apex_web_service.g_status_code=422) THEN
-                error('Domain name invalid');
+                error('Domain name invalid or already taken');
                 RETURN;
             END IF;
-            
             SELECT id INTO l_netlify_site_id_custom FROM JSON_TABLE(l_clob, '$' COLUMNS (id));
-            /*
-            pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites/' || l_netlify_site_id_custom || '/ssl', pStatusAllowed=>422, pMethod=>'POST', pData=>l_clob);
-            IF (apex_web_service.g_status_code=422) THEN
-                error('Error creating SSL certificate.');
-                RETURN;
-            END IF;
-            */
-
+            
             l_json:=new JSON_OBJECT_T;
-            l_json.put('name', l_domain || '-editor');
-            l_json.put('custom_domain', 'editor.' || l_domain);
+            l_json.put('name', l_domain_name || '-editor');
+            l_json.put('custom_domain', 'editor.' || l_domain_name);
             pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
-
-            SELECT id, ssl_url INTO l_netlify_site_id, l_ssl_url FROM JSON_TABLE(l_clob, '$' COLUMNS (id, ssl_url));
-            /* l_ssl_url looks like "https://editor.domain.com" */
-            pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites/' || l_netlify_site_id || '/ssl', pStatusAllowed=>422, pMethod=>'POST', pData=>l_clob);
+            SELECT id INTO l_netlify_site_id FROM JSON_TABLE(l_clob, '$' COLUMNS (id));
+            -- pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites/' || l_netlify_site_id || '/ssl', pStatusAllowed=>422, pMethod=>'POST', pData=>l_clob);
         END IF;
+
+        /*
+        ** GET HTML FOR WELCOME PAGE WHICH INCLUDES ALL OF THE ALPHABET
+        */ 
+        SELECT a.body_html
+          INTO l_welcome_html
+          FROM article a, website_article wa, website w 
+         WHERE w.domain_name='restartnet.com'
+           AND wa.website_id=w.id
+           AND wa.navigation_label='Welcome'
+           AND a.id=wa.article_id;
             
         /*
-        ** CREATE WEBSITE WITH NEW OWNER.
-        ** COPY RELATED TABLE DATA TO NEW WEBSITE.
+        ** CREATE WEBSITE IN CMS DATABASE
         */
         
-        SELECT email INTO l_contact_email FROM users WHERE id=l_session_data.user_id;
-
-        INSERT INTO website (id, domain_name, user_id, css, logo, favicon, esm_library, contact_email, netlify_site_id, netlify_site_id_custom)
-        SELECT l_new_website_id, l_domain, l_session_data.user_id, css, logo, favicon, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom
+        INSERT INTO website (id, domain_name, user_id, css, esm_library, contact_email, netlify_site_id, netlify_site_id_custom)
+        SELECT l_new_website_id, l_domain_name, l_session_data.user_id, css, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom
           FROM website
          WHERE id=pWebsiteid;
 
-        INSERT INTO website_font (website_id, context, font_id, opsz, slnt, wdth, wght)
-        SELECT l_new_website_id, context, font_id, opsz, slnt, wdth, wght
-          FROM website_font
-         WHERE website_id=pWebsiteId;
-
-        INSERT INTO website_fontface (website_id, context, font_family, font_style, font_weight, font_stretch, src_url, created_date, api_url, deploy_filename)
-        SELECT l_new_website_id, context, font_family, font_style, font_weight, font_stretch, src_url, created_date, api_url, deploy_filename
-          FROM website_fontface
-         WHERE website_id=pWebsiteId;
+        FOR C IN (
+            SELECT page
+            FROM JSON_TABLE(l_body_text, '$.pages[*]' COLUMNS (page PATH '$'))
+        ) LOOP
+            n:=n+1;
+            INSERT INTO article (id, body_html, author_user_id)
+            VALUES (seq_article.nextval, CASE WHEN n=1 THEN l_welcome_html ELSE TO_CLOB('<h2>'||C.page||'</h2>') END, l_session_data.user_id);
+            INSERT INTO website_article (website_id, article_id, display_order, navigation_label, collection_type, header_html, footer_html)
+            VALUES (l_new_website_id, seq_article.currval, n, C.page, 'N/A', null, null);
+        END LOOP;
         
-        INSERT INTO article (id, body_html, author_user_id)
-        SELECT l_new_article_id, body_html, l_session_data.user_id
-          FROM article
-         WHERE id=pArticleid;
-
-        INSERT INTO asset_used (article_id, asset_id)
-        SELECT l_new_article_id, asset_id
-          FROM asset_used 
-         WHERE article_id=pArticleid;
-
-        INSERT INTO website_article (website_id, article_id, display_order, navigation_label, collection_type, header_html, footer_html)
-        SELECT l_new_website_id, l_new_article_id, 1, navigation_label, collection_type, header_html, footer_html
-          FROM website_article
-         WHERE website_id=pWebsiteid
-           AND display_order=(SELECT MIN(display_order) FROM website_article WHERE website_id=pWebsiteid);
-
         pck_deploy.runDeployment(l_new_website_id, l_netlify_site_id, pck_core.getResturl);
 
-        IF (l_is_domain) THEN
-            /* Send email to requesting user with instructions to add DNS records */
+        /*
+        IF (l_domain_name IS NOT NULL) THEN
             l_sendmail_body:=pck_email.emailTemplate('website', l_ssl_url);
             pck_email.sendmail(l_contact_email, 'Website created successfully', l_sendmail_body);
-            /* Set link to new wensite as subdomain of netlify.app - user clicks on this for instant access */
-            l_ssl_url:='https://' || apex_string_util.get_slug(l_domain) || '-editor.netlify.app';
+            l_ssl_url:='https://' || apex_string_util.get_slug(l_domain_name) || '-editor.netlify.app';
+        END IF;
+        */
+
+        IF (l_ssl_url IS NULL) THEN
+            l_ssl_url:='https://' || apex_string_util.get_slug(l_domain_name) || '-editor.netlify.app';
         END IF;
 
         l_json:= new JSON_OBJECT_T;
@@ -366,7 +343,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
                 /* DELETE ARTICLE (CASCADES TO ASSET AND WEBSITE_ARTICLE) */
                 DELETE article WHERE id=l_website_articles(i);
                 DELETE asset_used WHERE article_id=l_website_articles(i);
-                DELETE page_hit WHERE article_id=l_website_articles(i);
+                -- DELETE page_hit WHERE article_id=l_website_articles(i);
 
             END LOOP;
 
