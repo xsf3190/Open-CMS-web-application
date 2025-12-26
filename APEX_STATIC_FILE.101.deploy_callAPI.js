@@ -1,15 +1,28 @@
-import { bodydata, output_dialog } from "deploy_elements";
+import { bodydata, output_dialog, dialog_article, dialog_footer } from "deploy_elements";
 
 let access_token = sessionStorage.getItem("token");
 let refresh_token = localStorage.getItem("refresh");
 
+/* 
+** FORCE LOG OUT WHEN REFRESH TOKEN EXPIRED
+*/
+const forceLogout = () => {
+    console.log("force Logout");
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+}
+
 const handleError = (error) => {
+    sessionStorage.clear();
+    localStorage.clear();
     if (!output_dialog.open) {
         output_dialog.showModal();
     }
-    const article = output_dialog.querySelector("article");
-    article.replaceChildren();
-    article.insertAdjacentHTML('afterbegin',error);
+    dialog_article.replaceChildren();
+    dialog_article.insertAdjacentHTML('afterbegin',error);
+    dialog_footer.replaceChildren();
+    dialog_footer.insertAdjacentHTML('afterbegin',"<span>Reload page and Log in</span>");
 }
 
 /* 
@@ -34,16 +47,6 @@ const replaceTokens = (data) => {
     localStorage.setItem("refresh",data.refresh);
     refresh_token = data.refresh;
     console.log("tokens refreshed");
-}
-
-/* 
-** FORCE LOG OUT WHEN REFRESH TOKEN EXPIRED
-*/
-const forceLogout = () => {
-    console.log("force Logout");
-    sessionStorage.clear();
-    localStorage.clear();
-    window.location.reload();
 }
 
 /* 
