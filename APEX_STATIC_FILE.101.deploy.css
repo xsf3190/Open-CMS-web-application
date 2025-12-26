@@ -707,6 +707,10 @@ dialog hr+span {
     text-align: left;
     border-collapse: collapse;
   }
+  caption {
+    text-align: inherit;
+    padding-block-end: 0.25em;
+  }
   thead {
     border-block-end: 2px solid;
     background: whitesmoke;
