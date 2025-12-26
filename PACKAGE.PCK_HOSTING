@@ -132,7 +132,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_footer LONG;
         l_json JSON_OBJECT_T;
         TYPE t_labels IS VARRAY(6) OF website_article.navigation_label%type;
-        l_labels t_labels:=t_labels('Home','About','Services','Products','Contact','Blog');
+        l_labels t_labels:=t_labels('About','Services','Products','Blog','Contact');
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         pck_core.log('l_browser_language:' || owa_util.get_cgi_env('HTTP_ACCEPT_LANGUAGE'));
@@ -185,6 +185,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_domain_name website.domain_name%type;
         l_domain_name_exists NUMBER;
         l_welcome_html article.body_html%type;
+        l_header_html website_article.header_html%type;
+        l_footer_html website_article.footer_html%type;
         l_ssl_url VARCHAR2(100);
         l_session_data pck_sec.t_session_data;
         l_contact_email website.contact_email%type;
@@ -192,8 +194,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_clob CLOB;
         l_netlify_site_id website.netlify_site_id%type;
         l_netlify_site_id_custom website.netlify_site_id_custom%type;
+        l_netlify_editor_url VARCHAR2(100);
+        l_netlify_live_url VARCHAR2(100);
         l_new_website_id website.id%type:=seq_website.nextval;
-        l_new_article_id website.id%type:=seq_article.nextval;
+        l_parent_id article.parent_id%type;
         l_sendmail_body CLOB;
         n PLS_INTEGER:=0;
         l_body_text CLOB:=pBodyText;
@@ -234,47 +238,77 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
                 RETURN;
             END IF;
             SELECT id INTO l_netlify_site_id_custom FROM JSON_TABLE(l_clob, '$' COLUMNS (id));
+            l_netlify_live_url:=apex_string_util.get_slug(l_domain_name) || '-custom.netlify.app';
             
             l_json:=new JSON_OBJECT_T;
             l_json.put('name', l_domain_name || '-editor');
             l_json.put('custom_domain', 'editor.' || l_domain_name);
             pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
             SELECT id INTO l_netlify_site_id FROM JSON_TABLE(l_clob, '$' COLUMNS (id));
+            l_netlify_editor_url:=apex_string_util.get_slug(l_domain_name) || '-editor.netlify.app';
             -- pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites/' || l_netlify_site_id || '/ssl', pStatusAllowed=>422, pMethod=>'POST', pData=>l_clob);
         END IF;
 
         /*
-        ** GET HTML FOR WELCOME PAGE WHICH INCLUDES ALL OF THE ALPHABET
+        ** GET HTML FOR WELCOME PAGE
         */ 
-        SELECT a.body_html
-          INTO l_welcome_html
+        SELECT REPLACE(a.body_html,'#DOMAIN_NAME#',l_domain_name), REPLACE(wa.header_html,'#DOMAIN_NAME#',l_domain_name), REPLACE(wa.footer_html,'#CONTACT_EMAIL#',l_contact_email)
+          INTO l_welcome_html, l_header_html, l_footer_html
           FROM article a, website_article wa, website w 
          WHERE w.domain_name='restartnet.com'
            AND wa.website_id=w.id
            AND wa.navigation_label='Welcome'
            AND a.id=wa.article_id;
-            
+
+        IF (l_netlify_site_id_custom IS NOT NULL) THEN
+            l_welcome_html:=REPLACE(l_welcome_html,'#NETLIFY_EDITOR_URL#',l_netlify_editor_url);
+            l_welcome_html:=REPLACE(l_welcome_html,'#NETLIFY_LIVE_URL#',l_netlify_live_url);
+        ELSE
+            l_welcome_html:='<h2>Funny name url</h2>';
+        END IF;
         /*
-        ** CREATE WEBSITE IN CMS DATABASE
+        ** CREATE WEBSITE IN CMS DATABASE. COPIES FONTS FROM pWebsiteid
         */
-        
-        INSERT INTO website (id, domain_name, user_id, css, esm_library, contact_email, netlify_site_id, netlify_site_id_custom)
-        SELECT l_new_website_id, l_domain_name, l_session_data.user_id, css, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom
+        INSERT INTO website (id, domain_name, user_id, css, esm_library, contact_email, netlify_site_id, netlify_site_id_custom, netlify_last_published, netlify_last_published_custom)
+        SELECT l_new_website_id, l_domain_name, l_session_data.user_id, css, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom, current_timestamp, current_timestamp
           FROM website
          WHERE id=pWebsiteid;
 
+        INSERT INTO website_font(website_id, font_id, context)
+        SELECT l_new_website_id, font_id, context
+          FROM website_font
+         WHERE website_id=pWebsiteid;
+
         FOR C IN (
+            SELECT 'Home' as page FROM dual
+            UNION ALL
             SELECT page
             FROM JSON_TABLE(l_body_text, '$.pages[*]' COLUMNS (page PATH '$'))
         ) LOOP
             n:=n+1;
-            INSERT INTO article (id, body_html, author_user_id)
-            VALUES (seq_article.nextval, CASE WHEN n=1 THEN l_welcome_html ELSE TO_CLOB('<h2>'||C.page||'</h2>') END, l_session_data.user_id);
-            INSERT INTO website_article (website_id, article_id, display_order, navigation_label, collection_type, header_html, footer_html)
-            VALUES (l_new_website_id, seq_article.currval, n, C.page, 'N/A', null, null);
+            IF (n=1) THEN
+                INSERT INTO article (id, body_html, author_user_id, publication_date )
+                    VALUES (seq_article.nextval, l_welcome_html, l_session_data.user_id, current_timestamp);
+                INSERT INTO website_article (website_id, article_id, display_order, navigation_label, header_html, footer_html)
+                    VALUES (l_new_website_id, seq_article.currval, n, C.page, l_header_html, l_footer_html);
+            ELSE
+                INSERT INTO article (id, body_html, author_user_id, publication_date)
+                    VALUES (seq_article.nextval, CASE WHEN C.page<>'Blog' THEN '<h2>Heading to introduce your "' || C.page || '" page</h2><p>Use the editor to change content.</p>' END, l_session_data.user_id, current_timestamp);
+                INSERT INTO website_article (website_id, article_id, display_order, navigation_label, collection_type)
+                    VALUES (l_new_website_id, seq_article.currval, n, C.page, CASE WHEN C.page='Blog' THEN 'BLOG' ELSE 'N/A' END);
+            END IF;
+
+            IF (C.page='Blog') THEN
+                l_parent_id:=seq_article.currval;
+                INSERT INTO article (parent_id, id, author_user_id, body_html, title, excerpt, word_count, publication_date)
+                    VALUES (l_parent_id, seq_article.nextval, l_session_data.user_id, '<h2>Title of your ' || C.page || ' post</h2></p><Use the editor to change content/p>', 'Title of your ' || C.page || ' post', 'Excerpt of your '|| C.page || ' post. Set using "Page Option" menu item', 11, current_timestamp);
+            END IF;
         END LOOP;
         
-        pck_deploy.runDeployment(l_new_website_id, l_netlify_site_id, pck_core.getResturl);
+        pck_deploy.deployEditorSite(l_new_website_id);
+        IF (l_netlify_site_id_custom IS NOT NULL) THEN
+            pck_deploy.deployLiveSite(l_new_website_id);
+        END IF;
 
         /*
         IF (l_domain_name IS NOT NULL) THEN
@@ -295,6 +329,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
         pStatus:=200;
 
+        pck_sec.updateCpuUsed(pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
+
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
     END;
@@ -303,55 +339,58 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
      * DELETE WEBSITE CALLED FROM PLSQL
     */
     PROCEDURE deleteWebsite(pWebsiteid IN website.id%type) IS
-        TYPE t_website_article IS TABLE OF article.id%type INDEX BY PLS_INTEGER;
-        l_website_articles t_website_article;
         l_clob CLOB;
     BEGIN
+        /*
+        **  1. DELETE HOSTING OBJECTS
+        */
         FOR C IN (
-            SELECT w.user_id, w.netlify_site_id, w.netlify_site_id_custom, w.netlify_dns_zone_id, u.cld_api_key 
-              FROM website w, users u 
+            SELECT w.netlify_site_id, w.netlify_site_id_custom, w.netlify_dns_zone_id
+              FROM website w
              WHERE w.id=pWebsiteId
-               AND w.user_id=u.id
         ) LOOP
-            /* DELETE NETLIFY SITES (NOTE THAT USER MAY HAVE DELETED THESE MANUALLY IF SELF-HOSTING)  */
+            /* DELETE NETLIFY SITES (ALLOW 404 AS HOSTING OBJECT MAY HAVE BEEN DELETED MANUALLY)  */
             IF (C.netlify_site_id_custom IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>C.user_id, pEndpoint=>'sites/' || C.netlify_site_id_custom, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
-                pck_api.callNetlifyAPI(pUserId=>C.user_id, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id_custom, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
             END IF;
             
             IF (C.netlify_site_id IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>C.user_id, pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
             END IF;
 
             IF (C.netlify_dns_zone_id IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>C.user_id, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
             END IF;
+        END LOOP;
 
-            /* DELETE ALL DATABASE ROWS RELATED TO WEBSITE */
-
-            SELECT article_id BULK COLLECT INTO l_website_articles FROM website_article WHERE website_id=pWebsiteId;
-            
-            FOR i IN 1..l_website_articles.COUNT LOOP
-
-                /* DELETE ASSETS ONLY IF WE ARE HOSTING THEM ON THE PLATFORM */
-                IF (C.cld_api_key IS NULL) THEN
-                    FOR C1 IN (SELECT DISTINCT cld_cloud_name, resource_type FROM asset WHERE article_id=l_website_articles(i)) LOOP
-                        pck_api.callCloudinaryAPI(pUserId=>C.user_id, pEndpoint=>C1.cld_cloud_name || '/resources/' || C1.resource_type || '/tags/' || l_website_articles(i), pMethod=>'DELETE', pData=>l_clob);
-                    END LOOP;
-                END IF;
-
-                /* DELETE ARTICLE (CASCADES TO ASSET AND WEBSITE_ARTICLE) */
-                DELETE article WHERE id=l_website_articles(i);
-                DELETE asset_used WHERE article_id=l_website_articles(i);
-                -- DELETE page_hit WHERE article_id=l_website_articles(i);
-
+        /* 
+        ** 2. DELETE DATABASE DATA AND CLOUDINARY ASSETS 
+        */
+        FOR C IN (
+            SELECT a.id, wa.navigation_label, a.title
+              FROM website_article wa, article a
+             WHERE wa.website_id=pWebsiteId
+               AND wa.article_id=NVL(a.parent_id,a.id)
+             ORDER BY wa.display_order
+        ) LOOP
+            /*
+            **  DELETE CLOUDINARY ASSETS
+            */
+            FOR C1 IN (
+                SELECT DISTINCT cld_cloud_name, resource_type FROM asset WHERE article_id=C.id
+            ) LOOP
+                pck_api.callCloudinaryAPI(pUserId=>null, pEndpoint=>C1.cld_cloud_name || '/resources/' || C1.resource_type || '/tags/' || C.id, pMethod=>'DELETE', pData=>l_clob);
             END LOOP;
 
-            /* DELETE WEBSITE (CASCADES) */
-            DELETE refresh_token WHERE website_id=pWebsiteId;
-            DELETE website WHERE id=pWebsiteId;
-
+            /* DELETE ARTICLE */
+            DELETE article WHERE id=C.id;
+            DELETE asset_used WHERE article_id=C.id;
         END LOOP;
+
+        /* DELETE TOKENS AND WEBSITE */
+        DELETE refresh_token WHERE website_id=pWebsiteId;
+        DELETE website WHERE id=pWebsiteId;
     END;
     
     /*
