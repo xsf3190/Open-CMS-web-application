@@ -70,30 +70,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         SELECT email INTO l_contact_email FROM users WHERE id=l_session_data.user_id;
 
         l_article:=
-        '<table style="font-size:var(--step--1)">' ||
-            '<caption style="text-align:left">Platform Usage Overview</caption>' ||
-            '<tr><th style="text-align:left">Domain Name</th><th>Created</th><th>Last Published</th><th>Pages</th><th>Images</th><th style="text-align:right">Page Hits</th></tr>';
+        '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+            '<table>' ||
+                '<caption id="table-caption">Platform Usage Overview</caption>' ||
+                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th></tr>';
 
         FOR C IN (
-            SELECT w.domain_name, w.created_date, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published,
+            SELECT w.domain_name, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published,
                 (SELECT COUNT(*) FROM article a, website_article wa WHERE wa.website_id=w.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_pages,
-                (SELECT COUNT(*) FROM article a, website_article wa, asset_used au WHERE wa.website_id=w.id AND au.article_id=a.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_images,
-                (SELECT COUNT(*) FROM article a, website_article wa, page_hit ph WHERE wa.website_id=w.id AND ph.article_id=a.id AND ph.url=w.domain_name AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_page_hits 
+                (SELECT COUNT(*) FROM article a, website_article wa, asset_used au WHERE wa.website_id=w.id AND au.article_id=a.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_images
              FROM website w
              WHERE w.contact_email=l_contact_email
              ORDER BY 1
         ) LOOP
             l_article:=l_article ||
-            '<tr style="border-block-end:solid 1px grey"><td>' || C.domain_name || '</td><td>' || 
-                apex_util.get_since(C.created_date, false) || '</td><td style="text-align:center">' || 
-                TO_CHAR(C.last_published,'fmdd Mon yy') || '</td><td style="text-align:right">' || 
-                C.nb_pages || '</td><td style="text-align:right">' || 
-                C.nb_images || '</td><td style="text-align:right">' || 
-                C.nb_page_hits || '</td><td style="text-align:right">' || 
+            '<tr><td>' || C.domain_name || '</td><td>' || 
+                apex_util.get_since(C.last_published, false) || '</td><td>' || 
+                C.nb_pages || '</td><td>' || 
+                C.nb_images || '</td>' || 
                 '</tr>';
         END LOOP;
         l_article:=l_article ||
-        '</table>';
+        '</table></div>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
