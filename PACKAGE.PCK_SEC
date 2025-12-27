@@ -50,7 +50,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE refreshOrdsEndpoints(pWebsiteId IN website.id%type);
     --
-    PROCEDURE updateCpuUsed(pUserid IN users.id%type, pCpuUsedStart IN users.cpu_used%type);
+    PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN cost_allocation.cpu_used%type);
     --
     PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER);
     --
@@ -60,42 +60,46 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
     PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_contact_email website.contact_email%type;
-
         l_json JSON_OBJECT_T;
         l_article LONG;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT email INTO l_contact_email FROM users WHERE id=l_session_data.user_id;
-
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
-                '<caption id="table-caption">Platform Usage Overview</caption>' ||
-                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th></tr>';
+                '<caption id="table-caption">Platform Usage</caption>' ||
+                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th><th>Usage</th></tr>';
 
         FOR C IN (
-            SELECT w.domain_name, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published,
+            WITH costs AS
+            (
+                SELECT website_id, SUM(cpu_used) cpu_used FROM cost_allocation GROUP BY website_id
+            )
+            SELECT w.domain_name, w.contact_email, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct,
                 (SELECT COUNT(*) FROM article a, website_article wa WHERE wa.website_id=w.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_pages,
                 (SELECT COUNT(*) FROM article a, website_article wa, asset_used au WHERE wa.website_id=w.id AND au.article_id=a.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_images
-             FROM website w
-             WHERE w.contact_email=l_contact_email
+             FROM website w,  costs c
+             WHERE w.id=c.website_id
              ORDER BY 1
         ) LOOP
-            l_article:=l_article ||
-            '<tr><td>' || C.domain_name || '</td><td>' || 
-                apex_util.get_since(C.last_published, false) || '</td><td>' || 
-                C.nb_pages || '</td><td>' || 
-                C.nb_images || '</td>' || 
+            IF (l_session_data.scope='admin' OR C.contact_email=l_session_data.sub) THEN
+                l_article:=l_article ||
+                '<tr>' || 
+                    '<td>' || C.domain_name || '</td>' || 
+                    '<td>' || apex_util.get_since(C.last_published, false) || '</td>' || 
+                    '<td>' || C.nb_pages || '</td>' || 
+                    '<td>' || C.nb_images || '</td>' || 
+                    '<td>' || C.cpu_used_pct || '%</td>' || 
                 '</tr>';
+            END IF;
         END LOOP;
         l_article:=l_article ||
         '</table></div>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('header', '<small>User Details</small>');
+        l_json.put('header', '<span>Domains hosted for ' || l_session_data.sub || '</span>');
         l_json.put('article', l_article);
         l_json.put('footer', '<button type="button" class="button logout">Log Out</button><span aria-live="polite"></span>');
         apex_util.prn(l_json.to_clob,false);
@@ -204,10 +208,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_email users.email%type;
         
         l_JWT_data t_JWT_data;
-        l_cpu_used_session NUMBER;
         l_session_data t_session_data;
     BEGIN
-        SELECT ms.value INTO l_cpu_used_session FROM v$statname sn, v$mystat ms WHERE sn.name='CPU used by this session' AND sn.statistic# = ms.statistic#;
+       l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
         l_bearer_token := SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
         l_JWT_data:=decodeJWT(l_bearer_token);
@@ -237,7 +240,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_session_data.client_secret:=l_JWT_data.client_secret;
         l_session_data.timezone:=OWA_UTIL.get_cgi_env('timezone');
         l_session_data.url:=OWA_UTIL.get_cgi_env('url');
-        l_session_data.cpu_used_session:=l_cpu_used_session;
 
         RETURN l_session_data;
     END;
@@ -245,14 +247,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     /*
     ** USAGE ACCOUNTING BASED ON CPU USED IN SESSION
     */
-    PROCEDURE updateCpuUsed(pUserid IN users.id%type, pCpuUsedStart IN users.cpu_used%type) IS
+    PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN cost_allocation.cpu_used%type) IS
         l_cpu_used_session users.cpu_used%type;
+        l_owner VARCHAR2(30);
+        l_calling_procedure cost_allocation.calling_procedure%type;
+        l_lineno NUMBER;
+        l_caller VARCHAR2(30);
     BEGIN
-        SELECT ms.value INTO l_cpu_used_session FROM v$statname sn, v$mystat ms WHERE sn.name='CPU used by this session' AND sn.statistic# = ms.statistic#;
-        UPDATE users
-           SET cpu_used_last_updated=current_timestamp, 
-               cpu_used_created_date=NVL(cpu_used_created_date,current_timestamp),
-               cpu_used=NVL(cpu_used,0)+l_cpu_used_session-pCpuUsedStart WHERE id=pUserid;
+        l_cpu_used_session:=dbms_utility.get_cpu_time();
+
+        pck_core.log('l_cpu_used_session:'||l_cpu_used_session);
+        l_cpu_used_session:=l_cpu_used_session-pCpuUsedStart;
+
+        
+        owa_util.who_called_me(l_owner, l_calling_procedure, l_lineno, l_caller);
+        
+        UPDATE cost_allocation
+           SET cpu_used=cpu_used+l_cpu_used_session, 
+               call_count=call_count+1,
+               updated_date=current_timestamp
+         WHERE website_id=pWebsiteid
+           AND calling_procedure=l_calling_procedure;
+
+        IF (SQL%ROWCOUNT=0) THEN
+            INSERT INTO cost_allocation (website_id, calling_procedure, user_id, cpu_used)
+                VALUES (pWebsiteid, l_calling_procedure, pUserid, l_cpu_used_session);
+        END IF;
     END;
 
     /*
