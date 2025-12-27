@@ -329,7 +329,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
         pStatus:=200;
 
-        pck_sec.updateCpuUsed(pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
+        pck_sec.updateCpuUsed(pWebsiteid=>l_new_website_id, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
