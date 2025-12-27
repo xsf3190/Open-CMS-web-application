@@ -4,9 +4,18 @@ const dialog_close = document.querySelector("dialog.output .close");
 const vitalsQueue = new Set();
 const metrics = [];
 
-
+/* 
+** POLYFILL FOR ANCHOR POSITIONING
+*/
 if (!("anchorName" in document.documentElement.style)) {
     import("https://unpkg.com/@oddbird/css-anchor-positioning");
+}
+
+/* 
+** CHECK IF EDITOR URL
+*/
+const is_editor = () => {
+    return window.location.host.startsWith("editor.") || window.location.host.endsWith(".netlify.app");
 }
 
 let aud = "";
@@ -23,7 +32,7 @@ async function load_modules() {
     new menu.MenuNavigationHandler(dropdown);
 
     if (jwt) {
-        if (window.location.host.startsWith("editor.") || window.location.host.endsWith(".netlify.app")) {
+        if (is_editor()) {
             module_name = "deploy_edited-content";
             const module = await import(module_name)
             .catch((error) => {
@@ -51,25 +60,17 @@ async function load_modules() {
 load_modules();
 
 /* 
-** TRACK PAGES VISITED IN SESSION 
+** DIALOG CLOSE BUTTON
 */
-let pages_visited = JSON.parse(sessionStorage.getItem("pages_visited"));
-const page_id = Number(document.body.dataset.articleid);
-const pages_set = new Set(pages_visited);
-pages_set.add(page_id);
-sessionStorage.setItem("pages_visited",JSON.stringify(Array.from(pages_set)));
-
 const closeHandler = (e) => {
     e.target.closest("dialog").close();
 }
-
 dialog_close.addEventListener("click", closeHandler);
 
 /*
 ** GET DROPDOWN MENU FROM LOCALSTORAGE IF USER LOGGED IN
 ** LOGOUT IF NOT LATEST MENU VERSION (I.E. <button>)
 */
-
 if (jwt) {
     if (localStorage.getItem("menulist").startsWith("<button")) {
         dropdown.replaceChildren();
@@ -107,11 +108,11 @@ const total_requests = () => {
     return metrics.length;
 }
 
-const cache = () => {
+const first_visit = () => {
     if (metrics.some( ({transferSize}) => transferSize<=300)) {
-        return true;
+        return 0;
     } else {
-        return false;
+        return 1;
     }
 }
 
@@ -152,10 +153,8 @@ const flushQueues = () => {
 
         json["page_weight"] = page_weight();
         json["total_requests"] = total_requests();
-        json["cache"] = cache();
-        json['pages_visited'] = Array.from(pages_set).toString();
+        json["first_visit"] = first_visit();
         
-
         vitalsQueue.add({name:"page_weight",value:page_weight()});
         vitalsQueue.add({name:"total_requests",value:total_requests()});
     }
@@ -173,6 +172,7 @@ const flushQueues = () => {
 
     if (navigator.webdriver) return;
     if (json["duration_visible"]<=1) return;
+    if (is_editor()) return; 
 
     (navigator.sendBeacon && navigator.sendBeacon(bodydata.resturl+"page-visit/"+bodydata.websiteid+"/"+bodydata.articleid, body)) || fetch(visit_url, {body, method: 'POST', keepalive: true});
 }
