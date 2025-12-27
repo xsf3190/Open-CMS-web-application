@@ -150,8 +150,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_object JSON_OBJECT_T;
         l_array JSON_ARRAY_T;    
         l_session_id page_hit.session_id%type;
+        l_cpu_used_session NUMBER;
         n PLS_INTEGER;
     BEGIN
+        l_cpu_used_session:=dbms_utility.get_cpu_time();
+        pck_core.log('l_cpu_used_session:'||l_cpu_used_session);
+
         FOR C IN (
             SELECT seq, referrer, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
                 mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, SUBSTR(pages_visited,1,100) pages_visited
@@ -253,7 +257,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 pck_core.log('ERROR rowcount:'||n);
             END IF;
         END LOOP;
-        
+
+        pck_sec.updateCpuUsed(pWebsiteid=>pWebsiteid, pUserid=>null, pCpuUsedStart=>l_cpu_used_session);
 
     END;
     
@@ -1099,7 +1104,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
 
         pStatus:=200;
 
-        pck_sec.updateCpuUsed(pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
