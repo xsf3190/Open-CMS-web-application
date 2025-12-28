@@ -254,12 +254,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_lineno NUMBER;
         l_caller VARCHAR2(30);
     BEGIN
-        l_cpu_used_session:=dbms_utility.get_cpu_time();
+        l_cpu_used_session:=dbms_utility.get_cpu_time()-pCpuUsedStart;
 
-        pck_core.log('l_cpu_used_session:'||l_cpu_used_session);
-        l_cpu_used_session:=l_cpu_used_session-pCpuUsedStart;
-
-        
         owa_util.who_called_me(l_owner, l_calling_procedure, l_lineno, l_caller);
         
         UPDATE cost_allocation
