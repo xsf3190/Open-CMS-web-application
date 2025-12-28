@@ -154,14 +154,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         n PLS_INTEGER;
     BEGIN
         l_cpu_used_session:=dbms_utility.get_cpu_time();
-        pck_core.log('l_cpu_used_session:'||l_cpu_used_session);
 
         FOR C IN (
             SELECT seq, referrer, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
-                mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, SUBSTR(pages_visited,1,100) pages_visited
+                mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud
           FROM JSON_TABLE(pBodyText FORMAT JSON, '$' 
             COLUMNS (seq, referrer, LCP, LCP_rating, CLS, CLS_rating, INP, INP_rating, FCP, FCP_rating, TTFB, TTFB_rating,
-                    mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, cache, aud, pages_visited))
+                    mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud))
         ) LOOP
             /* 
             ** 1. Get location from IPData.co
@@ -236,7 +235,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                      referrer, browser, location, mobile, connection, page_weight, total_requests, aud, pathname
                 )
                 VALUES (
-                    pWebsiteid, pArticleid, l_session_id, TO_TIMESTAMP('1970-01-01','yyyy-mm-dd') + numtodsinterval(C.website_loaded,'second'), C.url, C.duration_visible, CASE WHEN C.cache='false' THEN 1 ELSE 0 END,
+                    pWebsiteid, pArticleid, l_session_id, TO_TIMESTAMP('1970-01-01','yyyy-mm-dd') + numtodsinterval(C.website_loaded,'second'), C.url, C.duration_visible, C.first_visit,
                     C.ttfb, C.ttfb_rating, C.fcp, C.fcp_rating, C.lcp, C.lcp_rating, C.cls, C.cls_rating, C.inp, C.inp_rating,
                     C.referrer, l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname
                 );
@@ -702,40 +701,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     BEGIN
         IF (pOffset=0) THEN
             l_content:=
-            '<table role="presentation">
-                <thead>
-                    <tr>
-                        <th>Location</th>
-                        <th>No. Visits</th>
-                    </tr>
-                </thead>
-                <tbody>';
+            '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+            '<table>' ||
+                '<caption id="table-caption">Visits by Country code</caption>' ||
+                '<thead>' ||
+                    '<tr>' ||
+                        '<th>Location</th>' ||
+                        '<th>Visits</th>' ||
+                        '<th>Pct</th>' ||
+                        '<th>First Visit</th>' ||
+                        '<th>Last Visit</th>' ||
+                    '</tr>' ||
+                '</thead>' ||
+                '<tbody>';
         END IF;
 
         FOR C IN (
-                    SELECT location,  nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
+                    SELECT location, first_visit_date, last_visit_date, nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
                     FROM
                         (
-                        SELECT MAX(location) location, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
-                          FROM page_hit p
-                         WHERE p.website_id=pWebsiteId
-                           AND p.url=pUrl
-                         GROUP BY p.session_id
+                        SELECT SUBSTR(location,INSTR(location,',')+1) location, MIN(first_visit_date) first_visit_date, MAX(last_visit_date) last_visit_date, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
+                          FROM 
+                          (
+                            SELECT MAX(location) location, MIN(visit_date) first_visit_date, MAX(visit_date) last_visit_date
+                            FROM page_hit 
+                            WHERE website_id=pWebsiteId
+                            GROUP BY session_id
+                          )
+                         GROUP BY SUBSTR(location,INSTR(location,',')+1)
                         )
-                        ORDER BY nb_visits DESC, location
-                        OFFSET pOffset ROWS
-                        FETCH FIRST ROWS_PER_PAGE ROWS ONLY
+                    ORDER BY nb_visits DESC, location
+                    OFFSET pOffset ROWS
+                    FETCH FIRST ROWS_PER_PAGE ROWS ONLY
             ) LOOP
                 n:=n+1;
                 IF (n=1) THEN
                     pCount:=C.total;
                 END IF;
-                l_content:=l_content || '<tr><td>' || LTRIM(RTRIM(C.location,','),',') || '</td><td>' || C.nb_visits || ' (' || TO_CHAR(C.pct*100,'fm990D00') || '%)</td></tr>';
+                l_content:=l_content || 
+                '<tr>' ||
+                    '<td>' || C.location || '</td>' || 
+                    '<td>' || C.nb_visits || '</td>' || 
+                    '<td>' || TO_CHAR(C.pct*100,'fm990D00') || '%</td>' ||
+                    '<td>' || TO_CHAR(C.first_visit_date,'dd Mon yyyy') || '</td>' ||
+                    '<td>' || TO_CHAR(C.last_visit_date,'dd Mon yyyy') || '</td>' ||
+                '</tr>';
             END LOOP;
 
         IF (pOffset=0) THEN
             l_content:=l_content || 
-            '</tbody></table>';
+            '</tbody></table></div>';
         END IF;
 
         pHtml:=l_content;
@@ -747,40 +762,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     BEGIN
         IF (pOffset=0) THEN
             l_content:=
-            '<table role="presentation">
-                <thead>
-                    <tr>
-                        <th>Browser</th>
-                        <th>No. Visits</th>
-                    </tr>
-                </thead>
-                <tbody>';
+            '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+            '<table>' ||
+                '<caption id="table-caption">Visits by Browser / Device</caption>' ||
+                '<thead>' ||
+                    '<tr>' ||
+                        '<th>Browser</th>' ||
+                        '<th>Visits</th>' ||
+                        '<th>Pct</th>' ||
+                        '<th>First Visit</th>' ||
+                        '<th>Last Visit</th>' ||
+                    '</tr>' ||
+                '</thead>' ||
+                '<tbody>';
         END IF;
 
         FOR C IN (
-                    SELECT browser,  nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
+                   SELECT browser, first_visit_date, last_visit_date, nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
                     FROM
                         (
-                        SELECT browser, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
-                          FROM page_hit p
-                         WHERE p.website_id=pWebsiteId
-                           AND p.url=pUrl
-                         GROUP BY p.browser
+                        SELECT browser, MIN(first_visit_date) first_visit_date, MAX(last_visit_date) last_visit_date, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
+                          FROM 
+                          (
+                            SELECT MAX(browser) browser, MIN(visit_date) first_visit_date, MAX(visit_date) last_visit_date
+                            FROM page_hit 
+                            WHERE website_id=pWebsiteId
+                            GROUP BY session_id
+                          )
+                         GROUP BY browser
                         )
-                        ORDER BY nb_visits DESC, browser
-                        OFFSET pOffset ROWS
-                        FETCH FIRST ROWS_PER_PAGE ROWS ONLY
+                    ORDER BY nb_visits DESC, browser
+                    OFFSET pOffset ROWS
+                    FETCH FIRST ROWS_PER_PAGE ROWS ONLY
             ) LOOP
                 n:=n+1;
                 IF (n=1) THEN
                     pCount:=C.total;
                 END IF;
-                l_content:=l_content || '<tr><td>' || LTRIM(RTRIM(C.browser,','),',') || '</td><td>' || C.nb_visits || ' (' || TO_CHAR(C.pct*100,'fm990D00') || '%)</td></tr>';
+                l_content:=l_content || 
+                '<tr>' ||
+                    '<td>' || C.browser || '</td>' || 
+                    '<td>' || C.nb_visits || '</td>' || 
+                    '<td>' || TO_CHAR(C.pct*100,'fm990D00') || '%</td>' ||
+                    '<td>' || TO_CHAR(C.first_visit_date,'dd Mon yyyy') || '</td>' ||
+                    '<td>' || TO_CHAR(C.last_visit_date,'dd Mon yyyy') || '</td>' ||
+                '</tr>';
             END LOOP;
 
         IF (pOffset=0) THEN
             l_content:=l_content || 
-            '</tbody></table>';
+            '</tbody></table></div>';
         END IF;
 
         pHtml:=l_content;
