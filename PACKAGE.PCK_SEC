@@ -69,7 +69,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
                 '<caption id="table-caption">Platform Usage</caption>' ||
-                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th><th>Usage</th></tr>';
+                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th><th class="align-right">Usage</th></tr>';
 
         FOR C IN (
             WITH costs AS
@@ -90,7 +90,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<td>' || apex_util.get_since(C.last_published, false) || '</td>' || 
                     '<td>' || C.nb_pages || '</td>' || 
                     '<td>' || C.nb_images || '</td>' || 
-                    '<td>' || C.cpu_used_pct || '%</td>' || 
+                    '<td class="align-right">' || C.cpu_used_pct || '%</td>' || 
                 '</tr>';
             END IF;
         END LOOP;
