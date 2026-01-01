@@ -800,30 +800,21 @@ summary {
  
   /* Other properties */
   flex-direction: column;
-  margin: 0.25rem 0;
-  padding: 0.25rem 0;
-  border: none;
-  border-radius: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid pink;
   box-shadow: 8px 8px 15px -5px rgb(0 0 0 / 0.75);
   
   & >* {
     appearance: none;
-    background: none;
-    border-block-end: 1px solid grey;
-    border-radius: 0;
-    color: black;
+    background-color: transparent;
+    border: 1px solid pink;
     inline-size: 100%;
     font-size: var(--step--1);
-    padding: 2vmin 1rem;
-    text-align: left;
+    padding: 1rem;
     display: flex;
     gap: 0.5em;
     align-items: center;
-    text-decoration: none;
-
-    span {
-        inline-size: 2rem;
-    }
 
     &:focus {
       outline: none;
@@ -832,13 +823,6 @@ summary {
     &:is(:hover, :focus-visible) {
       background-color: pink;
     }
-    
- 
-    &:focus-visible {
-      outline: 2px solid var(--primary-color);
-      outline-offset: -4px;
-    }
-    
 
   }
   
