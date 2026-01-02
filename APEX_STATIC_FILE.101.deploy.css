@@ -19,6 +19,10 @@
   box-sizing: border-box;
 }
 
+html {
+  color-scheme: light dark;
+}
+
 body {
     font-family: var(--font-family-text);
     font-size: var(--step-0);
