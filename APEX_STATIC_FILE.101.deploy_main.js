@@ -12,6 +12,20 @@ if (!("anchorName" in document.documentElement.style)) {
 }
 
 /* 
+** LIGHT DARK BUTTON HANDLERS
+*/
+const html = document.querySelector("html");
+document.querySelector("#dark-switch").addEventListener("click",()=>{
+    html.style.setProperty("color-scheme", "dark");
+});
+document.querySelector("#light-switch").addEventListener("click",()=>{
+    html.style.setProperty("color-scheme", "light");
+});
+document.querySelector("#reset-switch").addEventListener("click",()=>{
+    html.style.setProperty("color-scheme", "light dark");
+});
+
+/* 
 ** CHECK IF EDITOR URL
 */
 const is_editor = () => {
