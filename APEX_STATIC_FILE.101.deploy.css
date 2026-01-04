@@ -19,10 +19,6 @@
   box-sizing: border-box;
 }
 
-html {
-  color-scheme: light dark;
-}
-
 body {
     font-family: var(--font-family-text);
     font-size: var(--step-0);
@@ -194,6 +190,76 @@ nav ul {
   nav ul {
     display:none;
   }
+}
+
+/* 
+** COLOUR SCHEME SWITCHER
+*/
+.theme-machine {
+  --_padding: 0.3em;
+  --_radius: 360px;
+  --icon-size: 1.2em;
+  --color-theme: #f1f5f9;
+  --color-theme-muted: #e6edf2;
+  --color-theme-accent: #cbd5e1;
+  --color-theme-offset: #475569;
+  display: flex;
+}
+@media (forced-colors: active) {
+  .theme-machine {
+    forced-color-adjust: none;
+  }
+}
+.theme-machine .control-appearance {
+  all: unset;
+  position: relative;
+  display: flex;
+  gap: var(--_padding);
+  background: var(--color-theme);
+  padding: var(--_padding);
+  border-radius: 360px;
+  isolation: isolate;
+  transform: translateZ(0);
+  inline-size: fit-content;
+  z-index: 2;
+}
+.theme-machine .control-appearance label {
+  display: grid;
+  place-items: center;
+  place-content: center;
+  border-radius: 50%;
+  padding: var(--_padding);
+  color: var(--color-theme-offset);
+  cursor: pointer;
+}
+.theme-machine .control-appearance input:checked + label {
+  color: currentcolor;
+}
+.theme-machine .control-appearance input:checked:focus-visible + label {
+  outline: var(--focus-outline);
+  outline-offset: 2px;
+}
+.theme-machine .control-appearance .highlighter {
+  content: "";
+  position: absolute;
+  top: var(--_padding);
+  left: var(--_padding);
+  aspect-ratio: 1;
+  height: calc(100% - var(--_padding) * 2);
+  background: var(--color-theme-accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+  transition: translate 250ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+.theme-machine .control-appearance input:focus-visible ~ .highlighter {
+  transition: unset;
+}
+.theme-machine .control-appearance input:nth-of-type(2):checked ~ .highlighter {
+  translate: calc(100% + var(--_padding));
+}
+.theme-machine .control-appearance input:nth-of-type(3):checked ~ .highlighter {
+  translate: calc(200% + var(--_padding) * 2);
 }
 
 /* 
