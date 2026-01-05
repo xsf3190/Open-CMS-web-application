@@ -128,7 +128,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             l_root_css:=l_root_css ||
             ':root {' ||
                 '-webkit-text-size-adjust: none;' ||
-                'text-size-adjust: none;';
+                'text-size-adjust: none;' ||
+                'color-scheme: light dark;';
                 
             FOR i IN 1..l_fluid_types.COUNT LOOP
                 l_root_css:=l_root_css || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
