@@ -11,27 +11,31 @@ class ColorScheme extends HTMLElement {
     }
 
     handleChange(e, prop, el) {
-      const attr = `data-${prop}`;
-      const value = e.target.value;
+        const attr = `data-${prop}`;
+        const value = e.target.value;
 
-      if (!value) {
-        localStorage.removeItem(prop);
-        el.removeAttribute(attr);
-        return;
-      }
+        if (!value) {
+            localStorage.removeItem(prop);
+            el.removeAttribute(attr);
+            return;
+        }
 
-      localStorage.setItem(prop, value);
-      el.setAttribute(attr, value);
+        localStorage.setItem(prop, value);
+        el.setAttribute(attr, value);
     }
     
     setupControl(prop, el) {
-      const initialValue = localStorage.getItem(prop) || "";
-      const collection = this.querySelectorAll(`[name='${prop}']`);
+        const initialValue = localStorage.getItem(prop) || "";
+        if (initialValue) {
+            const attr = `data-${prop}`;
+            el.setAttribute(attr, initialValue);
+        }
+        const collection = this.querySelectorAll(`[name='${prop}']`);
 
-      for (let item of collection) {
-        item.checked = item.value === initialValue;
-        item.addEventListener("change", (e) => this.handleChange(e, prop, el));
-      }
+        for (let item of collection) {
+            item.checked = item.value === initialValue;
+            item.addEventListener("change", (e) => this.handleChange(e, prop, el));
+        }
     }
 }
 
