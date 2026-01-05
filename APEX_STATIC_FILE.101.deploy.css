@@ -23,6 +23,8 @@ body {
     font-family: var(--font-family-text);
     font-size: var(--step-0);
     line-height: 1.5;
+    background-color: var(--color-bg);
+    color: var(--color-text);
     /* font-synthesis: none; */
     animation: 3s infinite flip-synthesis;   
 }
@@ -92,17 +94,7 @@ main + section {
     margin-block-start: 1em;
 }
 
-/* NORMALIZE IMAGE INLINE STYLES AND CLASSES THAT ARE INCLUDED BY CKEDITOR */
-
-/* BACKGROUND COLORS */
-
-body>header {
-  background-color: var(--header-background-color);
-}
-
-body>main {
-  background-color: var(--main-background-color);
-}
+/* NOT AT ALL SURE ABOUT THIS */
 
 body>header u {
     text-decoration-thickness: 0.5ex;
@@ -116,7 +108,6 @@ body>header u {
 body>footer {
   margin-block-start: 1rem;
   font-size: var(--step--1);
-  background-color: var(--footer-background-color);
   padding: 1em;
 }
 
@@ -137,7 +128,7 @@ body>footer>a {
   position: sticky;
   top: 0;
   z-index: 1;
-  background-color: white;
+  background-color: var(--color-bg);
 }
 
 .logo {
@@ -155,9 +146,9 @@ nav {
 }
 
 nav a {
+  color: inherit;
   --text-color: var(--nav-dark-color);
   border-block-end: 0.2ex solid var(--border-color, transparent);
-  color: var(--text-color);
   display: inline-block;
   margin-block-end: 0.5rem;
   margin-inline-end: 0.5rem;
@@ -167,7 +158,7 @@ nav a {
 }
 
 nav a:where(:hover, :focus) {
-  --border-color: var(--text-color);
+  --border-color: var(--color-text);
 }
 
 nav ul {
@@ -182,8 +173,7 @@ nav ul {
 }
 
 [aria-current="page"] {
-  --border-color: var(--nav-highlight-color);
-  --text-color: var(--nav-highlight-color);
+  --border-color: var(--color-text);
 }
 
 @media (width<=600px) {
