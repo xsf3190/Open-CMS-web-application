@@ -1,5 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as 
     --
+    FUNCTION buildColorScheme RETURN LONG;
+    --
     FUNCTION buildContentDialog RETURN VARCHAR2;
     --
     FUNCTION buildDropdown(pWebsiteId IN website.id%type) RETURN VARCHAR2;
@@ -323,7 +325,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         );
     BEGIN
         l_html:=
-        '<div class="theme-machine">' ||
+        '<color-scheme class="theme-machine">' ||
             '<fieldset class="control-appearance">' ||
             '<legend class="visually-hidden">Select appearance</legend>';
         l_index:=l_schemes.LAST;
@@ -340,7 +342,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_html:=l_html ||
             '<div class="highlighter"></div>' ||
             '</fieldset>' ||
-        '</div>';
+        '</<color-scheme>';
         RETURN(l_html);
     END;
 
