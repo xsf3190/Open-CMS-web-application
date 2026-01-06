@@ -170,7 +170,7 @@ const flushQueues = () => {
     const body = JSON.stringify(json);
     page_visit++;
 
-    if (navigator.webdriver) return;
+    if (navigator.webdriver || navigator.userAgent.toLowerCase().includes('headless') || navigator.languages.length === 0) return;
     if (json["duration_visible"]<=1) return;
     if (is_editor()) return; 
 
