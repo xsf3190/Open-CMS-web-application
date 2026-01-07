@@ -34,28 +34,6 @@ body {
     100% { font-synthesis: initial; }
 }
 
-blockquote,
-body,
-figure,
-h1,
-h2,
-h3,
-h4,
-p,
-menu,
-form,
-[popover] {
-  margin: 0;
-}
-
-
-[role="list"] {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-
 /* SKIP TO MAIN CONTENT ON ALL PAGES */
 
 .skip-link:not(:focus):not(:active) {
@@ -68,14 +46,6 @@ form,
 }
 main:focus {
   outline: none;
-}
-
-img {
-  max-width: 100%;
-  height: auto;
-  /* display: block; */
-  object-fit: cover;
-  border-radius: var(--img-border-radius,1em);
 }
 
 img:not([alt]) {
@@ -343,12 +313,16 @@ main a:hover {
   border: 1px solid darkgrey;
   border-radius: var(--img-border-radius);
   position: relative;
+
   img {
     block-size: 25dvh;
     border-bottom-right-radius: 0;
     border-bottom-left-radius: 0;
+    max-width: 100%;
+    height: auto;
+    object-fit: cover;
   }
-  
+
   .text {
     padding: 0.5rem;
     flex: 1 1 auto;
@@ -789,17 +763,17 @@ dialog hr+span {
   }
 }
 
-
-.no-border {
-  --border: none;
-}
-
-
-/* STYLES FOR PREFORMATTED CODE BLOCKS */
-
+/* 
+** STYLES FOR PREFORMATTED CODE BLOCKS 
+*/
 pre {
-  font-size: var(--step--1);
+  background-color:var(--color-bg-code);
   overflow-x: auto;
+  code {
+    color: var(--color-text-code);
+    font-family:monospace;
+    font-size:var(--step--2);
+  }
 }
 
 /* DEFAULT POINTER CURSOR FOR SUMMARY ELEMENTS */
