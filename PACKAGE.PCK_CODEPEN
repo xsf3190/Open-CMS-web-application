@@ -86,7 +86,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                  WHERE application_id=101
                    AND file_name='deploy.css'
                 UNION ALL
-                SELECT 3, apex_util.blob_to_clob(file_content)
+                SELECT 3, '@layer{' || apex_util.blob_to_clob(file_content) || '}'
                   FROM apex_application_static_files 
                  WHERE application_id=101
                    AND file_name='ckeditor.min.css'
