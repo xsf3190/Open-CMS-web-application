@@ -230,7 +230,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             AND wa.article_id=NVL(a.parent_id,a.id)
             AND wf.website_id=w.id
             AND a.application_id=101
-            AND a.file_name='deploy.min.css'
+            AND a.file_name IN ('deploy.min.css','ckeditor.min.css')
         )
         SELECT MAX(netlify_last_published),MAX(updated_date)
         INTO l_netlify_last_published, l_last_updated_date
@@ -1067,10 +1067,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH source AS
             (
-                SELECT '/css/' || CASE WHEN file_name='deploy.min.css' THEN 'core-styles.min.css' ELSE file_name END AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+                SELECT '/css/core-styles.min.css' AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
                   FROM apex_application_static_files 
                  WHERE application_id=101
-                   AND file_name IN ('deploy.min.css','ckeditor.min.css')
+                   AND file_name='deploy.min.css'
+                UNION ALL
+                SELECT '/css/' || file_name AS deploy_filename, '@layer{' || apex_util.blob_to_clob(file_content) || '}' file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+                  FROM apex_application_static_files 
+                 WHERE application_id=101
+                   AND file_name='ckeditor.min.css'
                 UNION ALL
                 SELECT '/css/website-styles.min.css', css, css_updated_date
                   FROM website
