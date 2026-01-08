@@ -50,7 +50,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE refreshOrdsEndpoints(pWebsiteId IN website.id%type);
     --
-    PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN cost_allocation.cpu_used%type);
+    PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN website_cpu.cpu_used%type);
     --
     PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER);
     --
@@ -68,19 +68,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
-                '<caption id="table-caption">Platform Usage</caption>' ||
+                '<caption id="table-caption">Platform CPU Usage for current month</caption>' ||
                 '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th><th class="align-right">Usage</th></tr>';
 
         FOR C IN (
-            WITH costs AS
+            WITH cpu AS
             (
-                SELECT website_id, SUM(cpu_used) cpu_used FROM cost_allocation GROUP BY website_id
+                SELECT website_id, SUM(cpu_used) cpu_used FROM website_cpu WHERE period_start=TRUNC(current_timestamp,'mm') GROUP BY website_id
             )
             SELECT w.domain_name, w.contact_email, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct,
                 (SELECT COUNT(*) FROM article a, website_article wa WHERE wa.website_id=w.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_pages,
                 (SELECT COUNT(*) FROM article a, website_article wa, asset_used au WHERE wa.website_id=w.id AND au.article_id=a.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_images
-             FROM website w,  costs c
-             WHERE w.id=c.website_id
+             FROM website w,  cpu c
+             WHERE w.id=c.website_id(+)
              ORDER BY 1
         ) LOOP
             IF (l_session_data.scope='admin' OR C.contact_email=l_session_data.sub) THEN
@@ -90,7 +90,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<td>' || apex_util.get_since(C.last_published, false) || '</td>' || 
                     '<td>' || C.nb_pages || '</td>' || 
                     '<td>' || C.nb_images || '</td>' || 
-                    '<td class="align-right">' || C.cpu_used_pct || '%</td>' || 
+                    '<td class="align-right">' || NVL(C.cpu_used_pct,0) || '%</td>' || 
                 '</tr>';
             END IF;
         END LOOP;
@@ -247,10 +247,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     /*
     ** USAGE ACCOUNTING BASED ON CPU USED IN SESSION
     */
-    PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN cost_allocation.cpu_used%type) IS
-        l_cpu_used_session users.cpu_used%type;
+    PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN website_cpu.cpu_used%type) IS
+        l_cpu_used_session website_cpu.cpu_used%type;
         l_owner VARCHAR2(30);
-        l_calling_procedure cost_allocation.calling_procedure%type;
+        l_calling_procedure website_cpu.calling_procedure%type;
         l_lineno NUMBER;
         l_caller VARCHAR2(30);
     BEGIN
@@ -258,16 +258,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
         owa_util.who_called_me(l_owner, l_calling_procedure, l_lineno, l_caller);
         
-        UPDATE cost_allocation
+        UPDATE website_cpu
            SET cpu_used=cpu_used+l_cpu_used_session, 
                call_count=call_count+1,
                updated_date=current_timestamp
          WHERE website_id=pWebsiteid
+           AND period_start=TRUNC(current_timestamp,'mm')
            AND calling_procedure=l_calling_procedure;
 
         IF (SQL%ROWCOUNT=0) THEN
-            INSERT INTO cost_allocation (website_id, calling_procedure, user_id, cpu_used)
-                VALUES (pWebsiteid, l_calling_procedure, pUserid, l_cpu_used_session);
+            INSERT INTO website_cpu (website_id, period_start, calling_procedure, user_id, cpu_used)
+                VALUES (pWebsiteid, TRUNC(current_timestamp,'mm'), l_calling_procedure, pUserid, l_cpu_used_session);
         END IF;
     END;
 
