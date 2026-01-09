@@ -342,7 +342,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_html:=l_html ||
             '<div class="highlighter"></div>' ||
             '</fieldset>' ||
-        '</<color-scheme>';
+        '</color-scheme>';
         RETURN(l_html);
     END;
 
