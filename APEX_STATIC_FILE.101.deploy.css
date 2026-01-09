@@ -153,6 +153,13 @@ nav ul {
 }
 
 /* 
+** FOCUS-VISOBLE STYLES
+*/
+input:focus-visible {
+  outline: var(--focus-outline);
+}
+
+/* 
 ** COLOUR SCHEME SWITCHER
 */
 .theme-machine {
