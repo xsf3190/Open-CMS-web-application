@@ -140,7 +140,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 '--color-theme: #ffedd5;' ||
                 '--color-theme-muted: #fff5e7;' ||
                 '--color-theme-accent: #fed7aa;' ||
-                '--color-theme-offset: #ef4444;';
+                '--color-theme-offset: #ef4444;' ||
+                '--focus-outline: 2px solid var(--color-link);';
                 
             FOR i IN 1..l_fluid_types.COUNT LOOP
                 l_root_css:=l_root_css || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
