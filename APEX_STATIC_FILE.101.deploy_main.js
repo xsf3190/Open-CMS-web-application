@@ -5,21 +5,34 @@ const vitalsQueue = new Set();
 const metrics = [];
 
 /* 
-** POLYFILL FOR ANCHOR POSITIONING
-*/
-if (!("anchorName" in document.documentElement.style)) {
-    import("https://unpkg.com/@oddbird/css-anchor-positioning");
-}
-
-/* 
 ** CHECK IF EDITOR URL
 */
-const is_editor = () => {
-    return window.location.host.startsWith("editor.") || window.location.host.endsWith(".netlify.app");
+const is_editor = window.location.host.startsWith("editor.") || window.location.host.endsWith(".netlify.app") || window.location.host==="cdpn.io";
+
+const set_controls = () => {
+    document.querySelector(".controls").style.blockSize = "3rem";
+    document.querySelector(".topnav").style.top = "3rem";
+}
+/* 
+** cOPY NAV ITEMS TO DROPDOWN ON NARROW VIEWPORTS
+*/
+const narrow_viewport = window.matchMedia("(width <= 600px)");
+if (narrow_viewport.matches) {
+    const nav = document.querySelector(".topnav nav ul");
+    document.querySelector("#navlist ul")?.replaceWith(nav);
+    document.getElementById("navlist-btn").style.visibility = "visible";
+    set_controls();
 }
 
 let aud = "";
 const jwt = localStorage.getItem("refresh");
+
+
+
+if (is_editor && jwt) {
+    document.getElementById("menulist-btn").style.visibility = "visible";
+    set_controls();
+}
 
 async function load_modules() { 
     let module_name = "deploy_menulist"
@@ -32,7 +45,7 @@ async function load_modules() {
     new menu.MenuNavigationHandler(dropdown);
 
     if (jwt) {
-        if (is_editor()) {
+        if (is_editor) {
             module_name = "deploy_edited-content";
             const module = await import(module_name)
             .catch((error) => {
@@ -69,19 +82,14 @@ dialog_close.addEventListener("click", closeHandler);
 
 /*
 ** GET DROPDOWN MENU FROM LOCALSTORAGE IF USER LOGGED IN
-** LOGOUT IF NOT LATEST MENU VERSION (I.E. <button>)
 */
 if (jwt) {
-    if (localStorage.getItem("menulist").startsWith("<button")) {
-        dropdown.replaceChildren();
-        dropdown.insertAdjacentHTML('beforeend',localStorage.getItem("menulist"));
-        const array = jwt.split(".");
-        const parse = JSON.parse(atob(array[1]));
-        aud = parse.aud;
-        console.log("Refresh token exists. User is logged in as " + aud);
-    } else {
-        localStorage.clear();
-    }
+    dropdown.replaceChildren();
+    dropdown.insertAdjacentHTML('beforeend',localStorage.getItem("menulist"));
+    const array = jwt.split(".");
+    const parse = JSON.parse(atob(array[1]));
+    aud = parse.aud;
+    console.log("Refresh token exists. User is logged in as " + aud);
 }
 
 /*
@@ -154,9 +162,6 @@ const flushQueues = () => {
         json["page_weight"] = page_weight();
         json["total_requests"] = total_requests();
         json["first_visit"] = first_visit();
-        
-        vitalsQueue.add({name:"page_weight",value:page_weight()});
-        vitalsQueue.add({name:"total_requests",value:total_requests()});
     }
 
     if (vitalsQueue.size > 0) {
@@ -172,7 +177,7 @@ const flushQueues = () => {
 
     if (navigator.webdriver || navigator.userAgent.toLowerCase().includes('headless') || navigator.languages.length === 0) return;
     if (json["duration_visible"]<=1) return;
-    if (is_editor()) return; 
+    if (is_editor) return; 
 
     (navigator.sendBeacon && navigator.sendBeacon(bodydata.resturl+"page-visit/"+bodydata.websiteid+"/"+bodydata.articleid, body)) || fetch(visit_url, {body, method: 'POST', keepalive: true});
 }
@@ -210,23 +215,9 @@ observer.observe({ type: "navigation", buffered: true });
 /*
 ** ADD CWV METRIC TO QUEUE WHEN EMITTED
 */
-let metric_supported;
-if ('LargestContentfulPaint' in window) {
-    metric_supported = "LCP";
-} else {
-    metric_supported = "FCP";
-}
-
 const addToVitalsQueue = ({name,value,rating}) => {
     console.log(name,value);
     vitalsQueue.add({name:name,value:value,rating:rating});
-    
-    if (name===metric_supported) {
-        if (!sessionStorage.getItem(name)) {
-            sessionStorage.setItem(name,value);
-            sessionStorage.setItem("metrics",JSON.stringify(metrics));
-        }
-    }
 };
 
 /*
