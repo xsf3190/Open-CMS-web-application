@@ -86,9 +86,138 @@ body>footer>a {
   text-decoration: none;
 }
 
+/* DROP DOWN STYLES - RESPONSIVE NAVIGATION AND EDITOR MENU */
+.controls {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--color-bg);
+  block-size: 0;
+}
 
-/* NAVIGATION STYLES */
+.popover-btn {
+  --icon-size: 32;
+  --icon-bar-size: 6;
+  --icon-translation-size: calc((var(--icon-size) - var(--icon-bar-size)) / 2);
+  color: var(--color-text);
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--step--1);
+  background-color: var(--color-bg);
+  z-index: 1;
+  visibility: hidden;
+}
 
+#navlist-btn {
+    anchor-name: --navlist-anchor;
+}
+
+#menulist-btn {
+    anchor-name: --menulist-anchor;
+}
+
+.popover-btn:has(+ *:popover-open) rect {
+  transition: all 0.5s ease-in-out;
+}
+
+.popover-btn:has(+ *:popover-open) .top,
+.popover-btn:has(+ *:popover-open) .bottom {
+  transform-origin: center;
+}
+
+.popover-btn:has(+ *:popover-open) .top {
+  transform: rotate(45deg)
+    translate(0, calc(var(--icon-translation-size) * 1px));
+}
+.popover-btn:has(+ *:popover-open) .middle {
+  opacity: 0;
+}
+.popover-btn:has(+ *:popover-open) .bottom {
+  transform: rotate(-45deg)
+    translate(0, calc(var(--icon-translation-size) * -1px));
+}
+
+.controls [popover] {
+  
+  opacity: 0;
+  transform: scale(1);
+  transition: opacity, transform, overlay, display;
+  transition-behavior: allow-discrete;
+  transition-duration: 100ms;
+  transition-timing-function: linear;
+
+  /* Other properties */
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--color-theme-accent);
+  
+  & > * {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-theme-accent);
+    inline-size: 100%;
+    font-size: var(--step--1);
+    padding: 1rem;
+    display: flex;
+    gap: 0.5em;
+    align-items: center;
+    cursor: pointer;
+  }
+}
+
+#navlist {
+  inset: auto;
+  top: anchor(--navlist-anchor bottom);
+  left: anchor(--navlist-anchor left);
+  ul {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+#menulist {
+  inset: auto;
+  top: anchor(--menulist-anchor bottom);
+  right: anchor(--menulist-anchor right);
+  &:focus {
+    outline: none;
+  }
+
+  &>*:is(:hover, :focus-visible) {
+    background-color: var(--color-text);
+    color: var(--color-bg);
+  }
+}
+
+[id="menulist"]:popover-open, [id="navlist"]:popover-open {
+  /* End of fade-in and start of fade-out */
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  opacity: 1;
+  transform: scale(1);
+}
+
+@starting-style {
+  /* Start of fade-in */
+  [id="navlist"]:popover-open, [id="menulist"]:popover-open {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+@supports not (position-anchor: --anchor) {
+  #menulist:popover-open {
+    inset:3rem 0.5rem auto auto;
+  }
+  #navlist:popover-open {
+    inset:3rem auto auto auto;
+  }
+}
+
+/* MAIN HEADER STYLES INCLUDING LOGO AND DESKTOP NAVIGATION */
 .topnav {
   --flex-vertical-alignment: flex-start;
   --flex-wrap: nowrap;
@@ -112,7 +241,6 @@ body>footer>a {
 
 nav {
   font-family: var(--font-family-ui);
-  
 }
 
 nav a {
@@ -151,6 +279,8 @@ nav ul {
     display:none;
   }
 }
+
+
 
 /* 
 ** FOCUS-VISOBLE STYLES
@@ -786,126 +916,6 @@ pre {
 /* DEFAULT POINTER CURSOR FOR SUMMARY ELEMENTS */
 summary {
     cursor: pointer;
-}
-
-/* MENULIST HAMBURGER BUTTON SWITCHES TO CROSS WHEN ACTIVATED */
-
-[id=menulist-btn] {
-    --icon-size: 32;
-    --icon-bar-size: 6;
-    --icon-translation-size: calc((var(--icon-size) - var(--icon-bar-size)) / 2);
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    border: none;
-    display:flex;
-    align-items:center;
-    gap:0.5rem;
-    anchor-name: --menulist-anchor;
-}
-
-[id=menulist-btn]:has(+ *:popover-open) rect {
-    transition: all 0.5s ease-in-out;
-}
-
-[id=menulist-btn]:has(+ *:popover-open) .top,
-[id=menulist-btn]:has(+ *:popover-open) .bottom {
-    transform-origin: center;
-}
-
-[id=menulist-btn]:has(+ *:popover-open) .top {
-    transform: rotate(45deg) translate(0, calc(var(--icon-translation-size) * 1px));
-}
-[id=menulist-btn]:has(+ *:popover-open) .middle {
-    opacity: 0;
-}
-[id=menulist-btn]:has(+ *:popover-open) .bottom {
-    transform: rotate(-45deg) translate(0, calc(var(--icon-translation-size) * -1px));
-}
-
-/* MENULIST */
-[id=menulist] {
-  /* Anchor Positioning */
-  /* position: absolute; */
-  /* position-area: end span-end; */
-  /* position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline; */
-  inset: auto;
-  top: anchor(--menulist-anchor bottom);
-  right: anchor(--menulist-anchor right);
-
-  /* End of fade-out */
-  opacity: 0;
-  transform: scale(1);
-  transition: opacity, transform, overlay, display;
-  transition-behavior: allow-discrete;
-  transition-duration: 100ms;
-  transition-timing-function: linear;
- 
-  /* Other properties */
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--color-theme-accent);
-  
-  & >* {
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-theme-accent);
-    inline-size: 100%;
-    font-size: var(--step--1);
-    padding: 1rem;
-    display: flex;
-    gap: 0.5em;
-    align-items: center;
-    cursor: pointer;
-
-    &:focus {
-      outline: none;
-    }
- 
-    &:is(:hover, :focus-visible) {
-      background-color: var(--color-text);
-      color: var(--color-bg);
-    }
-
-  }
-  
-  a {
-    display: block;
-    border-block-end: solid 1px black;
-  }
-  
-      
-    [aria-current="page"]::after {
-      content:" \2713 ";
-        color: green;
-   }
-  
-}
-
-
-[id=menulist]:popover-open {
-  /* End of fade-in and start of fade-out */
-  transition-duration: 120ms;
-  transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
-  opacity: 1;
-  transform: scale(1);
-}
-
-@starting-style {
-  /* Start of fade-in */
-  [id=menulist]:popover-open {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-}
-
-
-
-/* PLACE POPOVER TOP RIGHT OF VIEWPORT IF BROWSER NOT SUPPORTING ANCHOR API */
-@supports not (position-anchor: --anchor) {
-  [popover]:popover-open {
-    inset:2.25rem 0.5rem auto auto;
-  }
 }
 
 /*
