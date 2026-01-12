@@ -449,7 +449,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     /*
     **  Return log of all visits to website
     */
-    PROCEDURE getWebsiteVisits(pWebsiteId IN website.id%type, pOffset IN NUMBER, pTimeZone IN VARCHAR2, pUrl IN VARCHAR2, pCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
+    PROCEDURE getWebsiteVisits(pWebsiteId IN website.id%type, pOffset IN NUMBER, pTimeZone IN VARCHAR2, pCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
         l_content CLOB;
         l_popover VARCHAR2(300);
         l_rating VARCHAR2(7);
@@ -493,10 +493,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                     MAX(p.browser) browser, 
                     MAX(p.location) location, 
                     MAX(p.connection) connection, 
-                    MAX(p.mobile) mobile
-              FROM page_hit p
+                    MAX(p.mobile) mobile,
+                    MAX(w.domain_name) domain_name
+              FROM page_hit p, website w
              WHERE p.website_id=pWebsiteid
-               AND p.url=pUrl
+               AND w.id=pWebsiteid
              GROUP BY p.session_id
              ORDER BY visit_date DESC
              OFFSET pOffset ROWS
@@ -515,7 +516,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                     '<td>' || C.location || '</td>' ||
                     '<td>' || CASE WHEN C.first_visit=1 THEN '&#9989;' END || '</td>' ||
                     '<td>' || elapsedTime(C.duration_visible) || CASE WHEN C.pages_viewed>1 THEN ' - ' || C.pages_viewed || ' pages' END || '</td>' ||
-                    '<td>' || CASE WHEN INSTR(C.referrer,pUrl)=0 THEN C.referrer END || '</td>' ||
+                    '<td>' || CASE WHEN INSTR(C.referrer,C.domain_name)=0 THEN C.referrer END || '</td>' ||
                 '</tr>';
         END LOOP;
 
@@ -1114,7 +1115,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             '<button type="button" class="button show-more visually-hidden" data-button-variant="no-styles">More &gt;&gt;</button>';
         ELSE
             CASE pReport
-                WHEN 'visits' THEN getWebsiteVisits(pWebsiteId, pOffset, l_session_data.timezone, l_session_data.url, l_count, l_article);
+                WHEN 'visits' THEN getWebsiteVisits(pWebsiteId, pOffset, l_session_data.timezone, l_count, l_article);
                 WHEN 'performance' THEN getPerformance(pWebsiteId, l_session_data.timezone, l_session_data.url, l_article);
                 WHEN 'location' THEN getVisitsByLocation(pWebsiteId, pOffset, l_session_data.url, l_count, l_article);
                 WHEN 'browser' THEN getVisitsByBrowser(pWebsiteId, pOffset, l_session_data.url, l_count, l_article);
@@ -1143,14 +1144,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     END;
 
     /*
-    **  DAILY JOB TO PROCESS ANY VISITS WAITING IN WEBSITE_ARTICE_CWV TABLE 
+    **  DAILY JOB TO PROCESS VISIT DATA. NOTHING YET.
     */
     PROCEDURE daily_job IS
-        l_content VARCHAR2(300);
         n PLS_INTEGER;
     BEGIN
-        /* Delete raw website visit data for non-custom urls, i.e editor sites */
-        DELETE page_hit WHERE url LIKE 'editor.%' OR url LIKE '%.netlify.app';
+        null;
     END;
     
 END;
