@@ -19,9 +19,11 @@ const set_controls = () => {
 const narrow_viewport = window.matchMedia("(width <= 600px)");
 if (narrow_viewport.matches) {
     const nav = document.querySelector(".topnav nav ul");
-    document.querySelector("#navlist ul")?.replaceWith(nav);
-    document.getElementById("navlist-btn").style.visibility = "visible";
-    set_controls();
+    if (nav) {
+        document.querySelector("#navlist ul")?.replaceWith(nav);
+        document.getElementById("navlist-btn").style.visibility = "visible";
+        set_controls();
+    }
 }
 
 let aud = "";
