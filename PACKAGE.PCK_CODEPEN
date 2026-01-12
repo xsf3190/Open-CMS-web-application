@@ -48,9 +48,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 l_logo:='<span class="logo">' || C.logo || '</span>';
             END IF;
 
+            l_dropdown:=pck_deploy.buildDropdown(pWebsiteId);
             l_nav:=pck_deploy.buildNav(pWebsiteId);
             l_color_scheme:=pck_deploy.buildColorScheme;
-            l_dropdown:=pck_deploy.buildDropdown(pWebsiteId);
+            
             
             IF (l_nav IS NOT NULL) THEN
                 n:=INSTR(l_nav,pArticleid);
@@ -66,7 +67,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
 
             l_html:=
             '<body class="flow" data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleId || '">' ||
-                '<div class="topnav flex-items space-between">' || l_logo || l_nav || l_color_scheme || l_dropdown || '</div>' ||
+                l_dropdown ||
+                '<div class="topnav flex-items space-between">' || l_logo || l_nav || l_color_scheme || '</div>' ||
                 '<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>' ||
                 '<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>' ||
                 l_collection_html ||
