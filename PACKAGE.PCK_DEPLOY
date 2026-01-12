@@ -350,30 +350,42 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     **  Build Dropdown Component with "Log In" and "Ecology" buttons
     */
     FUNCTION buildDropdown(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
+        l_authenticate VARCHAR2(250);
         l_html LONG;
         l_uri_template ords_endpoints.uri_template%type;
     BEGIN
-        l_html:=
-        '<button type="button" popovertarget="menulist" id="menulist-btn" aria-label="Actions menu">' ||
-            'Menu' ||
-            '<svg height="1rem" viewBox="0 0 32 32" preserveAspectRatio="none" aria-hidden="true" focusable="false">' ||
-              '<rect class="top" x="0" y="0" width="32" height="6" fill="currentColor" />' ||
-              '<rect class="middle" x="0" y="13" width="32" height="6" fill="currentColor" />' ||
-              '<rect class="bottom" x="0" y="26" width="32" height="6" fill="currentColor" />' ||
-            '</svg>' ||
-        '</button>' ||
-        '<div id="menulist" role="menu" aria-labelledby="menulist-btn" popover>';
-        
         FOR C IN (
             SELECT o.label, o.uri_template, o.method
               FROM ords_endpoints o
              WHERE INSTR(o.uri_template,'authenticate')>0
-                OR INSTR(o.uri_template,'ecology')>0
         ) LOOP
-            l_html:=l_html ||
-            pck_sec.addMenuButton(C.uri_template, C.method, C.label);
+            l_authenticate:=pck_sec.addMenuButton(C.uri_template, C.method, C.label);
         END LOOP;
-        l_html:=l_html ||
+
+        l_html:=
+        '<div role="banner" class="controls flex-items space-between">' ||
+            '<button type="button" popovertarget="navlist" id="navlist-btn" aria-label="Site menu" class="popover-btn">' ||
+                '<svg height="1rem" viewBox="0 0 32 32" aria-hidden="true" focusable="false">' ||
+                  '<rect class="top" x="0" y="0" width="32" height="6" fill="currentColor" />' ||
+                  '<rect class="middle" x="0" y="13" width="32" height="6" fill="currentColor" />' ||
+                  '<rect class="bottom" x="0" y="26" width="32" height="6" fill="currentColor" />' ||
+                '</svg>' ||
+                '<span>Menu</span>' ||
+            '</button>' ||
+            '<nav id="navlist" popover>' ||
+                '<ul></ul>' ||
+            '</nav>' ||
+            '<button type="button" popovertarget="menulist" id="menulist-btn" aria-label="Editor menu" class="popover-btn">' ||
+                '<span>Editor</span>' ||
+                '<svg height="1rem" viewBox="0 0 32 32" aria-hidden="true" focusable="false">' ||
+                  '<rect class="top" x="0" y="0" width="32" height="6" fill="currentColor" />' ||
+                  '<rect class="middle" x="0" y="13" width="32" height="6" fill="currentColor" />' ||
+                  '<rect class="bottom" x="0" y="26" width="32" height="6" fill="currentColor" />' ||
+                '</svg>' ||
+            '</button>' ||
+            '<div id="menulist" role="menu" aria-labelledby="menulist-btn" popover>' ||
+                l_authenticate ||
+            '</div>' ||
         '</div>';
 
         RETURN(l_html);
@@ -760,8 +772,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 '</head>' ||
                 '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
                     '<a href="#main" class="skip-link">Skip to main content</a>' ||
+                    pDropdown || 
                     '<div class="topnav flex-items space-between">' ||
-                        l_logo || l_nav || pColorScheme || pDropdown || 
+                        l_logo || l_nav || pColorScheme || 
                     '</div>' ||    
                     l_header || l_main || l_collection || l_article_links || l_footer || buildLoginForm || buildContentDialog ||
                 '</body>' ||
@@ -802,9 +815,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         /* START OF NEW */
 
+        l_dropdown VARCHAR2(4000);
         l_nav VARCHAR2(4000);
         l_color_scheme LONG;
-        l_dropdown VARCHAR2(4000);
         l_common_header website_article.header_html%type;
         l_common_footer website_article.footer_html%type;
 
