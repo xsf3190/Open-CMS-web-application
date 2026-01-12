@@ -29,6 +29,14 @@ body {
     animation: 3s infinite flip-synthesis;   
 }
 
+/* LINK STYLES */
+a {
+  color: var(--color-link);
+  &:hover {
+    color: var(--color-link-hover);
+  }
+}
+
 @keyframes flip-synthesis {
     0% { font-synthesis: none; }
     100% { font-synthesis: initial; }
@@ -421,24 +429,6 @@ small {
 :where(h1,h2,h3,h4) {
   text-wrap: pretty;
   font-family: var(--font-family-headings);
-}
-
-/* LINK STYLES */
-main a {
-  text-decoration: underline;
-  color: var(--color-primary-light);
-}
-
-main a:visited {
-    color: rebeccapurple;
-}
-
-main a:hover {
-    color: var(--color-primary);
-}
-
-.no-padding {
-  --padding: 0;
 }
 
 /* CARD STYLES */
