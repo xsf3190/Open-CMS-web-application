@@ -1,13 +1,8 @@
 /*
 ** VISIT REPORTS
 */
-
-import { output_dialog } from "deploy_elements";
+import { dialog_header, dialog_article, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
-
-const header = output_dialog.querySelector("header");
-const article = output_dialog.querySelector("article");
-const footer = output_dialog.querySelector("footer");
 
 let endpoint;
 
@@ -16,13 +11,9 @@ export const init = (element) => {
 
     callAPI(endpoint, "GET", "?report=list&offset=0")
     .then((data) => {
-        header.querySelector(":first-child").replaceChildren();
-        header.insertAdjacentHTML('afterbegin',data.header);
-        article.replaceChildren();
-        article.insertAdjacentHTML('afterbegin',data.article);
-        footer.replaceChildren();
-        footer.insertAdjacentHTML('afterbegin',data.footer);
-        output_dialog.showModal();
+        initDialog(data);
+        dialog_header.addEventListener("change", changeHandler);
+        dialog_footer.addEventListener("click", clickHandler);
     })
     .catch((error) => {
             handleError(error);
