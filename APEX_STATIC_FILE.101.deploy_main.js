@@ -26,15 +26,13 @@ if (narrow_viewport.matches) {
     }
 }
 
-let aud = "";
-const jwt = localStorage.getItem("refresh");
-
-
-
-if (is_editor && jwt) {
+if (is_editor) {
     document.getElementById("menulist-btn").style.visibility = "visible";
     set_controls();
 }
+
+let aud = "";
+const jwt = localStorage.getItem("refresh");
 
 async function load_modules() { 
     let module_name = "deploy_menulist"
