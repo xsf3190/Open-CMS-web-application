@@ -5,11 +5,12 @@ import { dialog_header, dialog_article, dialog_footer, initDialog } from "deploy
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
+let selectedReport=1;
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
 
-    callAPI(endpoint, "GET", "?report=list&offset=0")
+    callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=1&handler=change")
     .then((data) => {
         initDialog(data);
         dialog_header.addEventListener("change", changeHandler);
@@ -20,67 +21,38 @@ export const init = (element) => {
     });
 }
 
-const getReport = async (report, reportType, offset) => {
-    const showmore = footer.querySelector(".show-more");
-    const status = footer.querySelector("footer>*:first-child");
-
-    const query = "?report=" + report + "&offset=" + offset;
-    callAPI(endpoint, "GET", query)
+/*
+** NEW REPORT REQUEST
+*/
+const changeHandler = (e) => {
+    selectedReport = document.getElementById("report").value;
+    callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=1&handler=change")
     .then((data) => {
-        if (reportType==="graph") {
-            article.replaceChildren();
-            article.insertAdjacentHTML('afterbegin',data.article);
-            showmore.classList.add("visually-hidden");
-            status.classList.add("visually-hidden");
-            return;
-        }
-
-        /* TABLE reports always show counts and may have "show more" button */
-        
-        status.classList.remove("visually-hidden");
-
-        if (offset===0) {
-            article.replaceChildren();
-            article.insertAdjacentHTML('afterbegin',data.article);
-            showmore.dataset.report = report;
-            showmore.dataset.reportType = reportType;
-        } else if (data.article) {
-            article.querySelector("tbody").insertAdjacentHTML('beforeend',data.article);
-        }
-
-        const tbody = article.querySelector("tbody");
-        status.textContent = tbody.childElementCount + " / " + data.count;
-
-        if (data.count > tbody.childElementCount ) {
-            showmore.classList.remove("visually-hidden");
-            showmore.dataset.offset = data.offset;
-            showmore.disabled = false;
-        } else {
-            showmore.disabled = true;
-            showmore.classList.add("visually-hidden");
-        }
+        dialog_article.replaceChildren();
+        dialog_article.insertAdjacentHTML('afterbegin',data.article);
+        dialog_footer.replaceChildren();
+        dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
     })
     .catch((error) => {
-            handleError(error);
+        handleError(error);
     });
 }
 
 /*
-** COMMON ENTRY POINT FOR HANDLING REPORTS
+** NEW REPORT PAGE REQUEST
 */
-header.addEventListener("click", (e) => {
-    if (e.target.dataset.report) {
-        getReport(e.target.dataset.report, e.target.dataset.reportType, 0);
-    }
-})
-
-/*
-** "SHOW MORE" REPORT BUTTON. PREVENT DOUBLE CLICKS
-*/
-footer.addEventListener("click", (e) => {
-    if (e.detail===1) {
-        if (e.target.dataset.report) {
-            getReport(e.target.dataset.report, e.target.dataset.reportType, e.target.dataset.offset);
-        }
-    }
-})
+const clickHandler = (e) => {
+    console.log(" e.target.dataset.page", e.target.dataset.page);
+    callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=" + e.target.dataset.page + "&handler=click")
+    .then((data) => {
+        const tbody = dialog_article.querySelector("tbody");
+        tbody.replaceChildren();
+        tbody.insertAdjacentHTML('afterbegin',data.article);
+        dialog_footer.replaceChildren();
+        dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
+    })
+    .catch((error) => {
+        // handleError(error);
+        console.error(error);
+    });
+}
