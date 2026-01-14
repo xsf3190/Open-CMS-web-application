@@ -4,7 +4,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_VISITS" AS
     --
     PROCEDURE ecology(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN VARCHAR2, pOffset IN NUMBER, pStatus OUT NUMBER);
+    PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN NUMBER, pPage IN NUMBER, pStatus OUT NUMBER);
+    --
+    FUNCTION pages(pSelectedPage IN NUMBER, pTotal IN NUMBER) RETURN VARCHAR2;
     --
     PROCEDURE uploadPageVisit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB);
     --
@@ -444,6 +446,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             l_ela_time:=l_ela_time || ' ' || t_ela_time(3) || 's';
         END if;
         RETURN (LTRIM(l_ela_time));
+    END;
+
+    FUNCTION pages(pSelectedPage IN NUMBER, pTotal IN NUMBER) RETURN VARCHAR2 IS
+        l_pages VARCHAR2(100);
+        l_html LONG;
+
+        FUNCTION buttonHtml(pPageNo IN NUMBER, pEllipsis IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN 
+                CASE WHEN pEllipsis='ellipsis-before' THEN '<span>...</span>' END || 
+                '<button type="button" class="button" data-button-variant="round-icon" data-page="' || pPageNo || '"><span>Page </span>' || pPageNo || '</button>' || 
+                CASE WHEN pEllipsis='ellipsis-after' THEN '<span>...</span>' END;
+        END;
+    BEGIN
+        IF (pSelectedPage>1) THEN
+            l_html:=l_html || '<button type="button" data-page="' || TO_CHAR(pSelectedPage-1) || '"><span><< Previous</span></button>';
+        END IF;
+
+        IF (pSelectedPage<=5) THEN
+            FOR i IN 1..LEAST(pSelectedPage+2,pTotal) LOOP
+                l_pages:=l_pages || i||',';
+                l_html:=l_html || buttonHtml(i);
+            END LOOP;
+            l_pages:=l_pages ||'...,'||pTotal;
+            l_html:=l_html || buttonHtml(pTotal,'ellipsis-before');
+        ELSE
+            l_pages:='1,...';
+            l_html:=l_html || buttonHtml(1,'ellipsis-after');
+            /* Middle section */
+            FOR i IN pSelectedPage-2..LEAST(pSelectedPage+2,pTotal) LOOP
+                l_pages:=l_pages ||i||','; 
+                l_html:=l_html || buttonHtml(i);
+            END LOOP;
+            /* End section */
+            IF (pTotal-pSelectedPage<=4) THEN
+                FOR i IN pSelectedPage+3..pTotal LOOP
+                    l_pages:=l_pages ||i||','; 
+                    l_html:=l_html || buttonHtml(i);
+                END LOOP;
+            ELSE
+                l_pages:=l_pages ||'...,'||pTotal;
+                l_html:=l_html || buttonHtml(pTotal,'ellipsis-before');
+            END IF;
+        END IF;
+
+         IF (pSelectedPage<pTotal) THEN
+            l_html:=l_html || '<button type="button" data-page="' || TO_CHAR(pSelectedPage+1) || '"><span>Next >></span></button>';
+        END IF;
+
+        RETURN (l_html);
     END;
 
     /*
@@ -1096,6 +1148,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
 
         IF (pReport='list') THEN
             l_header:=
+            '<div>' ||
+                '<label for="report">Select Report</label>' ||
+                '<select id="report">' ||
+                    '<button>' ||
+                      '<selectedcontent></selectedcontent>' ||
+                      '<span class="arrow"></span>' ||
+                    '</button>' ||
+                    '<option value="1">Detailed visits</option>' ||
+                    '<option value="2">Detailed visits 2</option>' ||
+                '</select>' ||
+            '</div>' ||
             '<ul role="list" class="flex-items">' || 
                 '<li><button class="button" type="button" data-report="visits" data-report-type="table" data-button-variant="small">Visits</button></li>' ||
                 '<li><button class="button" type="button" data-report="trends" data-report-type="graph" data-button-variant="small">Trends</button></li>' ||
