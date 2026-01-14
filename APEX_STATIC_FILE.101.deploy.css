@@ -405,6 +405,15 @@ input:focus-visible {
   margin-block-start: var(--flow-space, 1em);
 }
 
+.chip {
+  font-size: 75%;
+  background: var(--color-theme-offset);
+  color: light-dark(white, black);
+  padding: 2px 4px;
+  border-radius: 0.25em;
+  margin-inline-start: 0.4em;
+}
+
 h1 {
   font-size: var(--step-4);
   overflow-wrap: break-word;
@@ -661,6 +670,7 @@ fieldset {
   /* Layout and spacing */
   display: var(--button-display);
   align-items: center;
+  justify-content: center;
   gap: var(--button-gap);
   padding: var(--button-padding);
   text-align: center;
@@ -700,6 +710,11 @@ fieldset {
   fill: var(--button-hover-color);
 }
 
+.button[aria-pressed="true"] {
+  background: var(--color-link);
+  color: var(--color-bg);
+}
+
 .button:not(.no-focus):focus-visible {
   outline-width: var(--button-outline-width, var(--button-border-width));
   outline-style: var(--button-outline-style, var(--button-border-style));
@@ -727,6 +742,7 @@ fieldset {
     --button-color: currentColor;
     --button-radius: 50%;
     --button-border-color: currentColor;
+    aspect-ratio: 1;
 }
 
 .button[data-button-variant="round-icon"] svg {
