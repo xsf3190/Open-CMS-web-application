@@ -50,6 +50,13 @@ const clickHandler = (e) => {
         tbody.insertAdjacentHTML('afterbegin',data.article);
         dialog_footer.replaceChildren();
         dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
+        const liveRegion = document.getElementById("notification");
+        /* Remove any existing child nodes */
+        while (liveRegion.firstChild) {
+            liveRegion.removeChild(liveRegion.firstChild);
+        }
+        const message = document.createTextNode(data.notification);
+        liveRegion.appendChild(message);
     })
     .catch((error) => {
         // handleError(error);
