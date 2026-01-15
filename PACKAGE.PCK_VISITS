@@ -4,9 +4,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_VISITS" AS
     --
     PROCEDURE ecology(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN NUMBER, pPage IN NUMBER, pStatus OUT NUMBER);
+    PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN NUMBER, pPage IN NUMBER, pHandler IN VARCHAR2, pStatus OUT NUMBER);
     --
-    FUNCTION pages(pSelectedPage IN NUMBER, pTotal IN NUMBER) RETURN VARCHAR2;
+    FUNCTION pagination(pSelectedPage IN NUMBER, pTotal IN NUMBER) RETURN VARCHAR2;
     --
     PROCEDURE uploadPageVisit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB);
     --
@@ -239,7 +239,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 VALUES (
                     pWebsiteid, pArticleid, l_session_id, TO_TIMESTAMP('1970-01-01','yyyy-mm-dd') + numtodsinterval(C.website_loaded,'second'), C.url, C.duration_visible, C.first_visit,
                     C.ttfb, C.ttfb_rating, C.fcp, C.fcp_rating, C.lcp, C.lcp_rating, C.cls, C.cls_rating, C.inp, C.inp_rating,
-                    C.referrer, l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname
+                    apex_string_util.get_domain(C.referrer), l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname
                 );
             ELSE
                 UPDATE page_hit
@@ -262,167 +262,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         pck_sec.updateCpuUsed(pWebsiteid=>pWebsiteid, pUserid=>null, pCpuUsedStart=>l_cpu_used_session);
 
     END;
-    
-    FUNCTION sql2Html (pSql IN VARCHAR2, pWebsiteId IN website.id%type, pUrl IN VARCHAR2, pOffset IN NUMBER) RETURN CLOB
-    IS
-        l_cur       NUMBER:=dbms_sql.open_cursor;
-        l_execute   NUMBER;
-        l_col_cnt    INTEGER;
-        rec_tab      DBMS_SQL.DESC_TAB;
-        l_flag       NUMBER;
-        l_varchar2   VARCHAR2 (4000);
-        l_date       DATE;
-        l_number     NUMBER;
-        l_html       CLOB;
-    BEGIN
-    --pck_core.log(pSql);
-        dbms_sql.parse(l_cur,pSql,dbms_sql.native);
-
-        dbms_sql.bind_variable(l_cur,':B1',pWebsiteId);
-        dbms_sql.bind_variable(l_cur,':B2',pUrl);
-        dbms_sql.bind_variable(l_cur,':B3',pOffset);
-
-
-        -- define columns
-        
-        dbms_sql.describe_columns (l_cur, l_col_cnt, rec_tab);
-        FOR i IN 1 .. l_col_cnt
-        LOOP
-            CASE rec_tab (i).col_type
-                 WHEN 1 THEN
-                    dbms_sql.define_column (l_cur,i,l_varchar2,2000);
-                 WHEN 2 THEN
-                    dbms_sql.define_column (l_cur, i, l_number);
-                 WHEN 12 THEN
-                    dbms_sql.define_column (l_cur, i, l_date);
-                 ELSE
-                    dbms_sql.define_column (l_cur,i,l_varchar2,2000);
-              END CASE;
-        END LOOP;
-
-        IF (pOffset=0) THEN
-            l_html:=
-            '<table role="presentation">' ||
-            '<thead><tr>';
-           FOR i IN 1 .. l_col_cnt
-           LOOP
-              l_html:=l_html || '<th>' || rec_tab (i).col_name || '</th>';
-           END LOOP;
-           l_html:=l_html || '</tr></thead><tbody>';
-        END IF;
-
-        l_execute:=dbms_sql.execute(l_cur);
-        
-       -- Print data fetched by query
-       LOOP
-          l_flag := dbms_sql.fetch_rows (l_cur);
-          EXIT WHEN l_flag = 0;
-          
-          l_html:=l_html || '<tr>';
-          FOR i IN 1 .. l_col_cnt
-          LOOP
-             CASE rec_tab(i).col_type
-                WHEN 1 THEN
-                   dbms_sql.column_value (l_cur, i, l_varchar2);
-                   l_html:=l_html || '<td>' || l_varchar2 || '</td>';
-                WHEN 2 THEN
-                   dbms_sql.column_value (l_cur, i, l_number);
-                   l_html:=l_html || '<td>' || l_number || '</td>';
-                WHEN 12 THEN
-                   dbms_sql.column_value (l_cur, i, l_date);
-                   l_html:=l_html || '<td>' || TO_CHAR (l_date, 'DD/MM/YYYY HH24:MI:SS') || '</td>';
-                ELSE
-                   l_html:=l_html || '<td>' || l_varchar2 || '</td>';
-             END CASE;
-          END LOOP;
-          l_html:=l_html || '</tr>';
-       END LOOP;
-
-        IF (pOffset=0) THEN
-            l_html:=l_html || '</tbody></table>';
-        END IF;
-
-       dbms_sql.close_cursor (l_cur);
-
-       RETURN (l_html);
-    END;
-
-    /*
-    **  EMAIL WEBSITE VISIT ANALYSIS
-    */
-    PROCEDURE sendmail(pWebsiteId IN website.id%type, pContent IN OUT NOCOPY CLOB) IS
-        l_json JSON_OBJECT_T;
-        l_payload CLOB;
-        l_clob CLOB;
-        l_body CLOB:='To view the content of this message, please use an HTML enabled mail client.'||utl_tcp.crlf;
-        l_body_html CLOB:=
-        '<!DOCTYPE html>
-         <html>
-            <head>
-                <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <meta name="format-detection" content="telephone=no">
-                <meta name="format-detection" content="date=no">
-                <meta name="format-detection" content="address=no">
-                <meta name="format-detection" content="email=no">
-                <style type="text/css">
-                    body {
-                        font-family:Georgia,sans-serif;
-                        font-size:1rem;
-                    }
-                    td,
-                    th {
-                        border: 1px solid rgb(190, 190, 190);
-                        padding: 0.5rem;
-                    }
-                    table {
-                        border-collapse: collapse;
-                        border: 2px solid rgb(200, 200, 200);
-                        width: 100%;
-                    }
-                    table + table {
-                        margin-top: 1rem;
-                    }
-                    thead {
-                        background-color: #d7d9f2;
-                    }
-                    td.centered {
-                        text-align: center;
-                        font-weight: 900;
-                    }
-                    td.centered > span {
-                        display: inline-block;
-                        padding: 4px;
-                    }
-                    .good {
-                        color: #000;
-                        background-color: #0cce6b;
-                    }
-                    .needs-improvement {
-                        color: #000;
-                        background-color: #ffa401;
-                    }
-                    .poor {
-                        color: #000;
-                        background-color: #ff4e41;
-                    }
-                </style>
-            </head>
-        <body>';
-    BEGIN
-        FOR C IN (SELECT NVL(w.contact_email, u.email) contact_email, w.domain_name FROM website w, users u where u.id=w.user_id AND w.id=pWebsiteId) LOOP
-            l_json:=new JSON_OBJECT_T;
-            l_json.put('contactEmail',C.contact_email);
-            l_json.put('subject','Website visits to '|| C.domain_name);
-            l_json.put('body', l_body_html || pContent || '</body></html>');
-            l_json.put('sourceEmail','visits@adfreesites.com');
-
-            l_payload:=l_json.stringify;
-            pck_api.callAWSemailAPI(pMethod=>'POST',pBody=>l_payload,pData=>l_clob);
-        END LOOP;
-
-        EXCEPTION WHEN OTHERS THEN pck_core.log_error;
-    END;
 
     /*
     ** Convert seconds to hms notation, e.g. 100 -> 1m40s
@@ -431,6 +270,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         t_ela_time apex_t_varchar2;
         l_ela_time VARCHAR2(13);
     BEGIN
+        IF (pSeconds IS NULL) THEN
+            RETURN(null);
+        END IF;
+
         IF (pSeconds>86399) THEN
             RETURN ('>24h');
         END IF;
@@ -448,52 +291,50 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         RETURN (LTRIM(l_ela_time));
     END;
 
-    FUNCTION pages(pSelectedPage IN NUMBER, pTotal IN NUMBER) RETURN VARCHAR2 IS
-        l_pages VARCHAR2(100);
+    FUNCTION pagination(pSelectedPage IN NUMBER, pTotal IN NUMBER) RETURN VARCHAR2 IS
         l_html LONG;
 
         FUNCTION buttonHtml(pPageNo IN NUMBER, pEllipsis IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
         BEGIN
             RETURN 
                 CASE WHEN pEllipsis='ellipsis-before' THEN '<span>...</span>' END || 
-                '<button type="button" class="button" data-button-variant="round-icon" data-page="' || pPageNo || '"><span>Page </span>' || pPageNo || '</button>' || 
+                '<button type="button" class="button" data-button-variant="round-icon" data-page="' || pPageNo || '" ' || CASE WHEN pPageNo=pSelectedPage THEN 'aria-pressed="true"' ELSE 'aria-pressed="false"' END|| '>' || pPageNo || '</button>' || 
                 CASE WHEN pEllipsis='ellipsis-after' THEN '<span>...</span>' END;
         END;
     BEGIN
+        l_html:=
+        '<div class="flex-items center" role="group" aria-label="Buttons to page through visits" tabindex="0">';
         IF (pSelectedPage>1) THEN
-            l_html:=l_html || '<button type="button" data-page="' || TO_CHAR(pSelectedPage-1) || '"><span><< Previous</span></button>';
+            l_html:=l_html || '<button type="button" class="button" data-page="' || TO_CHAR(pSelectedPage-1) || '"><< Previous</button>';
         END IF;
 
         IF (pSelectedPage<=5) THEN
             FOR i IN 1..LEAST(pSelectedPage+2,pTotal) LOOP
-                l_pages:=l_pages || i||',';
                 l_html:=l_html || buttonHtml(i);
             END LOOP;
-            l_pages:=l_pages ||'...,'||pTotal;
             l_html:=l_html || buttonHtml(pTotal,'ellipsis-before');
         ELSE
-            l_pages:='1,...';
             l_html:=l_html || buttonHtml(1,'ellipsis-after');
             /* Middle section */
             FOR i IN pSelectedPage-2..LEAST(pSelectedPage+2,pTotal) LOOP
-                l_pages:=l_pages ||i||','; 
                 l_html:=l_html || buttonHtml(i);
             END LOOP;
             /* End section */
             IF (pTotal-pSelectedPage<=4) THEN
                 FOR i IN pSelectedPage+3..pTotal LOOP
-                    l_pages:=l_pages ||i||','; 
                     l_html:=l_html || buttonHtml(i);
                 END LOOP;
             ELSE
-                l_pages:=l_pages ||'...,'||pTotal;
                 l_html:=l_html || buttonHtml(pTotal,'ellipsis-before');
             END IF;
         END IF;
 
          IF (pSelectedPage<pTotal) THEN
-            l_html:=l_html || '<button type="button" data-page="' || TO_CHAR(pSelectedPage+1) || '"><span>Next >></span></button>';
+            l_html:=l_html || '<button type="button" class="button"  data-page="' || TO_CHAR(pSelectedPage+1) || '">Next >></button>';
         END IF;
+
+        l_html:=l_html ||
+        '</div>';
 
         RETURN (l_html);
     END;
@@ -501,28 +342,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     /*
     **  Return log of all visits to website
     */
-    PROCEDURE getWebsiteVisits(pWebsiteId IN website.id%type, pOffset IN NUMBER, pTimeZone IN VARCHAR2, pCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
+    PROCEDURE getWebsiteVisits(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTimeZone IN VARCHAR2, pTotalPages IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
         l_content CLOB;
-        l_popover VARCHAR2(300);
-        l_rating VARCHAR2(7);
-        l_rating_popover VARCHAR2(1000);
-        l_total PLS_INTEGER;
-        l_ela_time VARCHAR2(11);
-        l_nb_pages PLS_INTEGER;
-        n PLS_INTEGER:=0;
+        l_offset NUMBER;
     BEGIN
-        IF (pOffset=0) THEN
-            SELECT COUNT(*) INTO l_nb_pages FROM website_article WHERE website_id=pWebsiteId;
+        l_offset:=(pPage-1)*ROWS_PER_PAGE;
 
+        SELECT CEIL(COUNT(DISTINCT session_id)/ROWS_PER_PAGE) INTO pTotalPages FROM page_hit WHERE website_id=pWebsiteId;
+        
+        IF (pPage=1 AND pHandler='change') THEN
             l_content:=
             '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
-                '<table role="presentation">' ||
+                '<table>' ||
                     '<caption id="table-caption">Visits</caption>' ||
                     '<thead>' ||
                         '<tr>' ||
                             '<th>When</th>' ||
-                            '<th>Location</th>' ||
-                            '<th>First</th>' ||
+                            '<th>Location and First Visit</th>' ||
                             '<th>Engagement</th>' ||
                             '<th>Referrer</th>' ||
                         '</tr>' ||
@@ -531,8 +367,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         END IF;
 
         FOR C IN (
-            SELECT  COUNT(*) OVER() total,
-                    COUNT(*) pages_viewed,
+            SELECT  COUNT(*) pages_viewed,
                     MAX(visit_date) visit_date,
                     MAX(first_visit) first_visit,
                     MAX(p.referrer) referrer, 
@@ -552,200 +387,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                AND w.id=pWebsiteid
              GROUP BY p.session_id
              ORDER BY visit_date DESC
-             OFFSET pOffset ROWS
+             OFFSET l_offset ROWS
              FETCH FIRST ROWS_PER_PAGE ROWS ONLY
         ) 
         LOOP
-            n:=n+1;
-            IF (n=1) THEN
-                pCount:=C.total;
-            END IF;
-            n:=pOffset+n;
 
             l_content:=l_content ||
                 '<tr>' ||
                     '<td>' || TO_CHAR(C.visit_date at time zone pTimeZone, 'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
-                    '<td>' || C.location || '</td>' ||
-                    '<td>' || CASE WHEN C.first_visit=1 THEN '&#9989;' END || '</td>' ||
+                    '<td>' || C.location || CASE WHEN C.first_visit=1 THEN '<span class="chip">First Visit</span>' END || '</td>' ||
                     '<td>' || elapsedTime(C.duration_visible) || CASE WHEN C.pages_viewed>1 THEN ' - ' || C.pages_viewed || ' pages' END || '</td>' ||
                     '<td>' || CASE WHEN INSTR(C.referrer,C.domain_name)=0 THEN C.referrer END || '</td>' ||
                 '</tr>';
         END LOOP;
 
-        IF (pOffset=0) THEN
+        IF (pPage=1) THEN
             l_content:=l_content || '</tbody></table></div>';
         END IF;
 
         pHtml:=l_content;
-    END;
-
-
-    PROCEDURE getPerformance(pWebsiteId IN website.id%type, pTimeZone IN VARCHAR2, pUrl IN VARCHAR2, pHtml IN OUT NOCOPY CLOB)  IS
-        l_start_date page_hit.visit_date%type;
-        l_end_date page_hit.visit_date%type;
-        l_days_diff NUMBER;
-        l_days_period PLS_INTEGER:=7;
-        l_title VARCHAR2(200);
-        l_legend VARCHAR2(200);
-        l_summary LONG;
-        l_graph CLOB;
-        l_y_axis_width PLS_INTEGER:=6; 
-        l_bar_width PLS_INTEGER:=7;
-        l_gap NUMBER;
-        l_start_x NUMBER;
-        l_footer VARCHAR2(2000);
-        l_table VARCHAR2(4000);
-
-        FUNCTION buildSVG(pTitle IN VARCHAR2, pScore IN NUMBER, pGood IN NUMBER, pNeedsImprovement in NUMBER, pPoor IN NUMBER) RETURN VARCHAR2 IS
-            l_cwv_score VARCHAR2(20);
-        BEGIN
-            l_cwv_score:=
-            CASE pTitle
-                WHEN 'Largest Contentful Paint' THEN
-                    CASE 
-                        WHEN pScore <= 2500 THEN 'good' 
-                        WHEN pScore <= 4000 THEN 'needs-improvement'
-                        ELSE 'poor'
-                    END
-                WHEN 'Content Layout Shift' THEN
-                    CASE 
-                        WHEN pScore <= 0.1 THEN 'good' 
-                        WHEN pScore <= 0.25 THEN 'needs-improvement'
-                        ELSE 'poor'
-                    END
-                WHEN 'Interaction to Next Paint' THEN
-                    CASE 
-                        WHEN pScore <= 200 THEN 'good' 
-                        WHEN pScore <= 500 THEN 'needs-improvement'
-                        ELSE 'poor'
-                    END
-            END; 
-            RETURN(
-                '<text x="0" y="10" class="metric-title">' || pTitle || '</text>' ||
-                '<text x="100" y="10" class="metric-score '|| l_cwv_score || '">' || CASE WHEN pTitle='Content Layout Shift' THEN TO_CHAR(pScore) ELSE elapsedTime(ROUND(pScore/1000)) END || '</text>' ||
-
-                '<rect x="0" y="20" width="' || pGood || '" height="25" class="good"/>' ||
-                CASE WHEN pGood>0 THEN
-                '<text x="' || ROUND(pGood/2) || '" y="32.5" class="metric">' || pGood || '%</text>'
-                END ||
-
-                '<rect x="' || pGood || '" y="20" width="' || pNeedsImprovement || '" height="25" class="needs-improvement"/>' ||
-                CASE WHEN pNeedsImprovement>0 THEN
-                '<text x="' || ROUND(pGood+(pNeedsImprovement/2)) || '" y="32.5" class="metric">' || pNeedsImprovement || '%</text>'
-                END ||
-
-                '<rect x="' || ROUND(100- pPoor) || '" y="20" width="' || pPoor || '" height="25" class="poor"/>' ||
-                CASE WHEN pPoor>0 THEN
-                '<text x="' || ROUND(100- pPoor + (pPoor/2)) || '" y="32.5" class="metric">' || pPoor || '%</text>' 
-                END ||
-                '</svg>'
-            );
-        END;
-    BEGIN
-        SELECT MIN(visit_date) start_date, MAX(visit_date) end_date, TRUNC(MAX(visit_date))-TRUNC(MIN(visit_date)) 
-          INTO l_start_date, l_end_date, l_days_diff
-          FROM page_hit
-         WHERE website_id=pWebsiteid
-           AND url=pUrl;
-
-        /*
-        ** OVERALL CWV RATINGS 
-        */
-
-        FOR C IN (
-            WITH 
-            sessions AS
-            (
-            SELECT MAX(first_visit) visit, 
-                MAX(lcp) lcp, MAX(cls) cls, MAX(inp) inp,  
-                MAX(lcp_rating) lcp_rating, MAX(cls_rating) cls_rating, MAX(inp_rating) inp_rating
-              FROM page_hit ph
-             WHERE ph.website_id=pWebsiteid
-               AND ph.url=pUrl
-             GROUP BY ph.session_id
-            ),
-            dataset AS
-            (
-            SELECT 'LCP' metric,lcp_rating rating, COUNT(*) value
-            FROM sessions p
-            WHERE p.visit=1
-            AND lcp_rating IS NOT NULL
-            GROUP BY lcp_rating
-            UNION ALL
-            SELECT 'CLS',cls_rating, COUNT(*)
-            FROM sessions p
-            WHERE p.visit=1
-            AND cls_rating IS NOT NULL
-            GROUP BY cls_rating
-            UNION ALL
-            SELECT 'INP',inp_rating, COUNT(*)
-            FROM sessions p
-            WHERE p.visit=1
-            AND inp_rating IS NOT NULL
-            GROUP BY inp_rating
-            ),
-            cwv AS
-            (
-            SELECT metric, rating, ROUND(RATIO_TO_REPORT(value) OVER (PARTITION BY metric)*100) pct
-            FROM dataset
-            ),
-            score AS
-            (
-            SELECT APPROX_PERCENTILE(0.75 DETERMINISTIC) WITHIN GROUP (ORDER BY lcp) lcp75, APPROX_PERCENTILE(0.90 DETERMINISTIC) WITHIN GROUP (ORDER BY lcp) lcp90,
-                APPROX_PERCENTILE(0.75 DETERMINISTIC) WITHIN GROUP (ORDER BY cls) cls75, APPROX_PERCENTILE(0.90 DETERMINISTIC) WITHIN GROUP (ORDER BY cls) cls90,
-                APPROX_PERCENTILE(0.75 DETERMINISTIC) WITHIN GROUP (ORDER BY inp) inp75, APPROX_PERCENTILE(0.90 DETERMINISTIC) WITHIN GROUP (ORDER BY inp) inp90
-            FROM sessions p
-            WHERE p.visit=1
-            GROUP BY p.visit
-            )
-            SELECT 
-                MAX(score.lcp75) lcp75, MAX(score.lcp90) lcp90, MAX(score.cls75) cls75, MAX(score.cls90) cls90, MAX(score.inp75) inp75, MAX(score.inp90) inp90,
-                MAX(CASE WHEN metric='LCP' AND rating='good' THEN pct ELSE 0 END) LCP_good, MAX(CASE WHEN metric='LCP' AND rating='needs-improvement' THEN pct ELSE 0 END) LCP_improve, MAX(CASE WHEN metric='LCP' AND rating='poor' THEN pct ELSE 0 END) LCP_poor,
-                MAX(CASE WHEN metric='CLS' AND rating='good' THEN pct ELSE 0 END) CLS_good, MAX(CASE WHEN metric='CLS' AND rating='needs-improvement' THEN pct  ELSE 0 END) CLS_improve, MAX(CASE WHEN metric='CLS' AND rating='poor' THEN pct ELSE 0 END) CLS_poor,
-                MAX(CASE WHEN metric='INP' AND rating='good' THEN pct ELSE 0 END) INP_good, MAX(CASE WHEN metric='INP' AND rating='needs-improvement' THEN pct  ELSE 0 END) INP_improve, MAX(CASE WHEN metric='INP' AND rating='poor' THEN pct ELSE 0 END) INP_poor
-            FROM cwv, score
-        ) LOOP
-            pHtml:=
-            '<div class="grid grid__auto_fit">' ||
-                '<svg viewBox="0 0 100 50" role="img">' ||
-                    '<style>' ||
-                        'text {' ||
-                            'font-family: system-ui;' ||
-                            'font-size: 20%;' ||
-                            'fill: white;' ||
-                            'dominant-baseline: central;' ||
-                            'text-anchor: middle;' ||
-                        '}' ||
-                        '.metric-title {' ||
-                            'fill: black;' ||
-                            'text-anchor: start;' ||
-                        '}' ||
-                        '.metric-score {' ||
-                            'text-anchor: end;' ||
-                            'font-weight: 900;' ||
-                        '}' ||
-                        '.metric {' ||
-                            'text-anchor: middle;' ||
-                            'font-weight: 750;' ||
-                        '}' ||
-                        '.good {' ||
-                            'fill: #355E3B;' ||
-                        '}' ||
-                        '.needs-improvement {' ||
-                            'fill: orange;' ||
-                        '}' ||
-                        '.poor {' ||
-                            'fill: red;' ||
-                        '}' ||
-                    '</style>' || 
-                    buildSVG('Largest Contentful Paint', C.lcp75, C.lcp_good, C.lcp_improve, C.lcp_poor) ||
-                    '<svg viewBox="0 0 100 50" role="img">' ||
-                    buildSVG('Content Layout Shift', C.cls75, C.cls_good, C.cls_improve, C.cls_poor) ||
-                    '<svg viewBox="0 0 100 50" role="img">' ||
-                    buildSVG('Interaction to Next Paint', C.inp75, C.inp_good, C.inp_improve, C.inp_poor) ||
-            '</div>';
-        END LOOP;
-        
     END;
 
     PROCEDURE getVisitsByLocation(pWebsiteId IN website.id%type, pOffset IN NUMBER, pUrl IN VARCHAR2, pCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB)  IS
@@ -870,283 +530,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         pHtml:=l_content;
     END;
 
-    PROCEDURE getEngagement(pWebsiteId IN website.id%type, pOffset IN NUMBER, pTimeZone IN VARCHAR2, pUrl IN VARCHAR2, pCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB)  IS
-        l_content CLOB;
-        n PLS_INTEGER:=0;
-    BEGIN
-        IF (pOffset=0) THEN
-            l_content:=
-            '<table role="presentation" style="font-size:var(--step--2)">' ||
-                '<caption style="padding-block-end:1rem"><span style="font-stretch:120%;font-weight:550">Engaged page views ordered by popularity for first time and repeat visitors</span>' ||
-                    '<br>Visitors are engaged when viewing content for more than 10 seconds' ||
-                    '<br>Bounce rate is percentage of all unengaged visits' ||
-                    '<br>Engagement is at 75 percentile across all visits' ||
-                '</caption>' ||
-                '<thead>' ||
-                    '<tr>' ||
-                        '<th>Page</th>' ||
-                        '<th>First Visit</th>' ||
-                        '<th>Repeat Visit</th>' ||
-                        '<th>Engagement</th>' ||
-                        '<th>Bounce</th>' ||
-                    '</tr>' ||
-                '</thead>' ||
-                '<tbody>';
-        END IF;
-
-        FOR C IN (
-            WITH pages AS
-                (
-                    SELECT navigation_label, article_id 
-                    FROM website_article 
-                    WHERE website_id=pWebsiteId
-                    UNION ALL
-                    SELECT wa.navigation_label || '/' || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(a.body_html,'<h[1-4]>(.+?)<\/h[1-4]>',1,1))), a.id 
-                    FROM website_article wa, article a
-                    WHERE a.parent_id=wa.article_id
-                    AND wa.website_id=pWebsiteId
-                ),
-                sessions AS
-                (
-                    SELECT p.navigation_label, MAX(first_visit) visit, SUM(CASE WHEN ph.duration_visible>10 THEN 1 ELSE 0 END) engaged, MAX(ph.duration_visible) duration_visible
-                      FROM pages p, page_hit ph
-                     WHERE ph.website_id=pWebsiteId
-                       AND ph.url=pUrl
-                       AND ph.article_id=p.article_id
-                     GROUP BY ph.visit_date, p.navigation_label
-                ),
-                dataset AS
-                (
-                    SELECT  navigation_label, SUM(CASE WHEN visit=1 AND engaged=1 THEN 1 ELSE 0 END) first_time, SUM(CASE WHEN visit>1 AND engaged=1 THEN 1 ELSE 0 END) repeat_visit, SUM(visit) total_visits, SUM(CASE WHEN engaged=0 THEN 1 ELSE 0 END) bounce, 
-                    APPROX_PERCENTILE(0.75 DETERMINISTIC) WITHIN GROUP (ORDER BY duration_visible) duration_visibleP75
-                    FROM sessions
-                    GROUP BY navigation_label 
-                )
-                SELECT navigation_label, first_time, RATIO_TO_REPORT(first_time) OVER () pct1, repeat_visit, RATIO_TO_REPORT(repeat_visit) OVER () pct2, ROUND((bounce/total_visits)*100) bounce_rate, COUNT(*) OVER () total, duration_visibleP75
-                FROM dataset 
-                ORDER BY 2 DESC
-                OFFSET pOffset ROWS
-                FETCH FIRST ROWS_PER_PAGE ROWS ONLY) 
-        LOOP
-            n:=n+1;
-            IF (n=1) THEN
-                pCount:=C.total;
-            END IF;
-            l_content:=l_content ||
-            '<tr>' ||
-                '<td>'|| C.navigation_label || '</td>' ||
-                '<td>'|| C.first_time || ' (' || CASE WHEN C.pct1<.01 THEN '<1' ELSE TO_CHAR(C.pct1*100,'fm990') END || '%)</td>' ||
-                '<td>'|| C.repeat_visit || ' (' || CASE WHEN C.pct2<.01 THEN '<1' ELSE TO_CHAR(C.pct2*100,'fm990') END || '%)</td>' ||
-                '<td>'|| elapsedTime(C.duration_visibleP75) ||'</td>' ||
-                '<td>'|| C.bounce_rate || '%</td>' ||
-            '</tr>';
-        END LOOP;
-
-        IF (pOffset=0) THEN
-            l_content:=l_content || 
-            '</tbody></table>';
-        END IF;
-
-        pHtml:=l_content;
-    END;
-
-    PROCEDURE getWebsiteTrends(pWebsiteId IN website.id%type, pTimeZone IN VARCHAR2, pUrl IN VARCHAR2, pHtml IN OUT NOCOPY CLOB) IS
-        l_end_date page_hit.visit_date%type;
-        l_days_diff NUMBER;
-        l_days_period PLS_INTEGER:=7;
-        l_title VARCHAR2(200);
-        l_legend VARCHAR2(200);
-        l_graph CLOB;
-        l_y_axis_width PLS_INTEGER:=6; 
-        l_bar_width PLS_INTEGER:=7;
-        l_gap NUMBER;
-        l_pct_total NUMBER;
-        l_pct_first NUMBER;
-        l_start_x NUMBER;
-        l_footer VARCHAR2(2000);
-        l_table VARCHAR2(4000);
-    BEGIN
-        SELECT MAX(visit_date) end_date, TRUNC(MAX(visit_date))-TRUNC(MIN(visit_date)) 
-          INTO l_end_date, l_days_diff
-          FROM page_hit
-         WHERE website_id=pWebsiteid
-           AND url=pUrl;
-
-        l_start_x:=l_y_axis_width+0.5;
-        l_gap:=(100-l_y_axis_width-0.5 -(10*l_bar_width))/9;
-
-        /* Depending on number of days since website has visits set reporting period to highest multiple of 7-day periods  */
-        IF (l_days_diff<147) THEN
-            l_days_period:=1;
-        ELSE
-            FOR i IN REVERSE 1..4  LOOP
-                IF (l_days_diff/(i*7)>=10) THEN
-                    l_days_period:=i*7;
-                    EXIT;
-                END IF;
-            END LOOP;
-        END IF;
-
-        l_title:='Website visits in ' || l_days_period || ' day periods';
-        l_legend:='Last visit recorded ' || TO_CHAR(l_end_date at time zone pTimeZone,'Mon dd, YYYY hh24:mipm');
-
-        l_graph:=
-        '<svg width="100%" aria-labelledby="graph-title graph-desc" role="img">' ||
-        '<style>' || 
-            '.y-axis {' ||
-                'stroke: slategrey;' ||
-                'stroke-width: 2;' ||
-            '}' ||
-            '.x-axis {' ||
-                 'stroke: slategrey;' ||
-                'stroke-width: 0.5;' ||
-            '}' ||
-            'text {' ||
-                'font-family:system-ui;' ||
-                'font-size: var(--step--1);' ||
-                'font-weight: 650;' ||
-            '}' ||
-            '.total {' ||
-                'fill: var(--color-primary-lighter);' ||
-            '}' ||
-            '.first {' ||
-                'fill: var(--color-primary);' ||
-            '}' ||
-            '.label {' ||
-               'font-size: var(--step--2);' ||
-            '}' ||
-            '@media (max-width: 640px) {' ||
-                '.x-axis {' ||
-                    'height:2.5lh;' ||
-                '}' ||
-                '.label {' ||
-                    'writing-mode: vertical-rl;' ||
-                    'font-size: 70%;' ||
-                '}' || 
-                '[dominant-baseline="hanging"] {' ||
-                    'visibility: hidden;' ||
-                '}' || 
-            '}' ||
-        '</style>' ||
-        '<title id="graph-title">Website visit trends</title>' ||
-        '<desc id="graph-desc">' || 'Website visits in ' || l_days_period || ' day periods</desc>' ||
-        '<text x="50%" y="30" dominant-baseline="middle" text-anchor="middle">' || l_title || '</text>' ||
-        '<text x="50%" y="70" dominant-baseline="middle" text-anchor="middle">' || l_legend || '</text>' ||
-        '<rect  x="33%" y="100" width="10%" height="50" class="total" />' ||
-        '<text x="38%" y="125" alignment-baseline="middle" text-anchor="middle" fill="white" stroke="white" >Total</text>' ||
-        '<rect  x="50%" y="100" width="10%" height="50" class="first" />' ||
-        '<text x="55%" y="125" alignment-baseline="middle" text-anchor="middle" fill="white" stroke="white" >First</text>' ||
-        '</svg>';
-        
-        FOR C IN (
-            WITH end_date AS
-            (
-                SELECT l_end_date-((level-1) * l_days_period) end_date
-                FROM dual CONNECT BY level<=CASE WHEN l_days_period=1 THEN 10 ELSE l_days_period END
-            ),
-            range AS
-            (
-                SELECT end_date + INTERVAL '1' SECOND start_date, LEAD(end_date) OVER (ORDER BY end_date) end_date 
-                FROM end_date
-            ),
-            website_hit AS
-            (
-                SELECT p.visit_date, SUM(p.first_visit) visit_count, COUNT(*) visits, MAX(lcp) lcp, MAX(cls) cls, MAX(inp) inp
-                FROM page_hit p
-                WHERE p.website_id=pWebsiteid
-                AND url=pUrl
-                GROUP BY p.session_id, p.visit_date
-            ),
-            dataset AS
-            (
-            SELECT start_date, end_date, 
-                SUM(visits) total_visits, 
-                SUM(CASE WHEN visit_count=1 THEN 1 ELSE 0 END) first_time_visits, 
-                APPROX_PERCENTILE(0.75 DETERMINISTIC) WITHIN GROUP (ORDER BY lcp) lcp75,
-                APPROX_PERCENTILE(0.75 DETERMINISTIC) WITHIN GROUP (ORDER BY cls) cls75,
-                APPROX_PERCENTILE(0.75 DETERMINISTIC) WITHIN GROUP (ORDER BY inp) inp75
-            FROM range, website_hit p
-            WHERE p.visit_date BETWEEN start_date AND end_date
-            AND end_date IS NOT NULL
-            GROUP BY start_date, end_date
-            ORDER BY end_date DESC NULLS LAST
-                FETCH FIRST 10 ROWS ONLY
-            )
-            SELECT start_date, end_date, total_visits, first_time_visits, lcp75, cls75, inp75, 
-                MAX(total_visits) OVER () max_visits, 
-                ROW_NUMBER() OVER (ORDER BY start_date) rn,
-                COUNT(*) OVER () nb
-            FROM dataset
-            ORDER BY start_date
-        )
-        LOOP
-            IF (C.rn=1) THEN
-                l_graph:=l_graph || 
-                '<svg width="100%" height="60vh" role="img">';
-                
-                /* Draw Y-axis */
-                l_graph:=l_graph || 
-                '<!-- Y AXIS -->' ||
-                '<line x1="' || l_y_axis_width || '%" y1="0%" x2="' || l_y_axis_width || '%" y2="100%" class="y-axis"/>';
-
-                /* Draw horizontal lines for each 20% of max visits in computed range */
-                FOR i IN 1..5 LOOP
-                    l_graph:=l_graph || CASE WHEN i=1 THEN '<!-- Y AXIS LABELS -->' END ||
-                    '<line x1="6%" y1="' || TO_CHAR((i-1)*20) || '%" x2="100%" y2="' || TO_CHAR((i-1)*20) || '%" class="x-axis"/>' ||
-                    '<text x="3%" y="' || TO_CHAR((i-1)*20) || '%" dominant-baseline="' || CASE WHEN i=1 THEN 'hanging' ELSE 'central' END || '" text-anchor="middle" class="label">' || ROUND(C.max_visits*(100-((i-1)*20))/100) || '</text>';
-                END LOOP;
-            END IF;
-
-            l_pct_total:=C.total_visits/C.max_visits*100;
-            l_pct_first:=C.first_time_visits/C.max_visits*100;
-            
-
-            /* Draw bar chart using percentages */
-            l_graph:=l_graph || CASE WHEN C.rn=1 THEN '<!-- BAR CHART -->' END ||
-            '<rect x="' || l_start_x || '%" y="' || ROUND(100-l_pct_total,2) || '%" width="' || l_bar_width || '%" height="' || ROUND(l_pct_total,2) || '%" class="total"/>' || 
-            '<rect x="' || l_start_x || '%" y="' || ROUND(100-l_pct_first,2) || '%" width="' || l_bar_width || '%" height="' || ROUND(l_pct_first,2) || '%" class="first"/>';
-
-            l_table:=l_table || 
-            '<tr><td>' || TO_CHAR(C.start_date,'Mon dd yy hh24:mi:ss') || '</td><td>' || TO_CHAR(C.end_date at time zone pTimeZone,'Mon dd yy hh24:mi:ss') || '</td><td>' || C.total_visits || '</td><td>' || C.first_time_visits || '</td></tr>';
-
-            /* Print dates in footer */
-            l_footer:=l_footer || CASE WHEN C.rn=1 THEN '<!-- X AXIS LABELS -->' END ||
-            '<text x="' || TO_CHAR(l_start_x+1) || '%" y="15" dominant-baseline="middle" text-anchor="start" class="label">' || TO_CHAR(C.end_date at time zone pTimeZone,'fmMon dd') || '</text>';
-
-            IF (C.rn=C.nb) THEN
-                l_graph:=l_graph || 
-                '</svg>' ||
-                '<svg width="100%" height="1lh" role="img" class="x-axis">' || 
-                     l_footer || 
-                '</svg>' ||
-                '<table style="text-align:center">' ||
-                    '<thead><tr><th>Start</th><th>End</th><th>Total Visits</th><th>First Time Visits</th></tr></thead>' || 
-                    '<tbody>' || l_table || '</tbody>' ||
-                '</table>';
-            ELSE
-                l_start_x:=ROUND(l_start_x+l_bar_width+l_gap,2);
-            END IF;
-
-        END LOOP;
-
-        pHtml:=l_graph;
-    END;
-
     /* 
     **  ENTRY POINT FOR ALL VISIT REPORTS
     */
-    PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN VARCHAR2, pOffset IN NUMBER, pStatus OUT NUMBER) IS
+    PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN NUMBER, pPage IN NUMBER, pHandler IN VARCHAR2, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
-        l_count NUMBER;
+        l_total_pages NUMBER;
         l_json JSON_OBJECT_T;
-        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        IF (pReport='list') THEN
+        IF (pPage=1) THEN
             l_header:=
             '<div>' ||
                 '<label for="report">Select Report</label>' ||
@@ -1155,46 +552,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                       '<selectedcontent></selectedcontent>' ||
                       '<span class="arrow"></span>' ||
                     '</button>' ||
-                    '<option value="1">Detailed visits</option>' ||
-                    '<option value="2">Detailed visits 2</option>' ||
+                    '<option value="1" selected>' ||
+                        '<div>Detailed visits</div>' ||
+                        '<div class="info">Some detailed explanation</div>' ||
+                    '</option>' ||
+                    '<option value="2">' ||
+                        '<div>Browsers</div>' ||
+                        '<div class="info">Some detailed explanation of browsers</div>' ||
+                    '</option>' ||
                 '</select>' ||
-            '</div>' ||
-            '<ul role="list" class="flex-items">' || 
-                '<li><button class="button" type="button" data-report="visits" data-report-type="table" data-button-variant="small">Visits</button></li>' ||
-                '<li><button class="button" type="button" data-report="trends" data-report-type="graph" data-button-variant="small">Trends</button></li>' ||
-                '<li><button class="button" type="button" data-report="performance" data-report-type="graph" data-button-variant="small">Performance</button></li>' ||
-               -- '<li><button class="button" type="button" data-report="engagement" data-report-type="table" data-button-variant="small">Engagement</button></li>' ||
-                '<li><button class="button" type="button" data-report="location" data-report-type="table" data-button-variant="small">Locations</button></li>' ||
-                '<li><button class="button" type="button" data-report="browser" data-report-type="table" data-button-variant="small">Browsers</button></li>' ||
-            '</ul>';
-            l_article:=
-            '<h4>Real User Monitoring</h4>' ||
-            '<p>When visitors download your website we capture details about their experience, one of the most important being how long they had to wait before being able to view the content.</p>' ||
-            '<p>Equally important is how long they engaged with the content.</p>' ||
-            '<p>Was it their first visit? How many pages did they view? How were they referred to the site? How much data was downloaded? What was their location and connection speed?</p>' ||
-            '<p>Real User Monitoring collects these details so that owners can measure their site performance as experienced by real users.</p>';
-            l_footer:=
-            '<span></span>' ||
-            '<button type="button" class="button show-more visually-hidden" data-button-variant="no-styles">More &gt;&gt;</button>';
-        ELSE
-            CASE pReport
-                WHEN 'visits' THEN getWebsiteVisits(pWebsiteId, pOffset, l_session_data.timezone, l_count, l_article);
-                WHEN 'performance' THEN getPerformance(pWebsiteId, l_session_data.timezone, l_session_data.url, l_article);
-                WHEN 'location' THEN getVisitsByLocation(pWebsiteId, pOffset, l_session_data.url, l_count, l_article);
-                WHEN 'browser' THEN getVisitsByBrowser(pWebsiteId, pOffset, l_session_data.url, l_count, l_article);
-                WHEN 'engagement' THEN getEngagement(pWebsiteId, pOffset, l_session_data.timezone, l_session_data.url, l_count, l_article);
-                WHEN 'trends' THEN getWebsiteTrends(pWebsiteId, l_session_data.timezone, l_session_data.url, l_article);
-            END CASE;
+            '</div>';
         END IF;
+
+        getWebsiteVisits(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages, l_article);
 
         l_json:= new JSON_OBJECT_T;
         
         l_json.put('success',true);
         l_json.put('header', l_header);
         l_json.put('article', l_article);
-        l_json.put('footer', l_footer);
-        l_json.put('count', l_count);
-        l_json.put('offset', pOffset + ROWS_PER_PAGE);
+        l_json.put('footer', pagination(pPage,l_total_pages));
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
