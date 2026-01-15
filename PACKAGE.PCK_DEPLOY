@@ -298,7 +298,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                         '</button>' ||
                     '</header>' ||
                     '<article class="flow"></article>' ||
-                    '<footer class="flex-items space-between">' ||
+                    '<footer>' ||
                     '</footer>' ||
                 '</form>' ||
              '</dialog>');
