@@ -447,27 +447,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 END IF;
 
                 l_footer:=
-                '<button type="button" class="button publish" data-env="TEST">PUBLISH</button>' ||
-                '<span aria-live="polite"></span>' ||
-                '<span class="loader icon"></span>';
+                '<div class="flex-items space-apart">' ||
+                    '<button type="button" class="button publish" data-env="TEST">PUBLISH</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                    '<span class="loader icon"></span>' ||
+                '</div>';
             ELSIF (C.netlify_last_published>NVL(C.netlify_last_published_custom, C.netlify_last_published)) THEN
                 l_header:='<h4>PUBLISH LIVE SITE</h4>';
                 l_article:=
                 '<p>Editor site is published with all content up to date.</p>' ||
                 '<p>Click GO LIVE button</p>';
                 l_footer:=
-                '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>' ||
-                '<span aria-live="polite"></span>' ||
-                '<span class="loader icon"></span>';
+                '<div class="flex-items space-apart">' ||
+                    '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                    '<span class="loader icon"></span>' ||
+                '</div>';
             ELSIF (C.netlify_last_published_custom IS NULL) THEN
                 l_header:='<h4>PUBLISH LIVE SITE</h4>';
                 l_article:=
                 '<p>Editor site is published with all content up to date.</p>' ||
                 '<p>Click GO LIVE button</p>';
                 l_footer:=
-                '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>' ||
-                '<span aria-live="polite"></span>' ||
-                '<span class="loader icon"></span>';
+                '<div class="flex-items space-apart">' ||
+                    '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                    '<span class="loader icon"></span>' ||
+                '</div>';
             ELSE
                 l_header:='ALL CONTENT PUBLISHED';
                 l_article:='<p>NOTHING NEW TO PUBLISH</p>';
