@@ -121,7 +121,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             SELECT o.label, o.uri_template, o.method
               FROM ords_endpoints o
              WHERE INSTR(o.uri_template,'authenticate')>0
-                OR INSTR(o.uri_template,'ecology')>0
         ) LOOP
             l_dropdown:=l_dropdown ||
             pck_sec.addMenuButton(C.uri_template, C.method, C.label);
