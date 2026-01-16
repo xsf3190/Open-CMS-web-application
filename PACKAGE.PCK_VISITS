@@ -304,8 +304,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     BEGIN
         l_html:=
         '<div class="flex-items center" role="group" aria-label="Buttons to page through visits" tabindex="0">';
+
+        IF (pTotal<=7) THEN
+            FOR i IN 1..pTotal LOOP
+                l_html:=l_html || buttonHtml(i);
+            END LOOP;
+            l_html:=l_html || '</div>';
+            RETURN (l_html);
+        END IF;
+
         IF (pSelectedPage>1) THEN
-            l_html:=l_html || '<button type="button" class="button" data-page="' || TO_CHAR(pSelectedPage-1) || '"><< Previous</button>';
+            l_html:=l_html || '<button type="button" class="button" style="--button-font-size:70%" data-page="' || TO_CHAR(pSelectedPage-1) || '"><< Previous</button>';
         END IF;
 
         IF (pSelectedPage<=5) THEN
@@ -330,7 +339,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         END IF;
 
          IF (pSelectedPage<pTotal) THEN
-            l_html:=l_html || '<button type="button" class="button"  data-page="' || TO_CHAR(pSelectedPage+1) || '">Next >></button>';
+            l_html:=l_html || '<button type="button" class="button" style="--button-font-size:70%" data-page="' || TO_CHAR(pSelectedPage+1) || '">Next >></button>';
         END IF;
 
         l_html:=l_html ||
@@ -344,21 +353,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     */
     PROCEDURE getWebsiteVisits(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTimeZone IN VARCHAR2, pTotalPages IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
         l_content CLOB;
+        l_count NUMBER;
         l_offset NUMBER;
     BEGIN
         l_offset:=(pPage-1)*ROWS_PER_PAGE;
 
-        SELECT CEIL(COUNT(DISTINCT session_id)/ROWS_PER_PAGE) INTO pTotalPages FROM page_hit WHERE website_id=pWebsiteId;
+        SELECT COUNT(DISTINCT session_id) INTO l_count FROM page_hit WHERE website_id=pWebsiteId;
+        pTotalPages:=CEIL(l_count/ROWS_PER_PAGE);
         
         IF (pPage=1 AND pHandler='change') THEN
             l_content:=
             '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
                 '<table>' ||
-                    '<caption id="table-caption">Visits</caption>' ||
+                    '<caption id="table-caption">' || l_count || ' total site visits</caption>' ||
                     '<thead>' ||
                         '<tr>' ||
                             '<th>When</th>' ||
-                            '<th>Location and First Visit</th>' ||
+                            '<th>Location<span class="chip">First Visit</span></th>' ||
                             '<th>Engagement</th>' ||
                             '<th>Referrer</th>' ||
                         '</tr>' ||
@@ -408,15 +419,87 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         pHtml:=l_content;
     END;
 
-    PROCEDURE getVisitsByLocation(pWebsiteId IN website.id%type, pOffset IN NUMBER, pUrl IN VARCHAR2, pCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB)  IS
+    /*
+    **  First time vidits
+    */
+    PROCEDURE getWebsiteVisitsFirst(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTimeZone IN VARCHAR2, pTotalPages IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
+        l_content CLOB;
+        l_offset NUMBER;
+        l_count NUMBER;
+    BEGIN
+        l_offset:=(pPage-1)*ROWS_PER_PAGE;
+
+        SELECT COUNT(DISTINCT session_id) INTO l_count FROM page_hit WHERE website_id=pWebsiteId AND first_visit=1;
+        pTotalPages:=CEIL(l_count/ROWS_PER_PAGE);
+        
+        IF (pPage=1 AND pHandler='change') THEN
+            l_content:=
+            '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+                '<table>' ||
+                    '<caption id="table-caption">' || l_count|| ' first time visits with initial page weight and seconds loaded</caption>' ||
+                    '<thead>' ||
+                        '<tr>' ||
+                            '<th>When</th>' ||
+                            '<th>Location</th>' ||
+                            '<th>Page Weight</th>' ||
+                            '<th>Loaded</th>' ||
+                            '<th>Connection</th>' ||
+                            '<th>Browser</th>' ||
+                        '</tr>' ||
+                    '</thead>' ||
+                    '<tbody>';
+        END IF;
+
+        FOR C IN (
+            SELECT  MAX(visit_date) visit_date,
+                    ROUND(NVL(MAX(p.LCP)/1000,MAX(p.FCP)/1000),1) loaded,
+                    MAX(p.page_weight) page_weight, 
+                    MAX(p.browser) browser, 
+                    MAX(p.location) location, 
+                    MAX(p.connection) || CASE WHEN MAX(p.mobile)='true' THEN '(mobile)' END connection
+              FROM page_hit p
+             WHERE p.website_id=pWebsiteid
+             GROUP BY p.session_id
+             HAVING MAX(first_visit)=1
+             ORDER BY visit_date DESC
+             OFFSET l_offset ROWS
+             FETCH FIRST ROWS_PER_PAGE ROWS ONLY
+        ) 
+        LOOP
+            l_content:=l_content ||
+                '<tr>' ||
+                    '<td>' || TO_CHAR(C.visit_date at time zone pTimeZone, 'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
+                    '<td>' || C.location || '</td>' ||
+                    '<td>' || apex_string_util.to_display_filesize(C.page_weight) || '</td>' ||
+                    '<td>' || CASE WHEN C.loaded IS NOT NULL THEN TO_CHAR(C.loaded,'fm90D0') ||  ' s' END || '</td>' ||
+                    '<td>' || C.connection || '</td>' ||
+                    '<td>' || C.browser || '</td>' ||
+                '</tr>';
+        END LOOP;
+
+        IF (pPage=1 AND pHandler='change') THEN
+            l_content:=l_content || '</tbody></table></div>';
+        END IF;
+
+        pHtml:=l_content;
+    END;
+
+    PROCEDURE getVisitsByLocation(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTotalPages IN OUT NUMBER, pRowCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB)  IS
         l_content CLOB;
         n PLS_INTEGER:=0;
+        l_offset NUMBER;
+        l_count NUMBER;
     BEGIN
-        IF (pOffset=0) THEN
+        l_offset:=(pPage-1)*ROWS_PER_PAGE;
+
+        SELECT COUNT(DISTINCT SUBSTR(location,INSTR(location,',')+1)) INTO l_count FROM page_hit WHERE website_id=pWebsiteId;
+        pTotalPages:=CEIL(l_count/ROWS_PER_PAGE);
+        
+        IF (pPage=1 AND pHandler='change') THEN
             l_content:=
             '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
-                '<caption id="table-caption">Visits by Country code</caption>' ||
+                '<caption id="table-caption">Visits from ' || l_count || ' distinct countries</caption>' ||
                 '<thead>' ||
                     '<tr>' ||
                         '<th>Location</th>' ||
@@ -430,54 +513,52 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         END IF;
 
         FOR C IN (
-                    SELECT location, first_visit_date, last_visit_date, nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
-                    FROM
-                        (
-                        SELECT SUBSTR(location,INSTR(location,',')+1) location, MIN(first_visit_date) first_visit_date, MAX(last_visit_date) last_visit_date, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
-                          FROM 
-                          (
-                            SELECT MAX(location) location, MIN(visit_date) first_visit_date, MAX(visit_date) last_visit_date
-                            FROM page_hit 
-                            WHERE website_id=pWebsiteId
-                            GROUP BY session_id
-                          )
-                         GROUP BY SUBSTR(location,INSTR(location,',')+1)
-                        )
-                    ORDER BY nb_visits DESC, location
-                    OFFSET pOffset ROWS
-                    FETCH FIRST ROWS_PER_PAGE ROWS ONLY
-            ) LOOP
-                n:=n+1;
-                IF (n=1) THEN
-                    pCount:=C.total;
-                END IF;
-                l_content:=l_content || 
-                '<tr>' ||
-                    '<td>' || C.location || '</td>' || 
-                    '<td>' || C.nb_visits || '</td>' || 
-                    '<td>' || TO_CHAR(C.pct*100,'fm990D00') || '%</td>' ||
-                    '<td>' || TO_CHAR(C.first_visit_date,'dd Mon yyyy') || '</td>' ||
-                    '<td>' || TO_CHAR(C.last_visit_date,'dd Mon yyyy') || '</td>' ||
-                '</tr>';
-            END LOOP;
+            SELECT location, first_visit_date, last_visit_date, nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
+            FROM
+                (
+                SELECT SUBSTR(location,INSTR(location,',')+1) location, MIN(visit_date) first_visit_date, MAX(visit_date) last_visit_date, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
+                  FROM page_hit 
+                 WHERE website_id=pWebsiteId
+                 GROUP BY SUBSTR(location,INSTR(location,',')+1)
+                )
+            ORDER BY nb_visits DESC, location
+            OFFSET l_offset ROWS
+            FETCH FIRST ROWS_PER_PAGE ROWS ONLY
+        ) LOOP
+            l_content:=l_content || 
+            '<tr>' ||
+                '<td>' || C.location || '</td>' || 
+                '<td>' || C.nb_visits || '</td>' || 
+                '<td>' || TO_CHAR(C.pct*100,'fm990D00') || '%</td>' ||
+                '<td>' || TO_CHAR(C.first_visit_date,'dd Mon yyyy') || '</td>' ||
+                '<td>' || TO_CHAR(C.last_visit_date,'dd Mon yyyy') || '</td>' ||
+            '</tr>';
+        END LOOP;
 
-        IF (pOffset=0) THEN
+        IF (pPage=1 AND pHandler='change') THEN
             l_content:=l_content || 
             '</tbody></table></div>';
         END IF;
 
+        pRowCount:=l_count;
         pHtml:=l_content;
     END;
 
-    PROCEDURE getVisitsByBrowser(pWebsiteId IN website.id%type, pOffset IN NUMBER, pUrl IN VARCHAR2, pCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB)  IS
+    PROCEDURE getVisitsByBrowser(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTotalPages IN OUT NUMBER, pRowCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB)  IS
         l_content CLOB;
-        n PLS_INTEGER:=0;
+        l_offset NUMBER;
+        l_count NUMBER;
     BEGIN
-        IF (pOffset=0) THEN
+        l_offset:=(pPage-1)*ROWS_PER_PAGE;
+
+        SELECT COUNT(DISTINCT browser) INTO l_count FROM page_hit WHERE website_id=pWebsiteId AND browser IS NOT NULL;
+        pTotalPages:=CEIL(l_count/ROWS_PER_PAGE);
+        
+        IF (pPage=1 AND pHandler='change') THEN
             l_content:=
             '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
-                '<caption id="table-caption">Visits by Browser / Device</caption>' ||
+                '<caption id="table-caption">Site visited by ' || l_count|| ' distinct browser, operating systems</caption>' ||
                 '<thead>' ||
                     '<tr>' ||
                         '<th>Browser</th>' ||
@@ -494,24 +575,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                    SELECT browser, first_visit_date, last_visit_date, nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
                     FROM
                         (
-                        SELECT browser, MIN(first_visit_date) first_visit_date, MAX(last_visit_date) last_visit_date, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
-                          FROM 
-                          (
-                            SELECT MAX(browser) browser, MIN(visit_date) first_visit_date, MAX(visit_date) last_visit_date
-                            FROM page_hit 
-                            WHERE website_id=pWebsiteId
-                            GROUP BY session_id
-                          )
+                        SELECT browser, MIN(visit_date) first_visit_date, MAX(visit_date) last_visit_date, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
+                          FROM page_hit 
+                         WHERE website_id=pWebsiteId
+                           AND browser IS NOT NULL
                          GROUP BY browser
                         )
                     ORDER BY nb_visits DESC, browser
-                    OFFSET pOffset ROWS
+                    OFFSET l_offset ROWS
                     FETCH FIRST ROWS_PER_PAGE ROWS ONLY
             ) LOOP
-                n:=n+1;
-                IF (n=1) THEN
-                    pCount:=C.total;
-                END IF;
                 l_content:=l_content || 
                 '<tr>' ||
                     '<td>' || C.browser || '</td>' || 
@@ -522,11 +595,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 '</tr>';
             END LOOP;
 
-        IF (pOffset=0) THEN
+        IF (pPage=1 AND pHandler='change') THEN
             l_content:=l_content || 
             '</tbody></table></div>';
         END IF;
 
+        pRowCount:=l_count;
         pHtml:=l_content;
     END;
 
@@ -539,6 +613,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_article CLOB;
         l_footer LONG;
         l_total_pages NUMBER;
+        l_row_count NUMBER;
+        l_notification VARCHAR2(50);
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -547,31 +623,63 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             l_header:=
             '<div>' ||
                 '<label for="report">Select Report</label>' ||
-                '<select id="report">' ||
+                '<select id="report" class="select-analytics">' ||
                     '<button>' ||
                       '<selectedcontent></selectedcontent>' ||
                       '<span class="arrow"></span>' ||
                     '</button>' ||
                     '<option value="1" selected>' ||
-                        '<div>Detailed visits</div>' ||
-                        '<div class="info">Some detailed explanation</div>' ||
+                        '<div class="chip" aria-hidden="true">Sessions</div>' ||
+                        '<div>' ||    
+                            '<div class="heading">Site visits</div>' ||
+                            '<div class="detail">When, where, engagement, referrer</div>' ||
+                        '</div>' ||
                     '</option>' ||
                     '<option value="2">' ||
-                        '<div>Browsers</div>' ||
-                        '<div class="info">Some detailed explanation of browsers</div>' ||
+                        '<div class="chip" aria-hidden="true">First</div>' ||
+                        '<div>' ||    
+                            '<div class="heading">First time visits</div>' ||
+                            '<div class="detail">When, where, page weight, load time, connection speed</div>' ||
+                        '</div>' ||
+                    '</option>' ||
+                    '<option value="3">' ||
+                        '<div class="chip" aria-hidden="true">Countries</div>' ||
+                        '<div>' ||    
+                            '<div class="heading">Visits by Country</div>' ||
+                            '<div class="detail">Visit counts by country code including date of first and last visit</div>' ||
+                        '</div>' ||
+                    '</option>' ||
+                    '<option value="4">' ||
+                        '<div class="chip" aria-hidden="true">Browsers</div>' ||
+                        '<div>' ||    
+                            '<div class="heading">Visits by Browser / operating system</div>' ||
+                            '<div class="detail">Visit counts by browser including date of first and last visit</div>' ||
+                        '</div>' ||
                     '</option>' ||
                 '</select>' ||
             '</div>';
         END IF;
 
-        getWebsiteVisits(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages, l_article);
+        CASE pReport
+            WHEN 1 THEN
+                getWebsiteVisits(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages, l_article);
+            WHEN 2 THEN
+                getWebsiteVisitsFirst(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages, l_article);
+            WHEN 3 THEN
+                getVisitsByLocation(pWebsiteId, pPage, pHandler, l_total_pages, l_row_count, l_article);
+            WHEN 4 THEN
+                getVisitsByBrowser(pWebsiteId, pPage, pHandler, l_total_pages, l_row_count, l_article);
+        END CASE;
+
+        l_notification:=(pPage-1)*ROWS_PER_PAGE+1 || ' through ' || LEAST(l_row_count,pPage*ROWS_PER_PAGE);
 
         l_json:= new JSON_OBJECT_T;
         
         l_json.put('success',true);
         l_json.put('header', l_header);
         l_json.put('article', l_article);
-        l_json.put('footer', pagination(pPage,l_total_pages));
+        l_json.put('footer', pagination(pPage,l_total_pages) || '<div class="flex-items center" id="notification" aria-live="assertive"></div>');
+        l_json.put('notification','Showing rows ' || l_notification);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
