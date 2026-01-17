@@ -13,6 +13,9 @@ const forceLogout = () => {
     window.location.reload();
 }
 
+/* 
+** COMMON ERROR HANDLER FOR IMPORTING MODULES
+*/
 const handleError = (error) => {
     sessionStorage.clear();
     localStorage.clear();
@@ -80,6 +83,8 @@ const callAPI = async (endpoint, method, data) => {
       url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
       let refresh_headers = new Headers();
       refresh_headers.append("Content-Type", "application/json");
+      refresh_headers.append("url", window.location.hostname);
+      refresh_headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
       refresh_headers.append("Authorization","Bearer " + refresh_token);
       const refresh_config = {method: "GET", headers: refresh_headers};
       const refresh_response = await fetch(url, refresh_config);
