@@ -1,0 +1,121 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_TEST" as
+    --
+    ACCESS_TOKEN_EXP CONSTANT PLS_INTEGER:=60*5; -- 5 MINUTES
+    --
+    TYPE t_session_data IS RECORD (
+        url VARCHAR2(100),
+        timezone VARCHAR2(30),
+        user_id NUMBER,
+        scope VARCHAR2(7),
+        iss VARCHAR2(10),
+        sub VARCHAR2(100),
+        client_secret user_ords_clients.client_secret%type,
+        cpu_used_session NUMBER
+    );
+    ---
+    FUNCTION getSessionData(pWebsiteId IN website.id%type, pBearerToken IN VARCHAR2) RETURN t_session_data;
+    --
+    PROCEDURE test(pWebsiteid in number, pBearerToken IN VARCHAR2, pStatus OUT NUMBER);
+end;
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_TEST" as
+
+    FUNCTION getSessionData(pWebsiteId IN website.id%type, pBearerToken IN VARCHAR2) RETURN t_session_data IS
+        l_session_data t_session_data;
+        l_bearer_token varchar2(500);
+        l_token APEX_JWT.T_TOKEN;
+        l_errors BOOLEAN;
+        l_message VARCHAR2(50);
+        n pls_integer;
+
+        invalid_token  EXCEPTION;
+        PRAGMA EXCEPTION_INIT (invalid_token, -20099);
+
+    BEGIN
+        l_bearer_token:=pBearerToken;
+
+        l_errors:=TRUE;
+        l_message:='decoding bearer_token';
+
+        /*
+        **  Calls to APEX_JWT raise VALUE_ERROR
+        */
+
+        l_token:=apex_jwt.DECODE(p_value=>l_bearer_token, p_signature_key=>null);
+
+        FOR C IN (
+            SELECT j.iss, j.sub, j.aud, j.iat, j.exp, j.jti, j.cld_cloud_name, j.cld_upload_preset, NVL(o.client_secret,'x') client_secret, w.contact_email
+              FROM JSON_TABLE(l_token.payload, '$' COLUMNS(iss, sub, aud, iat, exp, jti, cld_cloud_name, cld_upload_preset)) j, user_ords_clients o, website w
+             WHERE j.sub=o.name(+)
+               AND w.id=pWebsiteid
+        ) LOOP
+            l_message:='checking issuer is valid';
+            IF (C.iss<>'ORDS.'||pWebsiteid) THEN
+                 RAISE VALUE_ERROR;
+            END IF;
+
+            l_message:='decoding bearer_token with signature key';
+            l_token:=apex_jwt.DECODE(p_value=>l_bearer_token, p_signature_key=>UTL_RAW.cast_to_raw(C.client_secret));
+
+            IF (C.aud='admin') THEN
+                l_message:='Checking admin role is still valid';
+                SELECT COUNT(*) INTO n
+                  FROM apex_workspace_apex_users w
+                 WHERE w.email=C.sub
+                   AND w.is_admin='Yes';
+                IF (n=0) THEN
+                    RAISE VALUE_ERROR;
+                END IF;
+            END IF;
+
+            IF (C.aud='owner') THEN
+                l_message:='Checking owner role is still valid';
+                IF (C.sub<>C.contact_email) THEN
+                    RAISE VALUE_ERROR;
+                END IF;
+            END IF;
+
+            l_message:='validating token for expiry';
+            apex_jwt.VALIDATE (p_token=>l_token, p_iss=>'ORDS.' || pWebsiteid);
+
+            l_message:='checking expiry under threshold of ' || ACCESS_TOKEN_EXP || ' seconds';
+            IF (C.exp-C.iat>ACCESS_TOKEN_EXP) THEN
+                RAISE VALUE_ERROR;
+            END IF;
+
+            /* Access Token valid */
+            l_session_data.user_id:=C.jti;
+            l_session_data.client_secret:=C.client_secret;
+
+            l_errors:=FALSE;
+        END LOOP;
+
+        IF (l_errors) THEN
+            RAISE VALUE_ERROR;
+        END IF;
+
+        RETURN (l_session_data);
+
+        EXCEPTION WHEN VALUE_ERROR THEN
+            RAISE_APPLICATION_ERROR(-20000,'Invalid JWT token - '||l_message);
+    END;
+
+    PROCEDURE test(pWebsiteid in number, pBearerToken IN VARCHAR2, pStatus OUT NUMBER) IS
+        l_session_data t_session_data;
+        n pls_integer:=1;
+    BEGIN
+        l_session_data:=pck_test.getSessionData(pWebsiteid, pBearerToken);
+
+        CASE n
+            WHEN 1608 THEN dbms_output.put_line('adfreesites');
+            WHEN 6602 THEN dbms_output.put_line('restartnet');
+        END CASE;
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+end;
+/
