@@ -162,6 +162,7 @@ const flushQueues = () => {
         json["page_weight"] = page_weight();
         json["total_requests"] = total_requests();
         json["first_visit"] = first_visit();
+        json["timezone"] = Intl.DateTimeFormat().resolvedOptions().timeZone;
     }
 
     if (vitalsQueue.size > 0) {
