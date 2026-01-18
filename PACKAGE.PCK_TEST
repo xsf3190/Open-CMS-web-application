@@ -1,6 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_TEST" as
     --
     ACCESS_TOKEN_EXP CONSTANT PLS_INTEGER:=60*5; -- 5 MINUTES
+    REFRESH_TOKEN_EXP CONSTANT PLS_INTEGER:=(24*60*60)*90; --90 DAYS
     --
     TYPE t_session_data IS RECORD (
         url VARCHAR2(100),
@@ -12,35 +13,39 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_TEST" as
         client_secret user_ords_clients.client_secret%type,
         cpu_used_session NUMBER
     );
+
+    g_session_user_id NUMBER;
     ---
-    FUNCTION getSessionData(pWebsiteId IN website.id%type, pBearerToken IN VARCHAR2) RETURN t_session_data;
+    FUNCTION getSessionData(pWebsiteId IN website.id%type, pBearerToken IN VARCHAR2, pExpiry IN NUMBER DEFAULT ACCESS_TOKEN_EXP) RETURN t_session_data;
     --
     PROCEDURE test(pWebsiteid in number, pBearerToken IN VARCHAR2, pStatus OUT NUMBER);
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_TEST" as
 
-    FUNCTION getSessionData(pWebsiteId IN website.id%type, pBearerToken IN VARCHAR2) RETURN t_session_data IS
+    FUNCTION getSessionData(pWebsiteId IN website.id%type, pBearerToken IN VARCHAR2, pExpiry IN NUMBER DEFAULT ACCESS_TOKEN_EXP) RETURN t_session_data IS
         l_session_data t_session_data;
         l_bearer_token varchar2(500);
+        l_token_name VARCHAR2(15);
         l_token APEX_JWT.T_TOKEN;
         l_errors BOOLEAN;
         l_message VARCHAR2(50);
         n pls_integer;
 
-        invalid_token  EXCEPTION;
-        PRAGMA EXCEPTION_INIT (invalid_token, -20099);
-
     BEGIN
         l_bearer_token:=pBearerToken;
 
+        
+
+        l_token_name:=CASE WHEN pExpiry=ACCESS_TOKEN_EXP THEN 'access token' ELSE 'refresh token' END;
+
         l_errors:=TRUE;
-        l_message:='decoding bearer_token';
+        
 
         /*
-        **  Calls to APEX_JWT raise VALUE_ERROR
+        **  "sub" in the token is the user's email address which we need to get user_ords_clients.client_secret
         */
-
+        l_message:='decode the ' || l_token_name;
         l_token:=apex_jwt.DECODE(p_value=>l_bearer_token, p_signature_key=>null);
 
         FOR C IN (
@@ -49,43 +54,51 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_TEST" as
              WHERE j.sub=o.name(+)
                AND w.id=pWebsiteid
         ) LOOP
-            l_message:='checking issuer is valid';
+            l_message:='check issuer is valid';
             IF (C.iss<>'ORDS.'||pWebsiteid) THEN
                  RAISE VALUE_ERROR;
             END IF;
 
-            l_message:='decoding bearer_token with signature key';
+            l_message:='decode the ' || l_token_name || ' with user''s signature key';
             l_token:=apex_jwt.DECODE(p_value=>l_bearer_token, p_signature_key=>UTL_RAW.cast_to_raw(C.client_secret));
 
-            IF (C.aud='admin') THEN
-                l_message:='Checking admin role is still valid';
-                SELECT COUNT(*) INTO n
-                  FROM apex_workspace_apex_users w
-                 WHERE w.email=C.sub
-                   AND w.is_admin='Yes';
-                IF (n=0) THEN
-                    RAISE VALUE_ERROR;
+            IF (l_token_name='refresh token') THEN
+                IF (C.aud='admin') THEN
+                    l_message:='Checking admin role is still valid';
+                    SELECT COUNT(*) INTO n
+                      FROM apex_workspace_apex_users w
+                     WHERE w.email=C.sub
+                       AND w.is_admin='Yes';
+                    IF (n=0) THEN
+                        RAISE VALUE_ERROR;
+                    END IF;
+                END IF;
+
+                IF (C.aud='owner') THEN
+                    l_message:='Checking owner role is still valid';
+                    IF (C.sub<>C.contact_email) THEN
+                        RAISE VALUE_ERROR;
+                    END IF;
                 END IF;
             END IF;
 
-            IF (C.aud='owner') THEN
-                l_message:='Checking owner role is still valid';
-                IF (C.sub<>C.contact_email) THEN
-                    RAISE VALUE_ERROR;
-                END IF;
-            END IF;
-
-            l_message:='validating token for expiry';
+            l_message:='token expired';
             apex_jwt.VALIDATE (p_token=>l_token, p_iss=>'ORDS.' || pWebsiteid);
 
-            l_message:='checking expiry under threshold of ' || ACCESS_TOKEN_EXP || ' seconds';
-            IF (C.exp-C.iat>ACCESS_TOKEN_EXP) THEN
+            l_message:='expiry threshold is ' || pExpiry || ' seconds';
+            IF (C.exp-C.iat>pExpiry) THEN
                 RAISE VALUE_ERROR;
             END IF;
 
-            /* Access Token valid */
+            /* Token valid */
             l_session_data.user_id:=C.jti;
+            l_session_data.scope:=C.aud;
+            l_session_data.iss:=C.iss;
+            l_session_data.sub:=C.sub;
             l_session_data.client_secret:=C.client_secret;
+            l_session_data.timezone:=OWA_UTIL.get_cgi_env('timezone');
+            l_session_data.url:=OWA_UTIL.get_cgi_env('url');
+            l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
             l_errors:=FALSE;
         END LOOP;
@@ -94,10 +107,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_TEST" as
             RAISE VALUE_ERROR;
         END IF;
 
+        g_session_user_id:=l_session_data.user_id;
+
         RETURN (l_session_data);
 
         EXCEPTION WHEN VALUE_ERROR THEN
-            RAISE_APPLICATION_ERROR(-20000,'Invalid JWT token - '||l_message);
+            RAISE_APPLICATION_ERROR(-20000,'Invalid JWT - '||l_message);
     END;
 
     PROCEDURE test(pWebsiteid in number, pBearerToken IN VARCHAR2, pStatus OUT NUMBER) IS
@@ -105,11 +120,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_TEST" as
         n pls_integer:=1;
     BEGIN
         l_session_data:=pck_test.getSessionData(pWebsiteid, pBearerToken);
+        --l_session_data:=pck_test.getSessionData(pWebsiteid, pBearerToken, REFRESH_TOKEN_EXP);
 
-        CASE n
-            WHEN 1608 THEN dbms_output.put_line('adfreesites');
-            WHEN 6602 THEN dbms_output.put_line('restartnet');
-        END CASE;
 
         pStatus:=200;
 
