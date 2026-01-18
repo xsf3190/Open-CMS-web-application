@@ -50,6 +50,7 @@ const callAuthAPI = async (method, data) => {
     headers.append("Content-Type", "application/json");
     headers.append("url", window.location.hostname);
     headers.append("email", emailInput.value);
+    headers.append("timezone",Intl.DateTimeFormat().resolvedOptions().timeZone);
     
     let config = {method: method, headers: headers};
     if (method==="POST" || method==="PUT") {
