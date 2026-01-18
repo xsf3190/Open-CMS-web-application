@@ -10,11 +10,14 @@ const selectHandler = async (e) => {
     if (e.target.classList.contains("logout")) {
         callAPI("userinfo/:ID","DELETE",{action:"logout"})
             .then((data) => {
-                live.textContent = "Logged out";
+                live.textContent = "Logged out. Reloading page";
                 sessionStorage.clear();
                 localStorage.clear();
                 dropdown.replaceChildren();
                 dropdown.insertAdjacentHTML('afterbegin',data.dropdown);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
             })
             .catch((error) => {
                 handleError(error);
