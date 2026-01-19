@@ -21,6 +21,10 @@ export const init = (e) => {
 let isSending = false;
 
 const clickHandler = (e) => {
+    if (e.target.classList.contains("reload")) {
+        window.location.reload();
+        return;
+    }
     if (!e.target.classList.contains("publish")) {
         return;
     }
