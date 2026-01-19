@@ -4,6 +4,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_VISITS" AS
     --
     PROCEDURE ecology(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    FUNCTION getBrowser RETURN VARCHAR2;
+    --
+    FUNCTION getLocation RETURN VARCHAR2;
+    --
     PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN NUMBER, pPage IN NUMBER, pHandler IN VARCHAR2, pStatus OUT NUMBER);
     --
     FUNCTION pagination(pSelectedPage IN NUMBER, pTotal IN NUMBER) RETURN VARCHAR2;
@@ -140,17 +144,85 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         pck_core.log_error(pStatus);
     END;
 
-    PROCEDURE uploadPageVisit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB) IS
-        l_user_agent_hash browser_lookup.user_agent_hash%type;
+    /*
+    **  GET GEOLOCATION FROM VISITOR'S IP ADDRESS
+    */
+    FUNCTION getLocation RETURN VARCHAR2 IS
         l_ip_address_hash ip_lookup_hash.ip_address_hash%type;
-        l_city website_visitor.city%type;
-        l_country_code website_visitor.country_code%type;
-        l_location VARCHAR2(100);
-        l_browser browser_lookup.browser%type;
+        l_location page_hit.location%type;
+        l_clob CLOB;
+    BEGIN
+        l_ip_address_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+        FOR C1 IN (
+            SELECT NVL2(city,city || ',',null) || country_code location
+              FROM ip_lookup_hash
+             WHERE ip_address_hash=l_ip_address_hash
+         ) LOOP
+            l_location:=C1.location;
+        END LOOP;
+        IF (l_location IS NULL) THEN
+            pck_api.callIpdataAPI(null,OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'GET',l_clob);
+            FOR C2 IN (
+                SELECT city,country_code, NVL2(city,city || ',',null) || country_code AS location
+                  FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code))
+            ) LOOP
+                INSERT INTO ip_lookup_hash (ip_address_hash, city, country_code)
+                VALUES (l_ip_address_hash, C2.city, C2.country_code);
+                l_location:=C2.location;
+                pck_core.log('First time IP -> '||C2.location);
+            END LOOP;
+        END IF;
+        RETURN (l_location);
+    END;
+
+    /*
+    **  GET BROWSER FROM VISITOR'S USER AGENT
+    */
+    FUNCTION getBrowser RETURN VARCHAR2 IS
+        l_user_agent_hash browser_lookup.user_agent_hash%type;
         l_clob CLOB;
         l_clob2 clob;
         l_object JSON_OBJECT_T;
         l_array JSON_ARRAY_T;    
+        l_browser browser_lookup.browser%type;
+    BEGIN
+        l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+        FOR C1 IN (
+            SELECT browser
+              FROM browser_lookup
+             WHERE user_agent_hash=l_user_agent_hash
+         ) LOOP
+            l_browser:=C1.browser;
+        END LOOP;
+
+        IF (l_browser IS NULL) THEN
+            l_array:= new JSON_ARRAY_T;
+            l_object:=new JSON_OBJECT_T;
+            l_object.put('name','User-Agent');
+            l_object.put('value',OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
+            l_array.append(l_object);
+            l_object:=new JSON_OBJECT_T;
+            l_object.put('headers',l_array);
+            l_clob:=l_object.stringify;
+            pck_api.callBrowserAPI(l_clob,l_clob2);
+            FOR C1 IN (
+                SELECT simple_software_string
+                  FROM JSON_TABLE(l_clob2 FORMAT JSON, '$.detection' COLUMNS (simple_software_string))
+            ) LOOP
+                l_browser:=C1.simple_software_string;
+                INSERT INTO browser_lookup (browser, user_agent_hash) VALUES (l_browser, l_user_agent_hash);
+                pck_core.log('New browser -> ' || l_browser);
+            END LOOP;
+        END IF;
+        RETURN (l_browser);
+    END;
+
+    /*
+    **  UPLOAD CLIENT VISIT DETAILS INTO PAGE_HIT TABLE
+    */
+    PROCEDURE uploadPageVisit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB) IS
+        l_location page_hit.location%type;
+        l_browser browser_lookup.browser%type;   
         l_session_id page_hit.session_id%type;
         l_cpu_used_session NUMBER;
         n PLS_INTEGER;
@@ -159,66 +231,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
 
         FOR C IN (
             SELECT seq, referrer, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
-                mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud
+                mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud, timezone
           FROM JSON_TABLE(pBodyText FORMAT JSON, '$' 
             COLUMNS (seq, referrer, LCP, LCP_rating, CLS, CLS_rating, INP, INP_rating, FCP, FCP_rating, TTFB, TTFB_rating,
-                    mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud))
+                    mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud, timezone))
         ) LOOP
             /* 
             ** 1. Get location from IPData.co
             **    TO BE GDPR/CCPA COMPLIANT NEVER STORE VISITOR'S IP ADDRESS 
             */
-            l_ip_address_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
-            FOR C1 IN (
-                SELECT NVL2(city,city || ',',null) || country_code location
-                  FROM ip_lookup_hash
-                 WHERE ip_address_hash=l_ip_address_hash
-             ) LOOP
-                l_location:=C1.location;
-            END LOOP;
-            IF (l_location IS NULL) THEN
-                pck_api.callIpdataAPI(null,OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'GET',l_clob);
-                FOR C2 IN (
-                    SELECT city,country_code, NVL2(city,city || ',',null) || country_code AS location
-                      FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code))
-                ) LOOP
-                    INSERT INTO ip_lookup_hash (ip_address_hash, city, country_code)
-                    VALUES (l_ip_address_hash, C2.city, C2.country_code);
-                    l_location:=C2.location;
-                    pck_core.log('First time IP -> '||C2.location);
-                END LOOP;
-            END IF;
+            l_location:=getLocation;
+
             /* 
             ** 2. BROWSER
             */
-            l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
-            FOR C1 IN (
-                SELECT browser
-                  FROM browser_lookup
-                 WHERE user_agent_hash=l_user_agent_hash
-             ) LOOP
-                l_browser:=C1.browser;
-            END LOOP;
+            l_browser:=getBrowser;
 
-            IF (l_browser IS NULL) THEN
-                l_array:= new JSON_ARRAY_T;
-                l_object:=new JSON_OBJECT_T;
-                l_object.put('name','User-Agent');
-                l_object.put('value',OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
-                l_array.append(l_object);
-                l_object:=new JSON_OBJECT_T;
-                l_object.put('headers',l_array);
-                l_clob:=l_object.stringify;
-                pck_api.callBrowserAPI(l_clob,l_clob2);
-                FOR C1 IN (
-                    SELECT simple_software_string
-                      FROM JSON_TABLE(l_clob2 FORMAT JSON, '$.detection' COLUMNS (simple_software_string))
-                ) LOOP
-                    l_browser:=C1.simple_software_string;
-                    INSERT INTO browser_lookup (browser, user_agent_hash) VALUES (l_browser, l_user_agent_hash);
-                    pck_core.log('New browser -> ' || l_browser);
-                END LOOP;
-            END IF;
             /* 
             ** 3. SESSION_ID : 
             */
@@ -234,12 +262,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 INSERT INTO page_hit (
                     website_id, article_id, session_id, visit_date, url, duration_visible, first_visit,
                      ttfb, ttfb_rating, fcp, fcp_rating, lcp, lcp_rating, cls, cls_rating, inp, inp_rating,
-                     referrer, browser, location, mobile, connection, page_weight, total_requests, aud, pathname
+                     referrer, browser, location, mobile, connection, page_weight, total_requests, aud, pathname, timezone
                 )
                 VALUES (
                     pWebsiteid, pArticleid, l_session_id, TO_TIMESTAMP('1970-01-01','yyyy-mm-dd') + numtodsinterval(C.website_loaded,'second'), C.url, C.duration_visible, C.first_visit,
                     C.ttfb, C.ttfb_rating, C.fcp, C.fcp_rating, C.lcp, C.lcp_rating, C.cls, C.cls_rating, C.inp, C.inp_rating,
-                    apex_string_util.get_domain(C.referrer), l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname
+                    apex_string_util.get_domain(C.referrer), l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname, C.timezone
                 );
             ELSE
                 UPDATE page_hit
