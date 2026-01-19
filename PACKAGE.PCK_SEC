@@ -89,7 +89,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_json.put('success',true);
         l_json.put('header', '<span>Domains hosted for ' || l_session_data.sub || '</span>');
         l_json.put('article', l_article);
-        l_json.put('footer', '<button type="button" class="button logout">Log Out</button><span aria-live="polite"></span>');
+        l_json.put('footer', '<div class="flex-items space-apart"><button type="button" class="button logout">Log Out</button><span aria-live="polite"></span></div>');
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -551,8 +551,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_scope VARCHAR2(7);
         l_cld_cloud_name users.cld_cloud_name%type:=pCldCloudName;
         l_cld_upload_preset users.cld_upload_preset%type:=pCldUploadPreset;
+        l_location fingerprint.location%type;
+        l_browser fingerprint.browser%type;
+
+        l_fingerprint fingerprint.fingerprint%type;
         l_json JSON_OBJECT_T;
+        n PLS_INTEGER;
     BEGIN
+        l_fingerprint:=getFingerprint;
+
+        UPDATE fingerprint 
+           SET last_used_date=current_timestamp
+         WHERE user_id=pUserid
+           AND fingerprint=l_fingerprint;
+
+        n:=sql%rowcount;
+        IF (n=0) THEN
+            l_location:=pck_visits.getLocation;
+            l_browser:=pck_visits.getBrowser;
+            INSERT INTO fingerprint(user_id, fingerprint, last_used_date, ip, timezone, location, browser)
+            VALUES (pUserid, l_fingerprint, current_timestamp, OWA_UTIL.get_cgi_env ('REMOTE_ADDR'), OWA_UTIL.get_cgi_env('timezone'), l_location, l_browser);
+        END IF;
+
         SELECT client_secret 
           INTO l_jwt_enc_key
           FROM user_ords_clients
@@ -729,14 +749,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
         
     /*
-    ** CREATE AND RETURN NEW ACCESS / REFRESH TOKEN PAIR
+    ** CREATE NEW PAIR OF ACCESS / REFRESH TOKENS
     ** CALLED WHEN CLIENT'S ACCESS TOKEN HAS EXPIRED
     ** CHECK REFRESH TOKEN HAS NOT PREVIOUSLY BEEN USED
     */
     PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS 
         l_session_data t_session_data;
         l_refresh_token VARCHAR2(4000);
-        l_token_used refresh_token.token_used%type;
+        l_refresh_token_hash refresh_token.token_issued%type;
         l_token_issued refresh_token.token_issued%type;
         l_token APEX_JWT.T_TOKEN;
         l_new_token VARCHAR2 (4000);
@@ -747,8 +767,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     BEGIN
         l_session_data:=getSessionData(pWebsiteId, REFRESH_TOKEN_EXP);
 
-        l_refresh_token:=SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
-
         -- Check user's fingerprint is known
         l_fingerprint:=getFingerprint;
         SELECT COUNT(*) 
@@ -757,13 +775,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
          WHERE user_id=l_session_data.user_id
            AND fingerprint=l_fingerprint;
 
-        --IF (n=0) THEN
-        --    RAISE_APPLICATION_ERROR(-20000,'Access denied from previously unknown device or location. Login again.');
-        --END IF;
+        IF (n=0) THEN
+           RAISE_APPLICATION_ERROR(-20000,'Access denied from unknown device or location. Login again.');
+        END IF;
 
+        l_refresh_token:=SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
 
         -- Check refresh token has not previously been used to generate a new token pair  (nb : all tokens stored as hash values)
-        l_token_used:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+        l_token_issued:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+        SELECT COUNT(*) INTO n 
+          FROM refresh_token 
+         WHERE token_issued=l_token_issued 
+           AND website_id=pWebsiteid 
+           AND user_id=l_session_data.user_id;
+
+        IF (n=0) THEN
+            RAISE_APPLICATION_ERROR(-20000,'Invalid refresh token');
+        END IF;
+
+        DELETE refresh_token 
+         WHERE token_issued=l_token_issued
+           AND website_id=pWebsiteid 
+           AND user_id=l_session_data.user_id;
 
         l_new_token:=apex_jwt.ENCODE (
             p_iss       => l_session_data.iss,
@@ -787,8 +820,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
         );
 
-        INSERT INTO refresh_token(website_id, user_id, token_used, token_issued)
-            VALUES (pWebsiteid, l_session_data.user_id, l_token_used, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
+        INSERT INTO refresh_token(website_id, user_id, token_issued)
+            VALUES (pWebsiteid, l_session_data.user_id, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
