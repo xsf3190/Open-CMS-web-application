@@ -59,6 +59,10 @@ const responseok = (response, result) => {
     if (response.ok && result.success) {
         return(true);
     }
+    if (response.status===401) {
+        forceLogout();
+        return;
+    }
     if (result.cause) {
       throw new Error(`${response.status} - ${result.cause}`);
     }
