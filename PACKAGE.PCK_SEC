@@ -166,6 +166,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     END;
 
     /*
+    ** PERMANENT RECORD OF SECURITY VIOLATIONS, ERRORS
+    */
+    PROCEDURE log_security(pWebsiteid IN NUMBER, pUserid IN NUMBER, pToken IN VARCHAR2, pMessage IN VARCHAR2) IS PRAGMA AUTONOMOUS_TRANSACTION;
+    BEGIN
+        INSERT INTO security_log(website_id, user_id, token, message) 
+        VALUES (pWebsiteid, pUserid, pToken, pMessage);
+
+        DELETE refresh_token WHERE website_id=pWebsiteId AND user_id=pUserid;
+
+        COMMIT;
+    END;
+
+    /*
     ** GET SESSION DETAILS OF JWT RESOURCE ACCESS REQUEST
     */
     FUNCTION getSessionData(pWebsiteId IN website.id%type, pExpiry IN NUMBER DEFAULT ACCESS_TOKEN_EXP) RETURN t_session_data IS
@@ -259,6 +272,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         RETURN (l_session_data);
 
         EXCEPTION WHEN VALUE_ERROR THEN
+            log_security(pWebsiteid, l_session_data.user_id, l_bearer_token, l_message);
+
             RAISE_APPLICATION_ERROR(-20000,'Invalid JWT - '||l_message);
     END;
 
@@ -747,7 +762,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 pck_core.log_error(pStatus);
     END;
 
-        
     /*
     ** CREATE NEW PAIR OF ACCESS / REFRESH TOKENS
     ** CALLED WHEN CLIENT'S ACCESS TOKEN HAS EXPIRED
