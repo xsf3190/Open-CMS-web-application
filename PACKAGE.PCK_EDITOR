@@ -440,7 +440,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         '<p>Content changes since last published on ' || TO_CHAR(C.netlify_last_published,'fmdd Mon yyyy, hh24:mi') || '</p>' ||
                          '<ul>';
                     END IF;
-                    l_article:=l_article || '<li>' || C1.item || '</li>';
+                    l_article:=l_article || '<li>' || NVL(C1.item,'CSS') || '</li>';
                 END LOOP;
                 IF (n>0) THEN
                     l_article:=l_article || '</ul>';
@@ -500,7 +500,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_env VARCHAR2(4);
-        l_link VARCHAR2(100);
+        l_link VARCHAR2(200);
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -517,7 +517,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 END LOOP;
             WHEN 'TEST' THEN
                 pck_deploy.deployEditorSite(pWebsiteid);
-                l_link:='<a href="https://' || l_session_data.url || '">Reload website</a>';
+                l_link:=
+                --'<a href="https://' || l_session_data.url || '">Reload website</a>' ||
+                '<button type="button" class="button reload" style="margin-inline-end:2em">RELOAD</button>' ||
+                '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>';
         END CASE;
 
         l_json:= new JSON_OBJECT_T;
