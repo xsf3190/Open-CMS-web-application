@@ -190,6 +190,7 @@ body>footer>a {
   inset: auto;
   top: anchor(--menulist-anchor bottom);
   right: anchor(--menulist-anchor right);
+  max-height: 100dvh;
   &:focus {
     outline: none;
   }
@@ -452,12 +453,12 @@ small {
   position: relative;
 
   img {
-    block-size: 25dvh;
     border-bottom-right-radius: 0;
     border-bottom-left-radius: 0;
     max-width: 100%;
     height: auto;
     object-fit: cover;
+    max-height: 5lh;
   }
 
   .text {
