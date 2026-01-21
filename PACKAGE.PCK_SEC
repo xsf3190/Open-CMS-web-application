@@ -170,8 +170,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     */
     PROCEDURE log_security(pWebsiteid IN NUMBER, pUserid IN NUMBER, pToken IN VARCHAR2, pMessage IN VARCHAR2) IS PRAGMA AUTONOMOUS_TRANSACTION;
     BEGIN
-        INSERT INTO security_log(website_id, user_id, token, message) 
-        VALUES (pWebsiteid, pUserid, pToken, pMessage);
+        INSERT INTO security_log(website_id, user_id, token, message, ip) 
+        VALUES (pWebsiteid, pUserid, pToken, pMessage, OWA_UTIL.get_cgi_env ('REMOTE_ADDR'));
 
         DELETE refresh_token WHERE website_id=pWebsiteId AND user_id=pUserid;
 
@@ -286,6 +286,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_calling_procedure website_cpu.calling_procedure%type;
         l_lineno NUMBER;
         l_caller VARCHAR2(30);
+        n PLS_INTEGER;
     BEGIN
         l_cpu_used_session:=dbms_utility.get_cpu_time()-pCpuUsedStart;
 
@@ -298,8 +299,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
          WHERE website_id=pWebsiteid
            AND period_start=TRUNC(current_timestamp,'mm')
            AND calling_procedure=l_calling_procedure;
+        
+        n:=SQL%ROWCOUNT;
 
-        IF (SQL%ROWCOUNT=0) THEN
+        IF (n=0) THEN
             INSERT INTO website_cpu (website_id, period_start, calling_procedure, user_id, cpu_used)
                 VALUES (pWebsiteid, TRUNC(current_timestamp,'mm'), l_calling_procedure, pUserid, l_cpu_used_session);
         END IF;
@@ -606,7 +609,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_issuer:='ORDS.'||pWebsiteId;
         l_scope:=getScope(pWebsiteId,pEmail);
 
-       l_new_refresh:=apex_jwt.ENCODE (
+        l_new_refresh:=apex_jwt.ENCODE (
             p_iss       => l_issuer,
             p_sub       => pEmail,
             p_aud       => l_scope,
@@ -776,10 +779,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_new_token VARCHAR2 (4000);
         l_new_refresh VARCHAR2 (4000);
         l_fingerprint fingerprint.fingerprint%type;
+        l_message security_log.message%type;
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
         l_session_data:=getSessionData(pWebsiteId, REFRESH_TOKEN_EXP);
+
+        l_refresh_token:=SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
 
         -- Check user's fingerprint is known
         l_fingerprint:=getFingerprint;
@@ -790,10 +796,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
            AND fingerprint=l_fingerprint;
 
         IF (n=0) THEN
-           RAISE_APPLICATION_ERROR(-20000,'Access denied from unknown device or location. Login again.');
+            l_message:='Access denied from unknown device or location. Login again.';
+            log_security(pWebsiteid, l_session_data.user_id, l_refresh_token, l_message);
+            RAISE_APPLICATION_ERROR(-20000,l_message);
         END IF;
 
-        l_refresh_token:=SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
+        
 
         -- Check refresh token has not previously been used to generate a new token pair  (nb : all tokens stored as hash values)
         l_token_issued:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
@@ -804,14 +812,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
            AND user_id=l_session_data.user_id;
 
         IF (n=0) THEN
-            RAISE_APPLICATION_ERROR(-20000,'Invalid refresh token');
+            l_message:='Invalid refresh token attempted for ' || l_session_data.sub;
+            log_security(pWebsiteid, l_session_data.user_id, l_refresh_token, l_message);
+            RAISE_APPLICATION_ERROR(-20000,l_message);
         END IF;
 
+        -- Delete the old token
         DELETE refresh_token 
          WHERE token_issued=l_token_issued
            AND website_id=pWebsiteid 
            AND user_id=l_session_data.user_id;
 
+        -- Create new refresh and access tokens
         l_new_token:=apex_jwt.ENCODE (
             p_iss       => l_session_data.iss,
             p_sub       => l_session_data.sub,
@@ -834,6 +846,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
         );
 
+        -- Rotate the user's refresh token for the website
         INSERT INTO refresh_token(website_id, user_id, token_issued)
             VALUES (pWebsiteid, l_session_data.user_id, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
 
