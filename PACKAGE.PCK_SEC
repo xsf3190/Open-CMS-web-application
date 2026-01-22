@@ -26,8 +26,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE getMenulist(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
-    --
     FUNCTION getSessionData(pWebsiteId IN website.id%type, pExpiry IN NUMBER DEFAULT ACCESS_TOKEN_EXP) RETURN t_session_data;
     --
     PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
@@ -475,8 +473,40 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 '</button>');
     END;
 
+    FUNCTION buildMenulist(pWebsiteid IN NUMBER, pScope IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
+        l_html CLOB;
+        FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pId IN NUMBER DEFAULT NULL) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN (
+                '<button type="button" role="menuitem" tabindex="-1" ' || 
+                    'data-endpoint="' || pEndpoint || '">' ||
+                    CASE WHEN pId IS NOT NULL THEN
+                    'data-id="' || pId || '"' 
+                    END ||
+                    '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
+                    '</button>'
+            );
+        END;
+    BEGIN
+        l_html:=l_html || addMenuitem('userinfo/:ID', 'blue', '👤', pEmail);
+        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'blue', '✎', 'Edit Content');
+        l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
+        l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
+        l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Manage Pages');
+        l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
+        
+        FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
+            l_html:=l_html || addMenuitem('create-collection-item/:ID/:PAGE', 'cyan', 'B', 'New ' || C.navigation_label, C.article_id);
+        END LOOP;
+
+        l_html:=l_html || addMenuitem('create-website/:ID/:PAGE', 'red', '🌐', 'New Website');
+        l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', 'cyan', '⚽', 'Codepen Editor');
+
+        RETURN (l_html);
+    END;
+
     /*
-    ** BUILD LIST OF MENU ITEMS FOR GIVEN SCOPE AND URL
+    ** BUILD LIST OF MENU ITEMS FOR AUTHENTICATED USER
     */
     FUNCTION getMenulist(pWebsiteId IN website.id%type, pScope IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_menulist LONG;
@@ -521,25 +551,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         END LOOP;
 
         RETURN (l_menulist);
-    END;
-
-    /*
-    ** CALLED BY menulist GET ENDPOINT
-    */
-    PROCEDURE getMenulist(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        pStatus:=200;
-
-        APEX_JSON.open_object;
-        APEX_JSON.write ('success', TRUE);
-        -- APEX_JSON.write ('menulist', getMenulist(pWebsiteId, l_session_data.scope, l_session_data.url));
-        APEX_JSON.close_object;
-
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
     END;
 
     /*
@@ -639,7 +650,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_json.put('success',true);
         l_json.put('token', l_new_token);
         l_json.put('refresh', l_new_refresh);
-        l_json.put('menulist', getMenulist(pWebsiteId, l_scope, OWA_UTIL.get_cgi_env('url'), pEmail));
+        --l_json.put('menulist', getMenulist(pWebsiteId, l_scope, OWA_UTIL.get_cgi_env('url'), pEmail));
+        l_json.put('menulist', buildMenulist(pWebsiteId, l_scope, pEmail));
         apex_util.prn(l_json.to_clob,false);
     END;
 
@@ -817,10 +829,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             RAISE_APPLICATION_ERROR(-20000,l_message);
         END IF;
 
-        -- Delete the old token
+        -- Delete all tokens for user / website
         DELETE refresh_token 
-         WHERE token_issued=l_token_issued
-           AND website_id=pWebsiteid 
+         WHERE website_id=pWebsiteid 
            AND user_id=l_session_data.user_id;
 
         -- Create new refresh and access tokens
