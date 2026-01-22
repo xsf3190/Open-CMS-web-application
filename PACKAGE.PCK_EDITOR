@@ -6,6 +6,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER);
     --
+    PROCEDURE getNewCollectionForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
+    --
     PROCEDURE getPageOptionsForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getDeploymentStatus(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
@@ -65,6 +67,54 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /*
     ** CREATE HTML FOR PAGE OPTIONS FORM
     */
+    PROCEDURE getNewCollectionForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_navigation_label website_article.navigation_label%type;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        SELECT navigation_label INTO l_navigation_label FROM website_article WHERE website_id=pWebsiteId AND article_id=pArticleId;
+
+        l_header:='<h4>Create New '|| l_navigation_label || '</h4>';
+
+        l_article:=
+        '<p>Use this form to create a new ' || l_navigation_label || '</p>' ||
+        '<div>' ||
+            '<label for="title">Enter title (maximum 100 characters)</label>' ||
+            '<input type="text" maxlength="100" id="title" name="title" value="">' ||
+        '</div>' ||
+        '<div>' ||
+            '<label for="excerpt">Enter excerpt (maximum 160 characters)</label>' ||
+            '<textarea id="excerpt" name="excerpt" style="min-width:50%" maxlength="160"></textarea>' ||
+        '</div>';
+
+        l_footer:=
+        '<div class="flex-items">' ||
+            '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' || 'PUBLISH' || '</button>' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>' ||
+        '</div>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+    /*
+    ** CREATE HTML FOR PAGE OPTIONS FORM
+    */
     PROCEDURE getPageOptionsForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
@@ -108,20 +158,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     '</fieldset>' ||
                     '<p id="skip"></p>';
                 /* Creating new BLOG item */
-                WHEN (C.parent_id IS NULL AND C.collection_type<>'N/A') THEN
-                    l_header:='<h4>Create New '|| INITCAP(C.navigation_label) || '</h4>';
-                    l_article:=
-                    '<p>Use this form to create a new ' || C.navigation_label ||
-                    '</p>' ||
-                    '<input type="hidden" name="dml" value="insert">' ||
-                    '<div>' ||
-                        '<label for="title">Enter title (maximum 100 characters)</label>' ||
-                        '<input type="text" maxlength="100" id="title" name="title" value="">' ||
-                    '</div>' ||
-                    '<div>' ||
-                        '<label for="excerpt">Enter excerpt (maximum 160 characters)</label>' ||
-                        '<textarea id="excerpt" name="excerpt" style="min-width:50%" maxlength="160"></textarea>' ||
-                    '</div>';
+                
                 ELSE
                     l_favicon:=regexp_substr(C.favicon,'<text.+?>(.+?)</text>',1,1,null,1);
                     l_header:='<h4>Page Options</h4>';
