@@ -17,8 +17,8 @@ const forceLogout = () => {
 ** COMMON ERROR HANDLER FOR IMPORTING MODULES
 */
 const handleError = (error) => {
-    sessionStorage.clear();
-    localStorage.clear();
+    // sessionStorage.clear();
+    // localStorage.clear();
     if (!output_dialog.open) {
         output_dialog.showModal();
     }
@@ -56,6 +56,7 @@ const replaceTokens = (data) => {
 ** COMMON ERROR HANDLER FOR API CALLS
 */
 const responseok = (response, result) => {
+    console.log("response.status",response.status);
     if (response.ok && result.success) {
         return(true);
     }
