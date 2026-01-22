@@ -379,7 +379,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     /*
     **  Return log of all visits to website
     */
-    PROCEDURE getWebsiteVisits(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTimeZone IN VARCHAR2, pTotalPages IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
+    PROCEDURE getWebsiteVisits(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTimeZone IN VARCHAR2, pTotalPages IN OUT NUMBER, pRowCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
         l_content CLOB;
         l_count NUMBER;
         l_offset NUMBER;
@@ -444,13 +444,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             l_content:=l_content || '</tbody></table></div>';
         END IF;
 
+        pRowCount:=l_count;
         pHtml:=l_content;
     END;
 
     /*
     **  First time vidits
     */
-    PROCEDURE getWebsiteVisitsFirst(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTimeZone IN VARCHAR2, pTotalPages IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
+    PROCEDURE getWebsiteVisitsFirst(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTimeZone IN VARCHAR2, pTotalPages IN OUT NUMBER, pRowCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB) IS
         l_content CLOB;
         l_offset NUMBER;
         l_count NUMBER;
@@ -509,6 +510,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             l_content:=l_content || '</tbody></table></div>';
         END IF;
 
+        pRowCount:=l_count;
         pHtml:=l_content;
     END;
 
@@ -559,7 +561,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 '<td>' || C.nb_visits || '</td>' || 
                 '<td>' || TO_CHAR(C.pct*100,'fm990D00') || '%</td>' ||
                 '<td>' || TO_CHAR(C.first_visit_date,'dd Mon yyyy') || '</td>' ||
-                '<td>' || TO_CHAR(C.last_visit_date,'dd Mon yyyy') || '</td>' ||
+                '<td>' || CASE WHEN C.nb_visits>1 THEN TO_CHAR(C.last_visit_date,'dd Mon yyyy') END || '</td>' ||
             '</tr>';
         END LOOP;
 
@@ -619,7 +621,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                     '<td>' || C.nb_visits || '</td>' || 
                     '<td>' || TO_CHAR(C.pct*100,'fm990D00') || '%</td>' ||
                     '<td>' || TO_CHAR(C.first_visit_date,'dd Mon yyyy') || '</td>' ||
-                    '<td>' || TO_CHAR(C.last_visit_date,'dd Mon yyyy') || '</td>' ||
+                    '<td>' || CASE WHEN C.nb_visits>1 THEN TO_CHAR(C.last_visit_date,'dd Mon yyyy') END || '</td>' ||
                 '</tr>';
             END LOOP;
 
@@ -642,7 +644,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_footer LONG;
         l_total_pages NUMBER;
         l_row_count NUMBER;
-        l_notification VARCHAR2(50);
+        l_notification VARCHAR2(100);
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -690,24 +692,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
 
         CASE pReport
             WHEN 1 THEN
-                getWebsiteVisits(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages, l_article);
+                getWebsiteVisits(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages, l_row_count, l_article);
             WHEN 2 THEN
-                getWebsiteVisitsFirst(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages, l_article);
+                getWebsiteVisitsFirst(pWebsiteId, pPage, pHandler, l_session_data.timezone,l_total_pages,  l_row_count, l_article);
             WHEN 3 THEN
                 getVisitsByLocation(pWebsiteId, pPage, pHandler, l_total_pages, l_row_count, l_article);
             WHEN 4 THEN
                 getVisitsByBrowser(pWebsiteId, pPage, pHandler, l_total_pages, l_row_count, l_article);
         END CASE;
 
-        l_notification:=(pPage-1)*ROWS_PER_PAGE+1 || ' through ' || LEAST(l_row_count,pPage*ROWS_PER_PAGE);
+        IF ( (pPage-1)*ROWS_PER_PAGE+1=l_row_count ) THEN
+            l_notification:='Showing row ' || l_row_count;
+        ELSE
+            l_notification:='Showing rows ' || TO_CHAR((pPage-1)*ROWS_PER_PAGE+1) || ' through ' || LEAST(l_row_count,pPage*ROWS_PER_PAGE);
+        END IF;
 
         l_json:= new JSON_OBJECT_T;
         
         l_json.put('success',true);
         l_json.put('header', l_header);
         l_json.put('article', l_article);
-        l_json.put('footer', pagination(pPage,l_total_pages) || '<div class="flex-items center" id="notification" aria-live="assertive"></div>');
-        l_json.put('notification','Showing rows ' || l_notification);
+        l_json.put('footer', pagination(pPage,l_total_pages) || '<div class="flex-items center" id="notification" aria-live="assertive" style="margin-block-start:1em"></div>');
+        l_json.put('notification', l_notification);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
