@@ -31,8 +31,6 @@ END;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
 
-    
-
     PROCEDURE log(pMsg IN OUT NOCOPY CLOB) IS PRAGMA AUTONOMOUS_TRANSACTION;
         l_calling_subprogram1 varchar2(128); -- package name, standalone function name, standalone procedure name or "__anonymous_block".
         l_calling_subprogram2 varchar2(128); -- package procedure name or package function name. NULL if the parent is a standalone function, standalone procedure, or anonymous block.
