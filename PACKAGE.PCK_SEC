@@ -255,7 +255,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             l_session_data.client_secret:=C.client_secret;
             l_session_data.timezone:=OWA_UTIL.get_cgi_env('timezone');
             l_session_data.url:=OWA_UTIL.get_cgi_env('url');
-            l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
             l_errors:=FALSE;
         END LOOP;
@@ -475,14 +474,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
     FUNCTION buildMenulist(pWebsiteid IN NUMBER, pScope IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_html CLOB;
-        FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pId IN NUMBER DEFAULT NULL) RETURN VARCHAR2 IS
+        FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pParentId IN NUMBER DEFAULT NULL) RETURN VARCHAR2 IS
         BEGIN
             RETURN (
                 '<button type="button" role="menuitem" tabindex="-1" ' || 
-                    'data-endpoint="' || pEndpoint || '">' ||
-                    CASE WHEN pId IS NOT NULL THEN
-                    'data-id="' || pId || '"' 
+                    'data-endpoint="' || pEndpoint || '"' ||
+                    CASE WHEN pParentId IS NOT NULL THEN
+                    ' data-parent-id="' || pParentId || '"' 
                     END ||
+                    '>' ||
                     '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
                     '</button>'
             );
@@ -496,7 +496,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
         
         FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
-            l_html:=l_html || addMenuitem('create-collection-item/:ID/:PAGE', 'cyan', 'B', 'New ' || C.navigation_label, C.article_id);
+            l_html:=l_html || addMenuitem('new-collection-item/:ID', 'cyan', 'B', 'New ' || C.navigation_label, C.article_id);
         END LOOP;
 
         l_html:=l_html || addMenuitem('create-website/:ID/:PAGE', 'red', '🌐', 'New Website');
@@ -780,10 +780,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     /*
     ** CREATE NEW PAIR OF ACCESS / REFRESH TOKENS
     ** CALLED WHEN CLIENT'S ACCESS TOKEN HAS EXPIRED
-    ** CHECK REFRESH TOKEN HAS NOT PREVIOUSLY BEEN USED
+    ** REFRESH TOKEN SENT IN THE REQUEST MUST EXIST FOR ONLY ONE USER/WEBSITE
     */
     PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS 
-        l_session_data t_session_data;
         l_refresh_token VARCHAR2(4000);
         l_refresh_token_hash refresh_token.token_issued%type;
         l_token_issued refresh_token.token_issued%type;
@@ -792,82 +791,102 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_new_refresh VARCHAR2 (4000);
         l_fingerprint fingerprint.fingerprint%type;
         l_message security_log.message%type;
+        l_aud VARCHAR2(7);
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
-        l_session_data:=getSessionData(pWebsiteId, REFRESH_TOKEN_EXP);
-
         l_refresh_token:=SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
+        -- pck_core.log('l_refresh_token:'||l_refresh_token);
 
-        -- Check user's fingerprint is known
-        l_fingerprint:=getFingerprint;
-        SELECT COUNT(*) 
-          INTO n
-          FROM fingerprint
-         WHERE user_id=l_session_data.user_id
-           AND fingerprint=l_fingerprint;
+        /* Decode refresh token without client secret to get the email (i.e. sub claim) */
+        l_token:=apex_jwt.DECODE(p_value=>l_refresh_token, p_signature_key=>null);
 
-        IF (n=0) THEN
-            l_message:='Access denied from unknown device or location. Login again.';
-            log_security(pWebsiteid, l_session_data.user_id, l_refresh_token, l_message);
-            RAISE_APPLICATION_ERROR(-20000,l_message);
-        END IF;
+        FOR C IN (
+            SELECT j.iss, j.sub, j.jti, j.cld_cloud_name, j.cld_upload_preset, o.client_secret
+              FROM JSON_TABLE(l_token.payload, '$' COLUMNS(iss, sub, jti, cld_cloud_name, cld_upload_preset)) j, user_ords_clients o
+             WHERE j.sub=o.name
+        ) LOOP
+            /* Decode refresh token WITH client secret */
+            -- pck_core.log('C.client_secret:'||C.client_secret);
+            l_token:=apex_jwt.DECODE(p_value=>l_refresh_token, p_signature_key=>UTL_RAW.cast_to_raw(C.client_secret));
 
-        
+            /* Check token not expired and issuer is valid */
+            apex_jwt.VALIDATE (p_token=>l_token, p_iss=>'ORDS.' || pWebsiteid);
 
-        -- Check refresh token has not previously been used to generate a new token pair  (nb : all tokens stored as hash values)
-        l_token_issued:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
-        SELECT COUNT(*) INTO n 
-          FROM refresh_token 
-         WHERE token_issued=l_token_issued 
-           AND website_id=pWebsiteid 
-           AND user_id=l_session_data.user_id;
+            /* Check token has been registered for user */
+            l_token_issued:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+            SELECT COUNT(*) INTO n 
+              FROM refresh_token 
+             WHERE token_issued=l_token_issued 
+               AND website_id=pWebsiteid 
+               AND user_id=C.jti;
+            
+            IF (n=0) THEN
+                log_security(pWebsiteid, C.jti, l_refresh_token, 'Invalid refresh token');
+                EXIT;
+            END IF;
 
-        IF (n=0) THEN
-            l_message:='Invalid refresh token attempted for ' || l_session_data.sub;
-            log_security(pWebsiteid, l_session_data.user_id, l_refresh_token, l_message);
-            RAISE_APPLICATION_ERROR(-20000,l_message);
-        END IF;
+            -- Delete old token before replacing it
+            DELETE refresh_token 
+             WHERE website_id=pWebsiteid 
+               AND user_id=C.jti;
 
-        -- Delete all tokens for user / website
-        DELETE refresh_token 
-         WHERE website_id=pWebsiteid 
-           AND user_id=l_session_data.user_id;
+            /* Check user has previously authenticated with current fingerprint  */
+            l_fingerprint:=getFingerprint;
+            SELECT COUNT(*) 
+              INTO n
+              FROM fingerprint
+             WHERE user_id=C.jti
+               AND fingerprint=l_fingerprint;
 
-        -- Create new refresh and access tokens
-        l_new_token:=apex_jwt.ENCODE (
-            p_iss       => l_session_data.iss,
-            p_sub       => l_session_data.sub,
-            p_aud       => l_session_data.scope,
-            p_jti       => l_session_data.user_id,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => ACCESS_TOKEN_EXP,
-            p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
-        );
+            IF (n=0) THEN
+                log_security(pWebsiteid, C.jti, l_refresh_token, 'Access denied from unknown device or location. Login again');
+                EXIT;
+            END IF;
 
-        l_new_refresh:=apex_jwt.ENCODE (
-            p_iss       => l_session_data.iss,
-            p_sub       => l_session_data.sub,
-            p_aud       => l_session_data.scope,
-            p_jti       => l_session_data.user_id,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => REFRESH_TOKEN_EXP,
-            p_other_claims => '"cld_cloud_name":' || apex_json.stringify(l_session_data.cld_cloud_name) ||
-                              ',"cld_upload_preset":' || apex_json.stringify(l_session_data.cld_upload_preset),
-            p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
-        );
+            /* User scope may have changed since last refresh cycle */
+            l_aud:=getScope(pWebsiteid, C.sub);
 
-        -- Rotate the user's refresh token for the website
-        INSERT INTO refresh_token(website_id, user_id, token_issued)
-            VALUES (pWebsiteid, l_session_data.user_id, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
+            -- Create new refresh and access tokens
+            l_new_token:=apex_jwt.ENCODE (
+                p_iss       => C.iss,
+                p_sub       => C.sub,
+                p_aud       => l_aud,
+                p_jti       => C.jti,
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => ACCESS_TOKEN_EXP,
+                p_signature_key => UTL_RAW.cast_to_raw (C.client_secret)
+            );
+
+            l_new_refresh:=apex_jwt.ENCODE (
+                p_iss       => C.iss,
+                p_sub       => C.sub,
+                p_aud       => l_aud,
+                p_jti       => C.jti,
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => REFRESH_TOKEN_EXP,
+                p_other_claims => '"cld_cloud_name":' || apex_json.stringify(C.cld_cloud_name) ||
+                                  ',"cld_upload_preset":' || apex_json.stringify(C.cld_upload_preset),
+                p_signature_key => UTL_RAW.cast_to_raw (C.client_secret)
+            );
+
+            -- Rotate the user's refresh token for the website
+            INSERT INTO refresh_token(website_id, user_id, token_issued)
+                VALUES (pWebsiteid, C.jti, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
+        END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('token', l_new_token);
-        l_json.put('refresh', l_new_refresh);
-        apex_util.prn(l_json.to_clob,false);
 
-        pStatus:=200;
+        IF (l_new_refresh IS NOT NULL AND l_new_token IS NOT NULL) THEN
+            l_json.put('token', l_new_token);
+            l_json.put('refresh', l_new_refresh);
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+        ELSE
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=401;
+        END IF;
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
