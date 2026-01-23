@@ -64,6 +64,10 @@ const clickHandler = (e) => {
 
     showErrors(errors);
 
+    if (errors.length>0) {
+        return;
+    }
+
 
     if (isSending) {
         console.log("Prevent double sends");
@@ -103,44 +107,44 @@ const clickHandler = (e) => {
 };
 
 const showErrors = (errors) => {
-  const list = summary.querySelector("ul");
-  list.innerHTML = "";
+    const list = summary.querySelector("ul");
+    list.innerHTML = "";
 
-  if (errors.length > 0) {
-    errors.forEach((err) => {
-      // Inline error for each field
-      err.field.setAttribute("aria-invalid", "true");
-      err.field.setAttribute("aria-describedby", err.errorId);
-      const inlineError = document.getElementById(err.errorId);
+    if (errors.length > 0) {
+        errors.forEach((err) => {
+            // Inline error for each field
+            err.field.setAttribute("aria-invalid", "true");
+            err.field.setAttribute("aria-describedby", err.errorId);
+            const inlineError = document.getElementById(err.errorId);
 
-      // Clear old content
-      inlineError.innerHTML = "";
+            // Clear old content
+            inlineError.innerHTML = "";
 
-      // Insert icon + message
-      const icon = document.createElement("span");
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = "⚠️";
-      icon.style.marginRight = "0.25rem";
+            // Insert icon + message
+            const icon = document.createElement("span");
+            icon.setAttribute("aria-hidden", "true");
+            icon.textContent = "⚠️";
+            icon.style.marginRight = "0.25rem";
 
-      inlineError.appendChild(icon);
-      inlineError.appendChild(document.createTextNode(err.message));
+            inlineError.appendChild(icon);
+            inlineError.appendChild(document.createTextNode(err.message));
 
-      // Add linked error message to summary list
-      const li = document.createElement("li");
-      const a = document.createElement("a");
-      a.href = `#${err.field.id}`;
-      a.textContent = err.message;
-      a.addEventListener("click", () => err.field.focus());
-      li.appendChild(a);
-      list.appendChild(li);
-    });
+            // Add linked error message to summary list
+            const li = document.createElement("li");
+            const a = document.createElement("a");
+            a.href = `#${err.field.id}`;
+            a.textContent = err.message;
+            a.addEventListener("click", () => err.field.focus());
+            li.appendChild(a);
+            list.appendChild(li);
+        });
 
-    summary.hidden = false;
-    summary.focus();
-    summary.scrollIntoView({ behavior: "smooth", block: "start" });
-  } else {
-    summary.hidden = true;
-  }
+        summary.hidden = false;
+        summary.focus();
+        summary.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+        summary.hidden = true;
+    }
 }
 
 dialog_footer.addEventListener("click", clickHandler);
