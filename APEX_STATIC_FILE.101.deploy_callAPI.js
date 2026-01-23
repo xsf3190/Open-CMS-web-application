@@ -17,15 +17,20 @@ const forceLogout = () => {
 ** COMMON ERROR HANDLER FOR IMPORTING MODULES
 */
 const handleError = (error) => {
-    // sessionStorage.clear();
-    // localStorage.clear();
     if (!output_dialog.open) {
         output_dialog.showModal();
     }
+    const msg = "<p>" + error + "</p>";
+    let action="";
+    if (msg.includes("Unauthorized")) {
+        sessionStorage.clear();
+        localStorage.clear();
+        action="Reload page and Log In";
+    }
     dialog_article.replaceChildren();
-    dialog_article.insertAdjacentHTML('afterbegin',error);
+    dialog_article.insertAdjacentHTML('afterbegin',msg);
     dialog_footer.replaceChildren();
-    dialog_footer.insertAdjacentHTML('afterbegin',"<span>Reload page and Log in</span>");
+    dialog_footer.insertAdjacentHTML('afterbegin',"<span>" + action + "</span>");
 }
 
 /* 
@@ -56,13 +61,8 @@ const replaceTokens = (data) => {
 ** COMMON ERROR HANDLER FOR API CALLS
 */
 const responseok = (response, result) => {
-    console.log("response.status",response.status);
     if (response.ok && result.success) {
         return(true);
-    }
-    if (response.status===401) {
-        forceLogout();
-        return;
     }
     if (result.cause) {
       throw new Error(`${response.status} - ${result.cause}`);
@@ -81,22 +81,22 @@ const callAPI = async (endpoint, method, data) => {
     let url;
 
     if (expiredToken(access_token)) {
-      if (expiredToken(refresh_token)) {
-        forceLogout();
-        return;
-      }
-      url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
-      let refresh_headers = new Headers();
-      refresh_headers.append("Content-Type", "application/json");
-      refresh_headers.append("url", window.location.hostname);
-      refresh_headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
-      refresh_headers.append("Authorization","Bearer " + refresh_token);
-      const refresh_config = {method: "GET", headers: refresh_headers};
-      const refresh_response = await fetch(url, refresh_config);
-      const refresh_result = await refresh_response.json();
-      if (responseok(refresh_response, refresh_result)) {
-          replaceTokens(refresh_result);
-      }
+        if (expiredToken(refresh_token)) {
+            forceLogout();
+            return;
+        }
+        url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
+        let refresh_headers = new Headers();
+        refresh_headers.append("Content-Type", "application/json");
+        refresh_headers.append("url", window.location.hostname);
+        refresh_headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+        refresh_headers.append("Authorization","Bearer " + refresh_token);
+        const refresh_config = {method: "GET", headers: refresh_headers};
+        const refresh_response = await fetch(url, refresh_config);
+        const refresh_result = await refresh_response.json();
+        if (responseok(refresh_response, refresh_result)) {
+            replaceTokens(refresh_result);
+        }
     }
       
     const path = endpoint.replace(":ID",bodydata.websiteid)
