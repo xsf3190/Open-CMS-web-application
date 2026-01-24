@@ -1,5 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
+     PROCEDURE createCollectionItem(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
+     --
     PROCEDURE deletePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
@@ -112,6 +114,53 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json.put('header',l_header);
         l_json.put('article',l_article);
         l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+    /*
+    ** CREATE NEW COLLLECTION ITEM
+    */
+    PROCEDURE createCollectionItem(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_navigation_label website_article.navigation_label%type;
+        l_link VARCHAR2(500);
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        FOR C IN (
+            SELECT parentid, title, excerpt
+            FROM JSON_TABLE(pBodyText, '$' COLUMNS (parentid, title, excerpt))
+        ) LOOP
+            
+            INSERT INTO article(id, parent_id, author_user_id, title, excerpt, body_html) 
+            VALUES (seq_article.nextval, C.parentid, l_session_data.user_id, C.title, C.excerpt, '<h2>' || C.title || '</h2>');
+
+            UPDATE article SET updated_date=current_timestamp WHERE id=C.parentid;
+
+            FOR C1 IN (
+                SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
+                  FROM website w, website_article wa 
+                 WHERE w.id=pWebsiteId
+                   AND wa.website_id=w.id
+                   AND wa.article_id=C.parentid
+            ) LOOP
+                /* Deploy editor site with new collection item */ 
+                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C1.netlify_site_id, pResturl=>pck_core.getResturl);
+                /* Link to new collection item */
+                l_link:='<a href="/' || C1.navigation_label_slug || '/' || apex_string_util.get_slug(C.title) || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open new ' || C1.navigation_label_slug || '</a>';
+            END LOOP;
+
+        END LOOP;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('link',l_link);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
