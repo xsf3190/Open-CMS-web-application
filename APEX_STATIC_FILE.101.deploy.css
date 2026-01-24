@@ -899,7 +899,7 @@ dialog hr+span {
     border: 1px solid lightgrey;
 	padding: 0.25em 0.75em;
   }
-  img, svg {
+  img {
     width: 5rem;
     height: 5rem;
     object-fit: cover;
