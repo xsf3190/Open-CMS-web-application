@@ -23,9 +23,9 @@ export const init = (element) => {
 let isSending = false;
 
 /*
-**  CLICK PUBLISH BUTTON
+**  CLICK PUBLISH BUTTON IN THE FOOTER
 */
-const clickHandler = (e) => {
+const footerHandler = (e) => {
     if (!e.target.classList.contains("publish")) {
         return;
     }
@@ -64,46 +64,44 @@ const clickHandler = (e) => {
 
     showErrors(errors);
 
-    if (errors.length>0) {
-        return;
+    if (errors.length === 0) {
+
+        if (isSending) {
+            console.log("Prevent double sends");
+            return;
+        }
+        const live=dialog_footer.querySelector("[aria-live]");
+        const loader = dialog_footer.querySelector(".loader");
+
+        isSending = true;
+        live.textContent = e.target.dataset.processing;
+        loader.style.opacity=1;
+
+        const formObj = {};
+
+        formObj["parentid"]=e.target.dataset.parentId;
+        formObj["title"]=dialog_article.querySelector("[name=title]").value;
+        formObj["excerpt"]=dialog_article.querySelector("[name=excerpt]").value;
+
+        callAPI(endpoint, "POST", formObj)
+            .then((data) => {
+                isSending = false;
+                loader.style.opacity=0;        
+                live.replaceChildren();
+                if (data.link) {
+                    live.insertAdjacentHTML('beforeend',data.link);
+                    live.style.color = "green";
+                }
+                if (data.message) {
+                    live.insertAdjacentHTML('beforeend',data.message);
+                    live.style.color = "red";
+                }
+            })
+            .catch((error) => {
+                loader.style.opacity=0;
+                handleError(error);
+            });
     }
-
-
-    if (isSending) {
-        console.log("Prevent double sends");
-        return;
-    }
-    const live=dialog_footer.querySelector("[aria-live]");
-    const loader = dialog_footer.querySelector(".loader");
-
-    isSending = true;
-    live.textContent = e.target.dataset.processing;
-    loader.style.opacity=1;
-
-    const formObj = {};
-
-    formObj["parentid"]=e.target.dataset.parentId;
-    formObj["title"]=dialog_article.querySelector("[name=title]").value;
-    formObj["excerpt"]=dialog_article.querySelector("[name=excerpt]").value;
-
-    callAPI(endpoint, "POST", formObj)
-        .then((data) => {
-            isSending = false;
-            loader.style.opacity=0;        
-            live.replaceChildren();
-            if (data.link) {
-                live.insertAdjacentHTML('beforeend',data.link);
-                live.style.color = "green";
-            }
-            if (data.message) {
-                live.insertAdjacentHTML('beforeend',data.message);
-                live.style.color = "red";
-            }
-        })
-        .catch((error) => {
-            loader.style.opacity=0;
-            handleError(error);
-        });
 };
 
 const showErrors = (errors) => {
@@ -147,4 +145,4 @@ const showErrors = (errors) => {
     }
 }
 
-dialog_footer.addEventListener("click", clickHandler);
+dialog_footer.addEventListener("click", footerHandler);
