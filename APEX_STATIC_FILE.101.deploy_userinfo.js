@@ -4,7 +4,10 @@
 import { dialog_article, dialog_footer, initDialog, dropdown } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-const selectHandler = async (e) => {
+/*
+**  CLICK DELETE WEBSITE BUTTON IN THE ARTICLE
+*/
+const footerHandler = async (e) => {
     /* click on <button class="logout"> */
     const live=dialog_footer.querySelector("[aria-live]");
     if (e.target.classList.contains("logout")) {
@@ -25,11 +28,22 @@ const selectHandler = async (e) => {
     }
 };
 
+/*
+**  CLICK DELETE WEBSITE BUTTON IN THE ARTICLE
+*/
+const actionHandler = (e) => {
+    if (!e.target.classList.contains("delete")) {
+        return;
+    }
+    console.log("Delete", e.target);
+}
+
 export const init = () => {
     callAPI("userinfo/:ID","GET")
         .then((data) => {
             initDialog(data);
-            dialog_footer.addEventListener("click", selectHandler);
+            dialog_footer.addEventListener("click", footerHandler);
+            dialog_article.addEventListener("click", actionHandler);
         })
         .catch((error) => {
             handleError(error);
