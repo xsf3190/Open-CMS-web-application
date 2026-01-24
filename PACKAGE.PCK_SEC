@@ -26,7 +26,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    FUNCTION getSessionData(pWebsiteId IN website.id%type, pExpiry IN NUMBER DEFAULT ACCESS_TOKEN_EXP) RETURN t_session_data;
+    FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data;
     --
     PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
@@ -166,84 +166,47 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     /*
     ** PERMANENT RECORD OF SECURITY VIOLATIONS, ERRORS
     */
-    PROCEDURE log_security(pWebsiteid IN NUMBER, pUserid IN NUMBER, pToken IN VARCHAR2, pMessage IN VARCHAR2) IS PRAGMA AUTONOMOUS_TRANSACTION;
+    PROCEDURE log_security(pWebsiteid IN NUMBER, pUserid IN NUMBER, pToken IN VARCHAR2, pMessage IN VARCHAR2) IS
     BEGIN
         INSERT INTO security_log(website_id, user_id, token, message, ip) 
         VALUES (pWebsiteid, pUserid, pToken, pMessage, OWA_UTIL.get_cgi_env ('REMOTE_ADDR'));
+    END;
 
-        DELETE refresh_token WHERE website_id=pWebsiteId AND user_id=pUserid;
-
-        COMMIT;
+    /*
+    ** JWT Issuer claim
+    */
+    FUNCTION getJWTIssuer(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN ('ORDS.' || pWebsiteid);
     END;
 
     /*
     ** GET SESSION DETAILS OF JWT RESOURCE ACCESS REQUEST
     */
-    FUNCTION getSessionData(pWebsiteId IN website.id%type, pExpiry IN NUMBER DEFAULT ACCESS_TOKEN_EXP) RETURN t_session_data IS
+    FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data IS
         l_session_data t_session_data;
         l_bearer_token varchar2(500);
-        l_token_name VARCHAR2(15);
         l_token APEX_JWT.T_TOKEN;
-        l_errors BOOLEAN;
-        l_message VARCHAR2(50);
-        n pls_integer;
 
     BEGIN
+    -- pck_core.log('getSessionData:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
         l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
         l_bearer_token := SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
-        l_token_name:=CASE WHEN pExpiry=ACCESS_TOKEN_EXP THEN 'access token' ELSE 'refresh token' END;
-
-        l_errors:=TRUE;
-        
-
         /*
         **  "sub" in the token is the user's email address which we need to get user_ords_clients.client_secret
         */
-        l_message:='decode the ' || l_token_name;
         l_token:=apex_jwt.DECODE(p_value=>l_bearer_token, p_signature_key=>null);
 
         FOR C IN (
-            SELECT j.iss, j.sub, j.aud, j.iat, j.exp, j.jti, j.cld_cloud_name, j.cld_upload_preset, NVL(o.client_secret,'x') client_secret, w.contact_email
-              FROM JSON_TABLE(l_token.payload, '$' COLUMNS(iss, sub, aud, iat, exp, jti, cld_cloud_name, cld_upload_preset)) j, user_ords_clients o, website w
-             WHERE j.sub=o.name(+)
-               AND w.id=pWebsiteid
+            SELECT j.iss, j.sub, j.aud, j.iat, j.exp, j.jti, j.cld_cloud_name, j.cld_upload_preset, o.client_secret
+              FROM JSON_TABLE(l_token.payload, '$' COLUMNS(iss, sub, aud, iat, exp, jti, cld_cloud_name, cld_upload_preset)) j, user_ords_clients o
+             WHERE j.sub=o.name
         ) LOOP
-            l_message:='check issuer is valid';
-            IF (C.iss<>'ORDS.'||pWebsiteid) THEN
-                 RAISE VALUE_ERROR;
-            END IF;
 
-            l_message:='decode the ' || l_token_name || ' with user''s signature key';
             l_token:=apex_jwt.DECODE(p_value=>l_bearer_token, p_signature_key=>UTL_RAW.cast_to_raw(C.client_secret));
 
-            IF (l_token_name='refresh token') THEN
-                IF (C.aud='admin') THEN
-                    l_message:='Checking admin role is still valid';
-                    SELECT COUNT(*) INTO n
-                      FROM apex_workspace_apex_users w
-                     WHERE w.email=C.sub
-                       AND w.is_admin='Yes';
-                    IF (n=0) THEN
-                        RAISE VALUE_ERROR;
-                    END IF;
-                END IF;
-
-                IF (C.aud='owner') THEN
-                    l_message:='Checking owner role is still valid';
-                    IF (C.sub<>C.contact_email) THEN
-                        RAISE VALUE_ERROR;
-                    END IF;
-                END IF;
-            END IF;
-
-            l_message:='token expired';
-            apex_jwt.VALIDATE (p_token=>l_token, p_iss=>'ORDS.' || pWebsiteid);
-
-            l_message:='expiry threshold is ' || pExpiry || ' seconds';
-            IF (C.exp-C.iat>pExpiry) THEN
-                RAISE VALUE_ERROR;
-            END IF;
+            apex_jwt.VALIDATE (p_token=>l_token, p_iss=>getJWTIssuer(pWebsiteid));
 
             /* Token valid */
             l_session_data.user_id:=C.jti;
@@ -255,23 +218,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             l_session_data.client_secret:=C.client_secret;
             l_session_data.timezone:=OWA_UTIL.get_cgi_env('timezone');
             l_session_data.url:=OWA_UTIL.get_cgi_env('url');
-
-            l_errors:=FALSE;
         END LOOP;
-
-        IF (l_errors) THEN
-            RAISE VALUE_ERROR;
-        END IF;
 
         g_session_user_id:=l_session_data.user_id;
         g_website_id:=pWebsiteid;
 
         RETURN (l_session_data);
 
-        EXCEPTION WHEN VALUE_ERROR THEN
-            log_security(pWebsiteid, l_session_data.user_id, l_bearer_token, l_message);
-
-            RAISE_APPLICATION_ERROR(-20000,'Invalid JWT - '||l_message);
     END;
 
     /*
@@ -327,6 +280,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_return_message VARCHAR2(100);
         l_json JSON_OBJECT_T;
     BEGIN
+    -- pck_core.log('createAuthRequest:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
         SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id
           INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id
           FROM user_ords_clients o, users u, JSON_TABLE(pBodyText, '$' COLUMNS email, url, request_type) j
@@ -349,7 +303,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         CASE l_request_type
             WHEN 'magic' THEN
                 l_token:=apex_jwt.ENCODE (
-                    p_iss       => 'ORDS.'||pWebsiteId,
+                    p_iss       => getJWTIssuer(pWebsiteid),
                     p_sub       => l_email,
                     p_aud       => 'xxx',
                     p_iat_ts    => current_timestamp,
@@ -587,6 +541,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
+    -- pck_core.log('issueJWTTokens:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
         l_fingerprint:=getFingerprint;
 
         UPDATE fingerprint 
@@ -617,7 +572,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
              FETCH FIRST ROW ONLY;
         END IF;
 
-        l_issuer:='ORDS.'||pWebsiteId;
+        l_issuer:=getJWTIssuer(pWebsiteid);
         l_scope:=getScope(pWebsiteId,pEmail);
 
         l_new_refresh:=apex_jwt.ENCODE (
@@ -715,7 +670,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 );
 
                 BEGIN
-                    apex_jwt.VALIDATE (p_token => l_token, p_iss => 'ORDS.'||pWebsiteId);
+                    apex_jwt.VALIDATE (p_token => l_token, p_iss => getJWTIssuer(pWebsiteid));
                     EXCEPTION 
                         WHEN VALUE_ERROR THEN
                             htp.p('<h1>Token expired or not current. Check you sent from most recent message received. Login again</h1>');
@@ -754,6 +709,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_token_issued refresh_token.token_issued%type;
         l_json JSON_OBJECT_T;
     BEGIN
+    -- pck_core.log('checkAuthStatus:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
         SELECT u.id, LOWER(u.email), u.cld_cloud_name, u.cld_upload_preset, extract (minute from (current_timestamp - coalesce(u.updated_date, u.created_date)))
           INTO l_user_id, l_email, l_cld_cloud_name, l_cld_upload_preset, l_time_since_sent
           FROM users u, JSON_TABLE(pBodyText, '$' COLUMNS email) j
@@ -790,13 +746,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_new_token VARCHAR2 (4000);
         l_new_refresh VARCHAR2 (4000);
         l_fingerprint fingerprint.fingerprint%type;
-        l_message security_log.message%type;
+        l_access_denied_user security_log.user_id%type;
+        l_access_denied_message security_log.message%type;
         l_aud VARCHAR2(7);
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
         l_refresh_token:=SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
-        -- pck_core.log('l_refresh_token:'||l_refresh_token);
+
+        l_fingerprint:=getFingerprint;
 
         /* Decode refresh token without client secret to get the email (i.e. sub claim) */
         l_token:=apex_jwt.DECODE(p_value=>l_refresh_token, p_signature_key=>null);
@@ -806,12 +764,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
               FROM JSON_TABLE(l_token.payload, '$' COLUMNS(iss, sub, jti, cld_cloud_name, cld_upload_preset)) j, user_ords_clients o
              WHERE j.sub=o.name
         ) LOOP
+            /* Check user has previously authenticated with their current fingerprint  */
+            SELECT COUNT(*) 
+              INTO n
+              FROM fingerprint
+             WHERE user_id=C.jti
+               AND fingerprint=l_fingerprint;
+            IF (n=0) THEN
+                l_access_denied_user:=C.jti;
+                l_access_denied_message:='Access denied from unknown device or location. Login again';
+                EXIT;
+            END IF;
+
             /* Decode refresh token WITH client secret */
-            -- pck_core.log('C.client_secret:'||C.client_secret);
             l_token:=apex_jwt.DECODE(p_value=>l_refresh_token, p_signature_key=>UTL_RAW.cast_to_raw(C.client_secret));
 
             /* Check token not expired and issuer is valid */
-            apex_jwt.VALIDATE (p_token=>l_token, p_iss=>'ORDS.' || pWebsiteid);
+            apex_jwt.VALIDATE (p_token=>l_token, p_iss=>getJWTIssuer(pWebsiteid));
 
             /* Check token has been registered for user */
             l_token_issued:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
@@ -820,9 +789,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
              WHERE token_issued=l_token_issued 
                AND website_id=pWebsiteid 
                AND user_id=C.jti;
-            
             IF (n=0) THEN
-                log_security(pWebsiteid, C.jti, l_refresh_token, 'Invalid refresh token');
+                l_access_denied_user:=C.jti;
+                l_access_denied_message:='Invalid refresh token';
                 EXIT;
             END IF;
 
@@ -830,19 +799,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             DELETE refresh_token 
              WHERE website_id=pWebsiteid 
                AND user_id=C.jti;
-
-            /* Check user has previously authenticated with current fingerprint  */
-            l_fingerprint:=getFingerprint;
-            SELECT COUNT(*) 
-              INTO n
-              FROM fingerprint
-             WHERE user_id=C.jti
-               AND fingerprint=l_fingerprint;
-
-            IF (n=0) THEN
-                log_security(pWebsiteid, C.jti, l_refresh_token, 'Access denied from unknown device or location. Login again');
-                EXIT;
-            END IF;
 
             /* User scope may have changed since last refresh cycle */
             l_aud:=getScope(pWebsiteid, C.sub);
@@ -875,16 +831,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 VALUES (pWebsiteid, C.jti, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
         END LOOP;
 
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
+        
 
-        IF (l_new_refresh IS NOT NULL AND l_new_token IS NOT NULL) THEN
+        IF (l_access_denied_user IS NULL) THEN
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('success',true);
             l_json.put('token', l_new_token);
             l_json.put('refresh', l_new_refresh);
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
         ELSE
-            apex_util.prn(l_json.to_clob,false);
+            log_security(pWebsiteid, l_access_denied_user, l_refresh_token, l_access_denied_message);
             pStatus:=401;
         END IF;
 
