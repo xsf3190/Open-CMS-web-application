@@ -705,6 +705,7 @@ fieldset {
   width: auto;   
   flex: none;
   aspect-ratio: 1;
+  pointer-events: none;
 }
 
 .button:hover {
