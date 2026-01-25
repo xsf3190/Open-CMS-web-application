@@ -40,33 +40,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     TYPE t_labels IS TABLE OF tt_labels;
 
     /*
-    ** ARTICLE LINK OPTIONS SELECT LIST
-    */
-    FUNCTION getLinkOptions(pParentId IN article.id%type, pArticleid IN article.id%type) RETURN VARCHAR2 IS
-        l_options CLOB;
-        n PLS_INTEGER:=0;
-    BEGIN
-        FOR C IN (
-            WITH checked AS
-            (
-                SELECT article_id_2 FROM article_link WHERE article_id_1=pArticleid
-            )
-            SELECT a.id, a.title, l.article_id_2
-              FROM article a, checked l
-             WHERE a.parent_id=pParentId
-               AND a.id<>pArticleid
-               AND a.id=l.article_id_2(+)
-             ORDER BY a.title
-        ) LOOP
-            n:=n+1;
-            l_options:=l_options ||
-            '<input type="checkbox" name="link" id="link' || n || '" value="' || C.id || '"' || CASE WHEN C.article_id_2 IS NOT NULL THEN ' checked' END || '>' || 
-            '<label for="link' || n || '">' || C.title || '</label>';
-        END LOOP;
-        RETURN (l_options);
-    END;
-
-    /*
     ** CREATE HTML FOR PAGE OPTIONS FORM
     */
     PROCEDURE getCollectionItemForm(pWebsiteId IN website.id%type, pParentId IN article.id%type, pStatus OUT NUMBER) IS
@@ -123,7 +96,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /*
-    ** CREATE NEW COLLLECTION ITEM
+    ** CREATE NEW COLLLECTION ITEM AND DEPLOY EDITOR SITE
     */
     PROCEDURE createCollectionItem(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -167,6 +140,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
+    END;
+
+    /*
+    ** ARTICLE LINK OPTIONS SELECT LIST
+    */
+    FUNCTION getLinkOptions(pParentId IN article.id%type, pArticleid IN article.id%type) RETURN VARCHAR2 IS
+        l_options CLOB;
+        n PLS_INTEGER:=0;
+    BEGIN
+        FOR C IN (
+            WITH checked AS
+            (
+                SELECT article_id_2 FROM article_link WHERE article_id_1=pArticleid
+            )
+            SELECT a.id, a.title, l.article_id_2
+              FROM article a, checked l
+             WHERE a.parent_id=pParentId
+               AND a.id<>pArticleid
+               AND a.id=l.article_id_2(+)
+             ORDER BY a.title
+        ) LOOP
+            n:=n+1;
+            l_options:=l_options ||
+            '<input type="checkbox" name="link" id="link' || n || '" value="' || C.id || '"' || CASE WHEN C.article_id_2 IS NOT NULL THEN ' checked' END || '>' || 
+            '<label for="link' || n || '">' || C.title || '</label>';
+        END LOOP;
+        RETURN (l_options);
     END;
 
     /*
@@ -243,16 +243,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             END CASE;
 
             l_footer:=
-            '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' ||
-                'PUBLISH' ||
-            '</button>' ||
-            '<span aria-live="polite"></span>' ||
-            '<span class="loader icon"></span>' ||
-            CASE WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
-            '<button type="button" class="button delete" style="--button-bg:red">' ||
-                'DELETE ' || UPPER(C.navigation_label) ||
-            '</button>'
-            END;
+            '<div class="flex-items space-between">' ||
+                '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' ||
+                    'PUBLISH' ||
+                '</button>' ||
+                '<span aria-live="polite"></span>' ||
+                '<span class="loader icon"></span>' ||
+                CASE WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
+                '<button type="button" class="button delete" style="--button-bg:red">' ||
+                    'DELETE ' || UPPER(C.navigation_label) ||
+                '</button>' 
+                END ||
+            '</div>';
         END LOOP;
 
         l_json:= new JSON_OBJECT_T;
@@ -348,7 +350,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         /* FORCE NEXT DEPLOYMENT TO REBUILD INDEX PAGE */
         FOR C IN (
-            SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug, a.parent_id
+            SELECT w.netlify_site_id, wa.navigation_label, a.parent_id
               FROM website w, website_article wa, article a
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -362,7 +364,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             /* Deploy editor site with new collection item */ 
             pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL);
             /* Link to new collection item */
-            l_link:='<a href="/' || C.navigation_label_slug || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">' || C.navigation_label_slug || ' Deleted. Go to new index</a>';
+            l_link:='<a href="/' || apex_string_util.get_slug(C.navigation_label) || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">' || C.navigation_label || ' Deleted. Index page updated</a>';
         END LOOP;
 
         l_json:= new JSON_OBJECT_T;
