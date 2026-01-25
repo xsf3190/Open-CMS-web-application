@@ -5,7 +5,7 @@ import { dialog_article, dialog_footer, initDialog, dropdown } from "deploy_elem
 import { callAPI, handleError } from "deploy_callAPI";
 
 /*
-**  CLICK DELETE WEBSITE BUTTON IN THE ARTICLE
+**  CLICK LOGOUT BUTTON
 */
 const footerHandler = async (e) => {
     /* click on <button class="logout"> */
@@ -31,11 +31,39 @@ const footerHandler = async (e) => {
 /*
 **  CLICK DELETE WEBSITE BUTTON IN THE ARTICLE
 */
-const actionHandler = (e) => {
-    if (!e.target.classList.contains("delete")) {
+let isSending = false;
+
+const deleteWebsite = (websiteid, tablerow) => {
+    if (isSending) {
+        console.log("Prevent double sends");
         return;
     }
-    console.log("Delete", e.target);
+    const live=dialog_footer.querySelector("[aria-live]");
+    const loader = dialog_footer.querySelector(".loader");
+
+    isSending = true;
+    live.textContent = "Deleting website";
+    loader.style.opacity=1;
+
+    callAPI("website/:ID","DELETE",{websiteid:websiteid})
+        .then((data) => {
+            isSending = false;
+            loader.style.opacity=0;        
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.message);
+            const tabindex = tablerow.closest("[tabindex]");
+            tablerow.remove();
+            tabindex.focus();
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+}
+
+const actionHandler = (e) => {
+    if (e.target.classList.contains("delete")) {
+        deleteWebsite(e.target.dataset.websiteid, e.target.closest("tr"));
+    }
 }
 
 export const init = () => {
