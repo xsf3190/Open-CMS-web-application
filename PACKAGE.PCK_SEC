@@ -47,7 +47,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
+        l_delete_button VARCHAR2(2000);
         l_article LONG;
+        l_svg icon.svg%type;
+        l_viewbox icon.viewbox%type;
+        n PLS_INTEGER:=0;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -55,21 +59,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
                 '<caption id="table-caption">Platform CPU Usage for current month</caption>' ||
-                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th><th class="align-right">Usage</th></tr>';
+                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th><th class="align-right">Usage</th><th>Delete</th></tr>';
 
         FOR C IN (
             WITH cpu AS
             (
                 SELECT website_id, SUM(cpu_used) cpu_used FROM website_cpu WHERE period_start=TRUNC(current_timestamp,'mm') GROUP BY website_id
             )
-            SELECT w.domain_name, w.contact_email, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct,
+            SELECT w.id, w.domain_name, w.contact_email, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct,
                 (SELECT COUNT(*) FROM article a, website_article wa WHERE wa.website_id=w.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_pages,
                 (SELECT COUNT(*) FROM article a, website_article wa, asset_used au WHERE wa.website_id=w.id AND au.article_id=a.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_images
              FROM website w,  cpu c
              WHERE w.id=c.website_id(+)
-             ORDER BY 1
+               AND w.domain_name<>'es-modules'
+             ORDER BY domain_name
         ) LOOP
             IF (l_session_data.scope='admin' OR C.contact_email=l_session_data.sub) THEN
+                IF (NVL(C.cpu_used_pct,0)=0) THEN
+                    n:=n+1;
+                    IF (n=1) THEN
+                        SELECT svg, viewbox INTO l_svg, l_viewbox FROM icon WHERE id='delete';
+                    END IF;
+                    l_delete_button:=
+                    '<button type="button" class="button delete" data-button-variant="round-icon" style="--button-border-color:red" aria-labelledby="delete-' || C.id || '">' || 
+                        '<span id="delete-' || C.id || '" hidden>Delete unused website '|| C.domain_name || '</span>'||
+                        '<svg aria-hidden="true" width="1em" viewBox="' || l_viewbox || '" style="fill:red">' || l_svg || '</svg>' ||         
+                    '</button>';
+                ELSE
+                    l_delete_button:=null;
+                END IF;
                 l_article:=l_article ||
                 '<tr>' || 
                     '<td>' || C.domain_name || '</td>' || 
@@ -77,6 +95,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<td>' || C.nb_pages || '</td>' || 
                     '<td>' || C.nb_images || '</td>' || 
                     '<td class="align-right">' || NVL(C.cpu_used_pct,0) || '%</td>' || 
+                    '<td class="align-center">' || l_delete_button || '</td>' || 
                 '</tr>';
             END IF;
         END LOOP;
@@ -161,15 +180,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
            AND r.name='visitor'
            AND (INSTR(o.uri_template,'message')>0 or INSTR(o.uri_template,'authenticate')>0);
 
-    END;
-
-    /*
-    ** PERMANENT RECORD OF SECURITY VIOLATIONS, ERRORS
-    */
-    PROCEDURE log_security(pWebsiteid IN NUMBER, pUserid IN NUMBER, pToken IN VARCHAR2, pMessage IN VARCHAR2) IS
-    BEGIN
-        INSERT INTO security_log(website_id, user_id, token, message, ip) 
-        VALUES (pWebsiteid, pUserid, pToken, pMessage, OWA_UTIL.get_cgi_env ('REMOTE_ADDR'));
     END;
 
     /*
@@ -510,12 +520,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     /*
     ** BUILD FINGERPRINT FOR CLIENT DEVICE AND LOCATION
     */
-    FUNCTION getFingerprint RETURN RAW IS
-        l_fingerprint_string VARCHAR2(500);
+    FUNCTION getFingerprint(pRemoteAddr IN OUT VARCHAR2, pUserAgent IN OUT VARCHAR2, pTimezone IN OUT VARCHAR2) RETURN RAW IS
         l_fingerprint fingerprint.fingerprint%type;
+        l_remote_addr security_log.remote_addr%type:=OWA_UTIL.get_cgi_env ('REMOTE_ADDR');
+        l_user_agent  security_log.user_agent%type:=OWA_UTIL.get_cgi_env ('sec-ch-ua') || OWA_UTIL.get_cgi_env ('sec-ch-ua-platform');
+        l_timezone security_log.timezone%type:=OWA_UTIL.get_cgi_env ('timezone');
     BEGIN
-        l_fingerprint_string:=OWA_UTIL.get_cgi_env ('REMOTE_ADDR') || OWA_UTIL.get_cgi_env('HTTP_USER_AGENT') || OWA_UTIL.get_cgi_env('timezone');
-        l_fingerprint:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_fingerprint_string,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+        l_fingerprint:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_remote_addr || l_user_agent || l_timezone,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+        pRemoteAddr:=l_remote_addr;
+        pUserAgent:=l_user_agent;
+        pTimezone:=l_timezone;
         RETURN (l_fingerprint);
     END;
 
@@ -534,15 +548,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_scope VARCHAR2(7);
         l_cld_cloud_name users.cld_cloud_name%type:=pCldCloudName;
         l_cld_upload_preset users.cld_upload_preset%type:=pCldUploadPreset;
-        l_location fingerprint.location%type;
-        l_browser fingerprint.browser%type;
 
         l_fingerprint fingerprint.fingerprint%type;
+        l_remote_addr fingerprint.remote_addr%type;
+        l_user_agent  fingerprint.user_agent%type;
+        l_timezone fingerprint.timezone%type;
+
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
+    for i in 1..nvl(owa.num_cgi_vars, 0) loop
+        if (instr(owa.cgi_var_name(i),'sec-ch-ua')>0) then
+            pck_core.log(owa.cgi_var_name(i) || ': ' || owa.cgi_var_val(i));
+        end if;
+    end loop;
     -- pck_core.log('issueJWTTokens:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
-        l_fingerprint:=getFingerprint;
+        l_fingerprint:=getFingerprint(l_remote_addr, l_user_agent, l_timezone);
 
         UPDATE fingerprint 
            SET last_used_date=current_timestamp
@@ -551,10 +572,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
         n:=sql%rowcount;
         IF (n=0) THEN
-            l_location:=pck_visits.getLocation;
-            l_browser:=pck_visits.getBrowser;
-            INSERT INTO fingerprint(user_id, fingerprint, last_used_date, ip, timezone, location, browser)
-            VALUES (pUserid, l_fingerprint, current_timestamp, OWA_UTIL.get_cgi_env ('REMOTE_ADDR'), OWA_UTIL.get_cgi_env('timezone'), l_location, l_browser);
+            INSERT INTO fingerprint(user_id, fingerprint, last_used_date, remote_addr, user_agent, timezone)
+            VALUES (pUserid, l_fingerprint, current_timestamp, l_remote_addr, l_user_agent, l_timezone);
         END IF;
 
         SELECT client_secret 
@@ -749,12 +768,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_access_denied_user security_log.user_id%type;
         l_access_denied_message security_log.message%type;
         l_aud VARCHAR2(7);
+        l_remote_addr fingerprint.remote_addr%type;
+        l_user_agent  fingerprint.user_agent%type;
+        l_timezone fingerprint.timezone%type;
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
         l_refresh_token:=SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
 
-        l_fingerprint:=getFingerprint;
+        l_fingerprint:=getFingerprint(l_remote_addr, l_user_agent, l_timezone);
 
         /* Decode refresh token without client secret to get the email (i.e. sub claim) */
         l_token:=apex_jwt.DECODE(p_value=>l_refresh_token, p_signature_key=>null);
@@ -841,7 +863,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
         ELSE
-            log_security(pWebsiteid, l_access_denied_user, l_refresh_token, l_access_denied_message);
+            INSERT INTO security_log(website_id, user_id, token, message, remote_addr, user_agent, timezone) 
+            VALUES (pWebsiteid, l_access_denied_user, l_refresh_token, l_access_denied_message, l_remote_addr, l_user_agent, l_timezone);
             pStatus:=401;
         END IF;
 
