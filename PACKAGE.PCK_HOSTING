@@ -10,7 +10,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
     PROCEDURE deleteWebsite(pWebsiteid IN website.id%type);
     --
-    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pStatus OUT NUMBER);
+    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE getChangeURL(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
@@ -395,16 +395,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     /*
      * DELETE WEBSITE CALLED FROM JAVASCRIPT FETCH
     */
-    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pStatus OUT NUMBER) IS
+    PROCEDURE deleteWebsite(pWebsiteid IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_websiteid website.id%type;
+        l_domain_name website.domain_name%type;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        deleteWebsite(pWebsiteId);
+        SELECT j.websiteid, w.domain_name 
+          INTO l_websiteid, l_domain_name
+          FROM JSON_TABLE(pBodytext, '$' COLUMNS (websiteid)) j, website w
+         WHERE w.id=j.websiteid;
+
+        deleteWebsite(l_websiteid);
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
+        l_json.put('message','Successfully deleted ' || l_domain_name);
         apex_util.prn(l_json.to_clob,false);
         
         pStatus:=200;
@@ -452,7 +460,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT j.subdomain, w.netlify_site_id INTO l_subdomain, l_netlify_site_id  FROM JSON_TABLE(pBodytext, '$' COLUMNS (subdomain)) j, website w WHERE w.id=pWebsiteId;
+        SELECT j.subdomain, w.netlify_site_id 
+          INTO l_subdomain, l_netlify_site_id  
+          FROM JSON_TABLE(pBodytext, '$' COLUMNS (subdomain)) j, website w WHERE w.id=pWebsiteId;
 
         IF (urlExists(l_subdomain || '.netlify.app')) THEN
             l_message:='URL already in use. Try again';
