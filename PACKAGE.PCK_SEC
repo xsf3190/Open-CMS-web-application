@@ -34,8 +34,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
-    PROCEDURE refreshOrdsEndpoints(pWebsiteId IN website.id%type);
-    --
     PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN website_cpu.cpu_used%type);
     --
     PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER);
@@ -48,6 +46,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
         l_delete_button VARCHAR2(2000);
+        l_header VARCHAR2(200);
+        l_footer VARCHAR2(500);
         l_article LONG;
         l_svg icon.svg%type;
         l_viewbox icon.viewbox%type;
@@ -55,22 +55,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        l_header:='<span>Domains hosted for ' || l_session_data.sub || '</span>';
+
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
                 '<caption id="table-caption">Platform CPU Usage for current month</caption>' ||
-                '<tr><th>Domain Name</th><th>Last Published</th><th>Pages</th><th>Images</th><th class="align-right">Usage</th><th>Delete</th></tr>';
+                '<tr><th>Domain Name</th><th>Last Activity</th><th>Pages</th><th>Media</th><th class="align-right">Usage</th><th>Delete</th></tr>';
 
         FOR C IN (
             WITH cpu AS
             (
                 SELECT website_id, SUM(cpu_used) cpu_used FROM website_cpu WHERE period_start=TRUNC(current_timestamp,'mm') GROUP BY website_id
+            ),
+            activity AS
+            (
+                SELECT id, MAX(updated_date) as last_activity
+                FROM
+                (
+                    SELECT w.id, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, 
+                        a.updated_date as article_updated_date, wf.updated_date as font_updated_date, 
+                        NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published,
+                    (SELECT MAX(visit_date) FROM page_hit WHERE website_id=w.id) as visit_date
+                    FROM website w, website_article wa, article a, website_font wf
+                    WHERE wa.website_id=w.id
+                    AND wa.article_id=NVL(a.parent_id,a.id)
+                    AND wf.website_id=w.id
+                    AND w.domain_name<>'es-modules'
+                )
+                UNPIVOT  (updated_date FOR COL IN (visit_date,last_published,nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date))
+                GROUP BY id
             )
-            SELECT w.id, w.domain_name, w.contact_email, NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct,
+            SELECT w.id, w.domain_name, w.contact_email, a.last_activity, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct,
                 (SELECT COUNT(*) FROM article a, website_article wa WHERE wa.website_id=w.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_pages,
                 (SELECT COUNT(*) FROM article a, website_article wa, asset_used au WHERE wa.website_id=w.id AND au.article_id=a.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_images
-             FROM website w,  cpu c
+             FROM website w,  cpu c, activity a
              WHERE w.id=c.website_id(+)
+               AND w.id=a.id
                AND w.domain_name<>'es-modules'
              ORDER BY domain_name
         ) LOOP
@@ -81,7 +102,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                         SELECT svg, viewbox INTO l_svg, l_viewbox FROM icon WHERE id='delete';
                     END IF;
                     l_delete_button:=
-                    '<button type="button" class="button delete" data-button-variant="round-icon" style="--button-border-color:red" aria-labelledby="delete-' || C.id || '">' || 
+                    '<button type="button" class="button delete" data-websiteid="' || C.id || '" data-button-variant="round-icon" style="--button-border-color:red" aria-labelledby="delete-' || C.id || '">' || 
                         '<span id="delete-' || C.id || '" hidden>Delete unused website '|| C.domain_name || '</span>'||
                         '<svg aria-hidden="true" width="1em" viewBox="' || l_viewbox || '" style="fill:red">' || l_svg || '</svg>' ||         
                     '</button>';
@@ -91,7 +112,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 l_article:=l_article ||
                 '<tr>' || 
                     '<td>' || C.domain_name || '</td>' || 
-                    '<td>' || apex_util.get_since(C.last_published, false) || '</td>' || 
+                    '<td>' || apex_util.get_since(C.last_activity, false) || '</td>' || 
                     '<td>' || C.nb_pages || '</td>' || 
                     '<td>' || C.nb_images || '</td>' || 
                     '<td class="align-right">' || NVL(C.cpu_used_pct,0) || '%</td>' || 
@@ -102,11 +123,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_article:=l_article ||
         '</table></div>';
 
+        l_footer:=
+        '<div class="flex-items">' ||
+            '<button type="button" class="button logout">Log Out</button>' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>'||
+        '</div>';
+
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('header', '<span>Domains hosted for ' || l_session_data.sub || '</span>');
+        l_json.put('header', l_header);
         l_json.put('article', l_article);
-        l_json.put('footer', '<div class="flex-items space-apart"><button type="button" class="button logout">Log Out</button><span aria-live="polite"></span></div>');
+        l_json.put('footer', l_footer);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -142,44 +170,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
-    END;
-
-
-    /* 
-    ** TEMPORARY SOLUTION TO POPULATE ENDPOINT TABLES
-    */
-    PROCEDURE refreshOrdsEndpoints(pWebsiteId IN website.id%type) IS 
-        n pls_integer;
-    BEGIN
-        DELETE api_endpoint WHERE website_id=pWebsiteId;
-
-        DELETE website_role WHERE website_id=pWebsiteId;
-        
-        INSERT INTO website_role(website_id, role_id)
-        SELECT w.id, r.id
-          FROM website w, role r
-         WHERE w.id=pWebsiteId
-           AND r.name in ('admin','owner');
-
-        INSERT INTO api_endpoint(website_id, role_id, template_id)
-        SELECT w.id, r.id, o.template_id 
-          FROM website w, role r, ords_endpoints o
-         WHERE w.id=pWebsiteId
-           AND r.name in ('admin','owner');
-
-        INSERT INTO website_role(website_id, role_id)
-        SELECT w.id, r.id
-          FROM website w, role r
-         WHERE w.id=pWebsiteId
-           AND r.name='visitor';
-
-        INSERT INTO api_endpoint(website_id, role_id, template_id)
-        SELECT w.id, r.id, o.template_id 
-          FROM website w, role r, ords_endpoints o
-         WHERE w.id=pWebsiteId
-           AND r.name='visitor'
-           AND (INSTR(o.uri_template,'message')>0 or INSTR(o.uri_template,'authenticate')>0);
-
     END;
 
     /*
@@ -456,6 +446,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'blue', '✎', 'Edit Content');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
         l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
+        l_html:=l_html || addMenuitem('logo/:ID', 'red', '📊', 'Logo');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Manage Pages');
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
         
@@ -467,54 +458,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', 'cyan', '⚽', 'Codepen Editor');
 
         RETURN (l_html);
-    END;
-
-    /*
-    ** BUILD LIST OF MENU ITEMS FOR AUTHENTICATED USER
-    */
-    FUNCTION getMenulist(pWebsiteId IN website.id%type, pScope IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
-        l_menulist LONG;
-        l_editor_site BOOLEAN:=FALSE;
-        n PLS_INTEGER;
-    BEGIN
-        /*
-        ** SITE IS "TEST" WHEN
-        ** 1. URL IS "editor" SUB-DOMAIN OF CUSTOM DOMAIN, E.G. "editor.example.com"
-        ** 2. URL IS SUB-DOMAIN OF "netlify.app", E.G. "example-com.netlify.app"
-        ** 3. URL CONTAINS "codepen.io"
-        */
-
-        l_editor_site:=pck_hosting.getEnvFromURL(pUrl)='TEST';
-
-        refreshOrdsEndpoints(pWebsiteId);
-
-        FOR C IN (
-            SELECT CASE WHEN o.label='userinfo' THEN pEmail ELSE o.label END label, o.uri_template, o.method, o.priority
-              FROM api_endpoint a, role r, ords_endpoints o
-             WHERE a.website_id=pWebsiteId 
-               AND a.role_id=r.id 
-               AND r.name=pScope
-               AND a.template_id=o.template_id
-               AND INSTR(o.uri_template,'authenticate')=0
-             ORDER BY CASE 
-                        WHEN INSTR(o.uri_template,'userinfo')>0 THEN 0 
-                        WHEN INSTR(o.uri_template,'ecology')>0 THEN 1
-                        WHEN INSTR(o.uri_template,'edit-content')>0 THEN 2
-                        WHEN INSTR(o.uri_template,'publish-website')>0 THEN 3
-                        WHEN INSTR(o.uri_template,'visits')>0 THEN 4
-                        ELSE 5
-                      END,
-                      label
-        )
-        LOOP
-            IF (l_editor_site) THEN
-                l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
-            ELSIF (C.priority=1) THEN
-                l_menulist:=l_menulist || addMenuButton(C.uri_template, C.method, C.label);
-            END IF;
-        END LOOP;
-
-        RETURN (l_menulist);
     END;
 
     /*
@@ -624,7 +567,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_json.put('success',true);
         l_json.put('token', l_new_token);
         l_json.put('refresh', l_new_refresh);
-        --l_json.put('menulist', getMenulist(pWebsiteId, l_scope, OWA_UTIL.get_cgi_env('url'), pEmail));
         l_json.put('menulist', buildMenulist(pWebsiteId, l_scope, pEmail));
         apex_util.prn(l_json.to_clob,false);
     END;
@@ -852,8 +794,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             INSERT INTO refresh_token(website_id, user_id, token_issued)
                 VALUES (pWebsiteid, C.jti, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
         END LOOP;
-
-        
 
         IF (l_access_denied_user IS NULL) THEN
             l_json:= new JSON_OBJECT_T;
