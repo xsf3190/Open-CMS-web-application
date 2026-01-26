@@ -6,6 +6,8 @@ import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
 
+const logo = document.querySelector(".logo");
+
 /*
 **  CLICK PUBLISH BUTTON
 */
@@ -24,7 +26,7 @@ const footerHandler = async (e) => {
         live.textContent = e.target.dataset.processing;
         loader.style.opacity=1;
 
-        callAPI("publish-website/ID", "POST", {})
+        callAPI("publish-website/:ID", "POST", {})
             .then((data) => {
                 isSending = false;
                 loader.style.opacity=0;        
@@ -45,17 +47,64 @@ const footerHandler = async (e) => {
         }
 };
 
-const actionHandler = (e) => {
-    if (e.target.classList.contains("upload")) {
-        import("deploy_upload-media")
-        .then((module) => {
-            module.init(true,"image");
+const logo_img = (e) => {
+    const selected = e.options[e.selectedIndex].querySelector("img");
+
+    let img = logo.querySelector("img");
+    if (!img) {
+        img = document.createElement("img");
+        img.setAttribute("alt","");
+        logo.appendChild(img);
+    }
+    img.src = selected.src;
+
+    callAPI(endpoint,"PUT",{logo_type:"img",asset_id:e.options[e.selectedIndex].value})
+        .then((data) => {
+            const live=dialog_footer.querySelector("[aria-live]");
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.message);
         })
         .catch((error) => {
-            console.error(error);
-            console.error("Failed to load module deploy_upload-media");
+            handleError(error);
         });
-    };
+}
+
+const logo_font = (e) => {
+    callAPI(endpoint,"PUT",{logo_type:"font",font_id:e.options[e.selectedIndex].value})
+        .then((data) => {
+            const live=dialog_footer.querySelector("[aria-live]");
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.message);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+}
+
+const logo_text = (e) => {
+    callAPI(endpoint,"PUT",{logo_type:"font",font_text:e.value})
+        .then((data) => {
+            const live=dialog_footer.querySelector("[aria-live]");
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.message);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+}
+
+const changeHandler = (e) => {
+    const id = e.target.getAttribute("id");
+
+    if (id === "logo-img") {
+        logo_img(e.target);
+    } 
+    else if (id === "logo-text") {
+        logo_text(e.target);
+    }
+    else if (id === "logo-font-id") {
+        logo_font(e.target);
+    }
 }
 
 export const init = (element) => {
@@ -64,7 +113,7 @@ export const init = (element) => {
         .then((data) => {
             initDialog(data);
             dialog_footer.addEventListener("click", footerHandler);
-            dialog_article.addEventListener("click", actionHandler);
+            dialog_article.addEventListener("change", changeHandler);
         })
         .catch((error) => {
             handleError(error);
