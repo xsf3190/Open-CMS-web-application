@@ -223,14 +223,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         WITH data AS
         (
-            SELECT w.css_updated_date, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published, CAST(a.last_updated_on AS TIMESTAMP WITH TIME ZONE) css2_updated_date
-            FROM website w, website_article wa, article a, website_font wf, apex_application_static_files a
+            SELECT w.css_updated_date, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published, CAST(x.last_updated_on AS TIMESTAMP WITH TIME ZONE) css2_updated_date
+            FROM website w, website_article wa, article a, website_font wf, apex_application_static_files x
             WHERE w.id=pWebsiteid
             AND wa.website_id=w.id
             AND wa.article_id=NVL(a.parent_id,a.id)
             AND wf.website_id=w.id
-            AND a.application_id=101
-            AND a.file_name IN ('deploy.min.css','ckeditor.min.css')
+            AND x.application_id=101
+            AND x.file_name IN ('deploy.min.css','ckeditor.min.css')
         )
         SELECT MAX(netlify_last_published),MAX(updated_date)
         INTO l_netlify_last_published, l_last_updated_date
