@@ -23,6 +23,7 @@ const handleError = (error) => {
     const msg = "<p>" + error + "</p>";
     let action="";
     if (msg.includes("Unauthorized")) {
+        msg += "<p><span>refresh token:</span><span>" + localStorage.getItem("refresh") + "</span></p>";
         sessionStorage.clear();
         localStorage.clear();
         action="Reload page and Log In";
