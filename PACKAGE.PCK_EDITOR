@@ -26,6 +26,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    --
     PROCEDURE updatePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE updatePages(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
@@ -46,6 +48,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     */
     PROCEDURE getLogoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_logo_type website.logo_type%type;
+        l_logo_asset_id website.logo_asset_id%type;
+        l_font_id website_font.font_id%type;
+        l_font_text article_chars.chars_normal%type;
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
@@ -55,23 +61,62 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_header:='<span>Add Logo to main navigation</span>';
 
+        SELECT w.logo_type, w.logo_asset_id, wf.font_id, ac.chars_normal 
+          INTO l_logo_type, l_logo_asset_id, l_font_id, l_font_text
+          FROM website w, website_article wa, website_font wf, article_chars ac
+         WHERE w.id=pWebsiteid
+           AND wa.website_id=w.id
+           AND wa.display_order=1
+           AND wf.website_id(+)=w.id
+           AND wf.context(+)='logo'
+           AND ac.article_id(+)=wa.article_id
+           AND ac.context(+)='logo';
+
         l_article:=
         '<ol>' ||
-            '<li><strong>EITHER</strong> upload image</li>' ||
+            '<li><strong>EITHER</strong> use image</li>' ||
             '<li><strong>OR</strong> write text in a selected font</li>' ||
             '<li><strong>OR</strong> import SVG Code (requires knowledge of SVG)</li>' ||
         '</ol>' ||
-        '<details open name="logo-option">' ||
-            '<summary>1. Upload image</summary>' ||
-            '<button type="button" class="button upload">Upload Image</button>' ||
+        '<details name="logo-option"' || CASE WHEN l_logo_type='img' THEN ' open' END || '>' ||
+            '<summary>1. Use image</summary>' ||
+            '<fieldset class="flex-items">' ||
+                '<legend>Set logo from image</legend>' ||
+                '<div>' ||
+                    '<label for="logo-img">Select image</label>' ||
+                    '<select id="logo-img">' ||
+                        '<button>' ||
+                          '<selectedcontent></selectedcontent>' ||
+                          '<span class="arrow"></span>' ||
+                        '</button>';
+
+                    FOR C IN (
+                        SELECT wa.article_id, a.id, a.cld_cloud_name, a.public_id
+                          FROM website_article wa, asset a
+                         WHERE wa.website_id=pWebsiteid
+                           AND a.article_id=wa.article_id
+                           AND a.format='avif'
+                         ORDER BY a.created_date DESC
+                    )
+                    LOOP
+                        l_article:=l_article || 
+                        '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_logo_asset_id THEN ' selected' END || '>' || 
+                            '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">' ||
+                        '</option>';
+                    END LOOP;
+
+            l_article:=l_article || 
+                    '</select>' ||
+                '</div>' ||
+            '</fieldset>' ||            
         '</details>' ||
-        '<details name="logo-option">' ||
+        '<details name="logo-option"' || CASE WHEN l_logo_type='font' THEN ' open' END || '>' ||
             '<summary>2. Write text in a selected font</summary>' ||
             '<fieldset class="flex-items">' ||
                 '<legend>Enter logo text and select font</legend>' ||
                 '<div>' ||
-                    '<label for="logo-font-family">Select Google Font</label>' ||
-                    '<select id="logo-font-family">' ||
+                    '<label for="logo-font-id">Select Font</label>' ||
+                    '<select id="logo-font-id">' ||
                         '<button>' ||
                           '<selectedcontent></selectedcontent>' ||
                           '<span class="arrow"></span>' ||
@@ -80,7 +125,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     FOR C IN (SELECT id, family FROM font ORDER BY 2)
                     LOOP
                         l_article:=l_article || 
-                        '<option value="' || TO_CHAR(C.id) || '">' || C.family || '</option>';
+                        '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_font_id THEN ' selected' END || '>' || C.family || '</option>';
                     END LOOP;
 
             l_article:=l_article || 
@@ -88,7 +133,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '</div>' ||
                 '<div>' ||
                     '<label for="logo-text">Logo text</label>' ||
-                    '<input type="text" id="logo-text"/>' ||
+                    '<input type="text" id="logo-text" value="' || l_font_text || '"/>' ||
                 '</div>' ||
             '</fieldset>' ||
         '</details>';
@@ -112,6 +157,82 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
     END;
+
+    /*
+    ** UPDATE WEBSITE LOGO
+    */
+    PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_home_article_id article.id%type;
+        l_message LONG;
+        l_json JSON_OBJECT_T;
+        n PLS_INTEGER;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+         FOR C IN (
+            SELECT logo_type, asset_id, font_id, font_text, svg
+            FROM JSON_TABLE(pBodyText, '$' COLUMNS (logo_type, asset_id, font_id, font_text, svg))
+        ) LOOP
+            UPDATE website
+               SET logo_type=C.logo_type,
+                   logo_asset_id=C.asset_id,
+                   logo_svg=C.svg,
+                   logo_updated_date=current_timestamp
+             WHERE id=pWebsiteid;
+
+            IF (C.logo_type='font') THEN
+                IF (C.font_text IS NOT NULL) THEN
+                    SELECT article_id
+                      INTO l_home_article_id
+                      FROM website_article
+                     WHERE website_id=pWebsiteid
+                       AND display_order=1;
+
+                    UPDATE article_chars
+                       SET chars_normal=C.font_text, updated_date=current_timestamp
+                     WHERE article_id=l_home_article_id
+                       AND context='logo';
+                    n:=sql%rowcount;
+                    IF (n=0) THEN
+                        INSERT INTO article_chars(article_id, context, chars_normal)
+                        VALUES (l_home_article_id, 'logo', C.font_text);
+                    END IF;
+                END IF;
+                IF (C.font_id IS NOT NULL) THEN
+                    UPDATE article 
+                       SET updated_date=current_timestamp
+                     WHERE id=l_home_article_id;
+         
+                    UPDATE website_font 
+                       SET font_id=C.font_id, updated_date=current_timestamp
+                     WHERE website_id=pWebsiteid
+                       AND context='logo';
+                    n:=sql%rowcount;
+                    IF (n=0) THEN
+                        INSERT INTO website_font(website_id, font_id, context)
+                        VALUES (pWebsiteid, C.font_id, 'logo');
+                    END IF;
+                END IF;
+            END IF;
+
+            IF (C.logo_type IS NOT NULL) THEN
+                l_message:='Logo ' || C.logo_type || ' Updated Successfully';
+            ELSE
+                l_message:='Logo Removed';
+            END IF;
+        END LOOP;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('message',l_message);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;        
 
     /*
     ** CREATE HTML FOR PAGE OPTIONS FORM
@@ -259,7 +380,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         /* Form depends on Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.logo, w.favicon, w.logo_inline_size, w.img_border_radius
+            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.logo_type, w.favicon, w.logo_inline_size, w.img_border_radius
               FROM website w, website_article wa, article a
              WHERE w.id=pWebsiteId 
                AND wa.website_id=w.id 
@@ -296,16 +417,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     l_article:=
                     '<p>Use this form to:</p>' || 
                     '<ol>' ||
-                        '<li>Set a Logo</li>' ||
                         '<li>Set a Favicon. Either SVG or emoji (default is 🌿)</li>' ||
                         '<li>Set image round borders</li>' ||
                     '</ol>' ||
+                    /*
                     '<fieldset>' ||
                         '<legend>Logo (maximum 4000 characters. SVG only)</legend>' ||
                         '<textarea name="logo" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.logo || '</textarea>' ||
                         '<input type="range" id="logo-inline-size" name="logo-inline-size" min="3" max="22" value="' || regexp_substr(C.logo_inline_size,'\d+') || '">' ||
                         '<label for="logo-inline-size">Adjust Width</label>' ||
                     '</fieldset>' ||
+                    */
                     '<fieldset>' ||
                         '<legend>Favicon (maximum 4000 characters. SVG or emoji)</legend>' ||
                         '<textarea name="favicon" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || NVL(l_favicon,C.favicon) || '</textarea>' ||
@@ -383,7 +505,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     END IF;
                 WHEN (C.parent_id IS NULL AND C.collection_type='N/A') THEN
                     IF (l_name='logo') THEN
-                        UPDATE website SET logo=l_value, logo_updated_date=current_timestamp WHERE id=pWebsiteid;
+                        -- UPDATE website SET logo=l_value, logo_updated_date=current_timestamp WHERE id=pWebsiteid;
+                        null;
                     END IF;
                     IF (l_name='favicon') THEN
                         /* Build svg if emoji character */
