@@ -339,6 +339,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
             SELECT seq, article_id, cld_cloud_name, resource_type, public_id, width, height, bytes, format
               FROM JSON_TABLE(l_bodytext, '$.images[*]' COLUMNS (seq FOR ORDINALITY, article_id, cld_cloud_name, resource_type, public_id, width, height, bytes,  format))
         ) LOOP
+        -- pck_core.log(C.public_id);
             INSERT INTO asset(id, article_id, cld_cloud_name, resource_type, public_id, width, height, bytes, format, display_order, created_date, user_id)
             VALUES (seq_asset.nextval, C.article_id, C.cld_cloud_name, C.resource_type, C.public_id, C.width, C.height, C.bytes, C.format,  C.seq, current_timestamp, l_session_data.user_id);
 
