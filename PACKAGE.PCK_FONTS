@@ -7,11 +7,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
             chars_bold_italic VARCHAR2(500)
     );
     TYPE t_chars_used IS TABLE OF tt_chars_used INDEX BY VARCHAR2(40);
-    g_chars_used t_chars_used:=t_chars_used( 'headings' => tt_chars_used(null,null,null,null), 'text' => tt_chars_used(null,null,null,null));
+    g_chars_used t_chars_used:=t_chars_used( 
+        'headings' => tt_chars_used(null,null,null,null), 
+        'text' => tt_chars_used(null,null,null,null), 
+        'logo' => tt_chars_used(null,null,null,null));
     --
     PROCEDURE getCharsUsed(pArticleId IN article.id%type, pContent IN OUT NOCOPY CLOB);
     --
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pSiteid IN website.netlify_site_id%type);
+    PROCEDURE getFontface(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pFamily IN VARCHAR2, pApiParams IN VARCHAR2, pChars IN VARCHAR2);
+    --
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
     --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER);
     --
@@ -67,7 +72,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_second_heading article_chars.second_heading%type;
 
     BEGIN
-        DELETE article_chars WHERE article_id=pArticleId;
+        DELETE article_chars WHERE article_id=pArticleId AND context<>'logo';
         
         /* 
         ** REMOVE <code></code>  AND <p>&nbsp;</p>
@@ -304,7 +309,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  CALL GOOGLE FONTS API TO GET URL OF EACH FONT USED IN THE WEBSITE - CALLED BY DEPLOYMENT
     */
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pSiteid IN website.netlify_site_id%type) IS
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type) IS
         l_fontfaces VARCHAR2(4000);
     BEGIN
         /* Get distinct set of characters for each font style / weight for each context */
