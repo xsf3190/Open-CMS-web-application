@@ -49,6 +49,7 @@ const footerHandler = async (e) => {
 
 const logo_img = (e) => {
     const selected = e.options[e.selectedIndex].querySelector("img");
+    console.log("selected",selected)
 
     let img = logo.querySelector("img");
     if (!img) {
@@ -94,7 +95,10 @@ const logo_text = (e) => {
 }
 
 const changeHandler = (e) => {
+    console.log("changeHandler")
     const id = e.target.getAttribute("id");
+    console.log("id",id)
+    logo.replaceChildren();
 
     if (id === "logo-img") {
         logo_img(e.target);
