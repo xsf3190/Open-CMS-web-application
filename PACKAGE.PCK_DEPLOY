@@ -392,6 +392,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
+    ** BUILD LOGO TEXT
+    */
+    FUNCTION buildLogo(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
+        l_logo_text article_chars.chars_normal%type;
+    BEGIN
+        FOR C IN (
+            SELECT ac.chars_normal 
+              FROM website w, website_article wa, article_chars ac
+             WHERE w.id=pWebsiteId
+               AND w.logo_type='font'
+               AND wa.website_id=w.id
+               AND wa.display_order=1
+               AND ac.article_id(+)=wa.article_id
+               AND ac.context(+)='logo'
+        ) LOOP
+            l_logo_text:=C.chars_normal;
+        END LOOP;
+        RETuRN (l_logo_text);
+    END;
+
+    /*
     ** BUILD NAVIGATION ELEMENT COMMON TO ALL PAGES
     */
     FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2 IS
@@ -642,6 +663,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE buildPageBody(
         pWebsiteId IN website.id%type, 
         pArticleid IN article.id%type,
+        pLogoText IN article_chars.chars_normal%type,
         pNav IN VARCHAR2, 
         pColorScheme IN VARCHAR2,
         pDropdown in VARCHAR2, 
@@ -669,7 +691,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         pBody:=null;
         FOR C IN (
-            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, w.max_width, NVL2(w.logo,'1',null) logo, NVL2(w.favicon,'1',null) favicon
+            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
+                    w.max_width, w.logo_type, NVL2(w.favicon,'1',null) favicon
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -744,16 +767,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
 
             /*
-            ** CONFIGURE LOGO. ONLY SUPPORTED LOGO IS SVG WITH viewBox ATTRIBUTE OR EMOJI
+            ** CONFIGURE LOGO.
             */
-            IF (C.logo IS NULL) THEN
-                l_logo:='<span class="logo"></span>';
-            ELSE
-                -- l_viewbox:=regexp_substr(pLogo,'viewBox="(.+?)"',1,1,null,1);
-                -- l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
-                -- l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
-                l_logo:='<span class="logo"><img src="/images/logo.svg" alt="Image of website logo" fetchpriority="high"></span>';
-            END IF;
+            CASE C.logo_type
+                WHEN 'svg' THEN
+                    l_logo:='<span class="logo"><img src="/images/logo.svg" alt="Image of website logo" fetchpriority="high"></span>';
+                WHEN 'img' THEN
+                    l_logo:='<span class="logo"><img src="/images/logo.avif" alt="Image of website logo" fetchpriority="high"></span>';
+                WHEN 'font' THEN
+                    l_logo:='<span class="logo">' || pLogoText || '</span>';
+                ELSE
+                    l_logo:='<span class="logo"></span>';
+            END CASE;
 
             pBody:=
             '<!DOCTYPE HTML>' ||
@@ -802,7 +827,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_deploy_files t_files;
 
         l_script_sha256 VARCHAR2(500);
-        l_font_download BLOB;
+        l_blob_download BLOB;
 
         l_sha1 VARCHAR2(40);
         n PLS_INTEGER;
@@ -813,15 +838,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_dogface_empty_clob CLOB:=EMPTY_CLOB();
         l_dogface_empty_blob BLOB:=EMPTY_BLOB();
 
-        /* START OF NEW */
-
         l_dropdown VARCHAR2(4000);
+        l_logo_text article_chars.chars_normal%type;
         l_nav VARCHAR2(4000);
         l_color_scheme LONG;
         l_common_header website_article.header_html%type;
         l_common_footer website_article.footer_html%type;
 
-        /* END NEW */
 
         /* CLOB SIGNATURE */
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB) IS
@@ -964,15 +987,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  2. Build LOGO and FAVICON files
+        **  2.1 Build LOGO and FAVICON svg files
         */
         FOR C IN (
             WITH source AS
             (
-                SELECT '/images/logo.svg' AS deploy_filename, logo AS file_content, logo_updated_date AS updated_date
+                SELECT '/images/logo.svg' AS deploy_filename, logo_svg AS file_content, logo_updated_date AS updated_date
                   FROM website
                  WHERE id=pWebsiteid
-                   AND logo IS NOT NULL
+                   AND logo_type='svg'
                  UNION ALL
                 SELECT '/images/favicon.svg', favicon, favicon_updated_date
                   FROM website
@@ -996,6 +1019,39 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
             END IF;
         END LOOP;
+
+        /*
+        **  2.2 Build LOGO img file
+        */
+        FOR C IN (
+            WITH source AS
+            (
+                SELECT '/images/logo.avif' AS deploy_filename, logo_asset_id, logo_updated_date AS updated_date
+                  FROM website
+                 WHERE id=pWebsiteid
+                   AND logo_type='img'
+            )
+            SELECT s.deploy_filename, s.logo_asset_id, s.updated_date, wf.sha1,
+                    'https://res.cloudinary.com/' || a.cld_cloud_name || '/w_200/' || a.public_id as src_url,
+                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf, asset a
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.site_id(+)=pSiteid
+               AND wf.path(+)=s.deploy_filename
+               AND wf.mime_type(+)='avif'
+               AND a.id=s.logo_asset_id
+        ) LOOP
+            IF (C.build=0) THEN
+                l_files.put(C.deploy_filename, C.sha1);
+                CONTINUE;
+            END IF;
+
+            IF (C.src_url IS NOT NULL) THEN
+                logDeployment(pWebsiteId, pSiteId, 'Download IMAGE - ' || C.deploy_filename);
+                l_blob_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_blob_download);
+            END IF;
+        END LOOP;
         
         /*
         **  3. Build HTML files
@@ -1005,14 +1061,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             WITH content AS
             (
                 SELECT wa.article_id, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, 
-                        GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
+                        GREATEST(NVL(w.nav_updated_date,w.updated_date),NVL(w.logo_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
                    AND a.id=wa.article_id
                 UNION ALL 
                 SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(a.title) || '.html' path, 
-                        GREATEST(NVL(w.nav_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
+                        GREATEST(NVL(w.nav_updated_date,w.updated_date),NVL(w.logo_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
                   FROM article a, website_article wa, website w
                  WHERE w.id=pWebsiteId
                    AND wa.website_id=w.id
@@ -1032,22 +1088,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
             n:=n+1;
             IF (n=1) THEN
+                l_logo_text:=buildLogo(pWebsiteId);
                 l_nav:=buildNav(pWebsiteId);
-                -- l_logo:=buildLogo(pWebsiteId);
                 l_color_scheme:=buildColorscheme();
                 l_dropdown:=buildDropdown(pWebsiteId);
                 l_common_header:=buildCommonHeader(pWebsiteid);
                 l_common_footer:=buildCommonFooter(pWebsiteid);
                 -- l_favicon:=buildFavicon(pWebsiteid);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo_text, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
         /*
-        **  4. Build FONT files
+        **  4. Build FONT files. 
         */
-        pck_fonts.getFontFiles(pWebsiteid, pSiteId);  /* Sets website_fontfaces.created_date */
+        
+        pck_fonts.getFontFiles(pWebsiteid);  /* Sets website_fontfaces.created_date */
         
         FOR C IN (
             SELECT ff.deploy_filename, ff.src_url, wf.sha1,
@@ -1068,8 +1125,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             **  DEPLOY FONT FILE FROM GOOGLE
             */
             logDeployment(pWebsiteId, pSiteId, 'Download Google Font - '|| C.deploy_filename);
-            l_font_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
-            addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_font_download);
+            l_blob_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
+            addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_blob_download);
         END LOOP;
         
         /*
