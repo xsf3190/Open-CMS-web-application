@@ -16,7 +16,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_html CLOB;
         l_css website.css%type;
         l_javascript CLOB;
-        l_logo website.logo%type;
+        l_logo LONG;
         l_nav VARCHAR2(4000);
         l_color_scheme LONG;
         l_dropdown LONG;
@@ -28,7 +28,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         FOR C IN (
-            SELECT w.domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo, wa.collection_type
+            SELECT w.domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo_type, wa.collection_type
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -37,16 +37,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         ) LOOP
             l_domain_name:=C.domain_name;
 
-            IF (C.logo IS NULL) THEN
-                l_logo:='<span class="logo"></span>';
-            ELSIF (LENGTHB(C.logo)>5) THEN
-                -- l_viewbox:=regexp_substr(pLogo,'viewBox="(.+?)"',1,1,null,1);
-                -- l_width:=regexp_substr(l_viewbox,'[^ ]+',1) + regexp_substr(l_viewbox,'[^ ]+',1,3);
-                -- l_height:=regexp_substr(l_viewbox,'[^ ]+',1,2) + regexp_substr(l_viewbox,'[^ ]+',1,4);
-                l_logo:='<span class="logo"><img src="https://' || l_session_data.url || '/images/logo.svg" alt="Image of website logo"></span>';
-            ELSE
-                l_logo:='<span class="logo">' || C.logo || '</span>';
-            END IF;
+            CASE C.logo_type
+                WHEN 'svg' THEN
+                    l_logo:='<span class="logo"><img src="https://' || l_session_data.url || '/images/logo.svg" alt="Image of website logo"></span>';
+                WHEN 'img' THEN
+                    l_logo:='<span class="logo"><img src="https://' || l_session_data.url || '/images/logo.avif" alt="Image of website logo"></span>';
+                WHEN 'font' THEN
+                    l_logo:='<span class="logo">FRED</span>';
+                ELSE
+                    l_logo:='<span class="logo"></span>';
+            END CASE;
 
             l_dropdown:=pck_deploy.buildDropdown(pWebsiteId);
             l_nav:=pck_deploy.buildNav(pWebsiteId);
