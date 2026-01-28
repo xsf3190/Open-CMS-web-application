@@ -20,18 +20,18 @@ const handleError = (error) => {
     if (!output_dialog.open) {
         output_dialog.showModal();
     }
-    const msg = "<p>" + error + "</p>";
-    let action="";
-    if (msg.includes("Unauthorized")) {
-        msg += "<p><span>refresh token:</span><span>" + localStorage.getItem("refresh") + "</span></p>";
+    dialog_article.replaceChildren();
+    let message = "<p>" + error + "</p>";
+    if (error.includes("Unauthorized")) {
+        message += "<p>refresh token:" + localStorage.getItem("refresh") + "</p>";
         sessionStorage.clear();
         localStorage.clear();
-        action="Reload page and Log In";
+        message += "<p>Logged out</p>";
     }
-    dialog_article.replaceChildren();
-    dialog_article.insertAdjacentHTML('afterbegin',msg);
+    dialog_article.insertAdjacentHTML('afterbegin',message);
+    
     dialog_footer.replaceChildren();
-    dialog_footer.insertAdjacentHTML('afterbegin',"<span>" + action + "</span>");
+    dialog_footer.insertAdjacentHTML('afterbegin',"<span></span>");
 }
 
 /* 
