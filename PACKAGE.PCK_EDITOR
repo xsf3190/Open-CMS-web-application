@@ -59,7 +59,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        l_header:='<span>Add Logo to main navigation</span>';
+        l_header:='<span>Add Logo to main navigation (3 alternative methods)</span>';
 
         SELECT w.logo_type, w.logo_asset_id, wf.font_id, ac.chars_normal 
           INTO l_logo_type, l_logo_asset_id, l_font_id, l_font_text
@@ -73,13 +73,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
            AND ac.context(+)='logo';
 
         l_article:=
-        '<ol>' ||
-            '<li><strong>EITHER</strong> use image</li>' ||
-            '<li><strong>OR</strong> write text in a selected font</li>' ||
-            '<li><strong>OR</strong> import SVG Code (requires knowledge of SVG)</li>' ||
-        '</ol>' ||
         '<details name="logo-option"' || CASE WHEN l_logo_type='img' THEN ' open' END || '>' ||
-            '<summary>1. Use image</summary>' ||
+            '<summary>1. Use uploaded image</summary>' ||
             '<fieldset class="flex-items">' ||
                 '<legend>Set logo from image</legend>' ||
                 '<div>' ||
@@ -159,7 +154,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /*
-    ** UPDATE WEBSITE LOGO
+    ** UPDATE WEBSITE LOGO. METHODS ARE MUTUALLY EXCLUSIVE.
     */
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -181,14 +176,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                    logo_updated_date=current_timestamp
              WHERE id=pWebsiteid;
 
+            SELECT article_id
+              INTO l_home_article_id
+              FROM website_article
+             WHERE website_id=pWebsiteid
+               AND display_order=1;
+
             IF (C.logo_type='font') THEN
                 IF (C.font_text IS NOT NULL) THEN
-                    SELECT article_id
-                      INTO l_home_article_id
-                      FROM website_article
-                     WHERE website_id=pWebsiteid
-                       AND display_order=1;
-
                     UPDATE article_chars
                        SET chars_normal=C.font_text, updated_date=current_timestamp
                      WHERE article_id=l_home_article_id
@@ -214,10 +209,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         VALUES (pWebsiteid, C.font_id, 'logo');
                     END IF;
                 END IF;
+            ELSE
+                DELETE website_font WHERE website_id=pWebsiteid AND context='logo';
+                DELETE article_chars WHERE article_id=l_home_article_id AND context='logo';
             END IF;
 
             IF (C.logo_type IS NOT NULL) THEN
-                l_message:='Logo ' || C.logo_type || ' Updated Successfully';
+                l_message:='Logo ' || C.logo_type || ' updated successfully';
             ELSE
                 l_message:='Logo Removed';
             END IF;
