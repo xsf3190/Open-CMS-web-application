@@ -247,7 +247,9 @@ body>footer>a {
   block-size: auto;
   align-self: flex-start;
   img {
-    border-radius: 0;
+    max-height: 5rem;
+    border-radius: 16px;
+    object-fit: contain;
   }
 }
 
