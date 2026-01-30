@@ -47,10 +47,12 @@ const footerHandler = async (e) => {
         }
 };
 
+const removeSelectedImg = () => {
+    dialog_article.querySelector("#logo-img [selected]")?.removeAttribute("selected");
+}
+
 const logo_img = (e) => {
     const selected = e.options[e.selectedIndex].querySelector("img");
-    console.log("selected",selected)
-
     let img = logo.querySelector("img");
     if (!img) {
         img = document.createElement("img");
@@ -71,6 +73,7 @@ const logo_img = (e) => {
 }
 
 const logo_font = (e) => {
+    removeSelectedImg();
     callAPI(endpoint,"PUT",{logo_type:"font",font_id:e.options[e.selectedIndex].value})
         .then((data) => {
             const live=dialog_footer.querySelector("[aria-live]");
@@ -83,8 +86,10 @@ const logo_font = (e) => {
 }
 
 const logo_text = (e) => {
+    removeSelectedImg();
     callAPI(endpoint,"PUT",{logo_type:"font",font_text:e.value})
         .then((data) => {
+            logo.textContent = e.value;
             const live=dialog_footer.querySelector("[aria-live]");
             live.replaceChildren();
             live.insertAdjacentHTML('beforeend',data.message);
