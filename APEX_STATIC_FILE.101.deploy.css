@@ -228,7 +228,6 @@ body>footer>a {
 
 /* MAIN HEADER STYLES INCLUDING LOGO AND DESKTOP NAVIGATION */
 .topnav {
-  --flex-vertical-alignment: flex-start;
   --flex-wrap: nowrap;
   --flex-gap: 1rem;
   padding-block-start: 0.5rem;
@@ -240,17 +239,16 @@ body>footer>a {
 }
 
 .logo {
-  font-family: var(--font-family-logo);
-  font-size: var(--step-3);
-  text-box: cap alphabetic;
-  inline-size: var(--logo-inline-size);
-  block-size: auto;
-  align-self: flex-start;
   img {
     max-height: 5rem;
     border-radius: 16px;
-    object-fit: contain;
   }
+}
+
+.logo:not(:has(img)) {
+  font-family: var(--font-family-logo);
+  font-size: var(--step-1);
+  text-box: cap alphabetic;
 }
 
 nav {
