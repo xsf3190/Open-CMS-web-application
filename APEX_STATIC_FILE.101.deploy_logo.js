@@ -5,6 +5,7 @@ import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
+let logo_type;
 
 const logo = document.querySelector(".logo");
 
@@ -118,7 +119,9 @@ const changeHandler = (e) => {
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
-    callAPI(endpoint,"GET")
+    logo_type = element.dataset.logo;
+
+    callAPI(endpoint,"GET", "?logo=" + logo_type)
         .then((data) => {
             initDialog(data);
             dialog_footer.addEventListener("click", footerHandler);
