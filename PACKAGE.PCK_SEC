@@ -438,7 +438,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     END ||
                     '>' ||
                     '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
-                    '</button>'
+                '</button>'
             );
         END;
     BEGIN
@@ -447,7 +447,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'pink', '✎', 'Upload Media');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
         l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
-        l_html:=l_html || addMenuitem('logo/:ID', 'red', '📊', 'Logo');
+        l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo from Image');
+        l_html:=l_html || addMenuitem('logo/:ID', '', '0️⃣', 'Logo from Text');
+        l_html:=l_html || addMenuitem('logo/:ID', '', '😣', 'Logo from SVG');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Manage Pages');
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
         
