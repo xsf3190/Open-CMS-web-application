@@ -1,0 +1,3 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_LOG" as
+end pck_logo;
+/
