@@ -14,15 +14,16 @@ const forceLogout = () => {
 }
 
 /* 
-** COMMON ERROR HANDLER FOR IMPORTING MODULES
+** COMMON ERROR HANDLER FOR IMPORTED MODULES
+** "error" is object containing name, message thrown in function "responseok"
 */
 const handleError = (error) => {
     if (!output_dialog.open) {
         output_dialog.showModal();
     }
     dialog_article.replaceChildren();
-    let message = "<p>" + error + "</p>";
-    if (error.includes("Unauthorized")) {
+    let message = "<p>" + error.name + ": " + error.message + "</p>";
+    if (message.includes("Unauthorized")) {
         message += "<p>refresh token:" + localStorage.getItem("refresh") + "</p>";
         sessionStorage.clear();
         localStorage.clear();
