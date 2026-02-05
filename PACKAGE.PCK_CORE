@@ -102,7 +102,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
         l_json.put('sqlerrm', SQLERRM);
         apex_util.prn(l_json.to_clob,false);
 
-        pStatus:=CASE WHEN SQLCODE=-20000 THEN 401 ELSE 400 END;
+        pStatus:=400;
     END;
 
     /*
