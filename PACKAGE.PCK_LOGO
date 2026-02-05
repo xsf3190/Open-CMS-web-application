@@ -1,32 +1,66 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_LOGO" as
     
-    PROCEDURE getLogoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    PROCEDURE getLogoForm(pWebsiteId IN website.id%type, pLogoType IN VARCHAR2, pStatus OUT NUMBER);
     --
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
-/*
-    ** CREATE HTML FOR PAGE OPTIONS FORM
-    */
-    PROCEDURE getLogoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
+
+    PROCEDURE buildImageLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
         l_logo_type website.logo_type%type;
         l_logo_asset_id website.logo_asset_id%type;
+    BEGIN
+        pHeader:='<span>Set Website Logo from uploaded image</span>';
+
+        SELECT w.logo_type, w.logo_asset_id
+          INTO l_logo_type, l_logo_asset_id
+          FROM website w
+         WHERE w.id=pWebsiteid;
+
+        pArticle:=
+        '<fieldset class="flex-items">' ||
+            '<legend>Set logo from image</legend>' ||
+            '<div>' ||
+                '<label for="logo-img">Select image</label>' ||
+                '<select id="logo-img">' ||
+                    '<button>' ||
+                      '<selectedcontent></selectedcontent>' ||
+                      '<span class="arrow"></span>' ||
+                    '</button>';
+
+                FOR C IN (
+                    SELECT wa.article_id, a.id, a.cld_cloud_name, a.public_id
+                      FROM website_article wa, asset a
+                     WHERE wa.website_id=pWebsiteid
+                       AND a.article_id=wa.article_id
+                       AND a.format='avif'
+                     ORDER BY a.created_date DESC
+                )
+                LOOP
+                    pArticle:=pArticle || 
+                    '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_logo_asset_id THEN ' selected' END || '>' || 
+                        '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">' ||
+                    '</option>';
+                END LOOP;
+
+        pArticle:=pArticle || 
+                '</select>' ||
+            '</div>' ||
+        '</fieldset>';
+        
+    END;
+
+    PROCEDURE buildFontLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
+        l_logo_type website.logo_type%type;
         l_font_id website_font.font_id%type;
         l_font_text article_chars.chars_normal%type;
-        l_header LONG;
-        l_article CLOB;
-        l_footer LONG;
-        l_json JSON_OBJECT_T;
     BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        pHeader:='<span>Set Website Logo to font</span>';
 
-        l_header:='<span>Add Logo to main navigation (3 alternative methods)</span>';
-
-        SELECT w.logo_type, w.logo_asset_id, wf.font_id, ac.chars_normal 
-          INTO l_logo_type, l_logo_asset_id, l_font_id, l_font_text
+        SELECT w.logo_type, wf.font_id, ac.chars_normal 
+          INTO l_logo_type, l_font_id, l_font_text
           FROM website w, website_article wa, website_font wf, article_chars ac
          WHERE w.id=pWebsiteid
            AND wa.website_id=w.id
@@ -36,66 +70,50 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
            AND ac.article_id(+)=wa.article_id
            AND ac.context(+)='logo';
 
-        l_article:=
-        '<details name="logo-option"' || CASE WHEN l_logo_type='img' THEN ' open' END || '>' ||
-            '<summary>1. Use uploaded image</summary>' ||
-            '<fieldset class="flex-items">' ||
-                '<legend>Set logo from image</legend>' ||
-                '<div>' ||
-                    '<label for="logo-img">Select image</label>' ||
-                    '<select id="logo-img">' ||
-                        '<button>' ||
-                          '<selectedcontent></selectedcontent>' ||
-                          '<span class="arrow"></span>' ||
-                        '</button>';
+        pArticle:=
+        '<fieldset class="flex-items">' ||
+            '<legend>Enter logo text and select font</legend>' ||
+            '<div>' ||
+                '<label for="logo-font-id">Select Font</label>' ||
+                '<select id="logo-font-id">' ||
+                    '<button>' ||
+                      '<selectedcontent></selectedcontent>' ||
+                      '<span class="arrow"></span>' ||
+                    '</button>';
 
-                    FOR C IN (
-                        SELECT wa.article_id, a.id, a.cld_cloud_name, a.public_id
-                          FROM website_article wa, asset a
-                         WHERE wa.website_id=pWebsiteid
-                           AND a.article_id=wa.article_id
-                           AND a.format='avif'
-                         ORDER BY a.created_date DESC
-                    )
-                    LOOP
-                        l_article:=l_article || 
-                        '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_logo_asset_id THEN ' selected' END || '>' || 
-                            '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">' ||
-                        '</option>';
-                    END LOOP;
+                FOR C IN (SELECT id, family FROM font ORDER BY 2)
+                LOOP
+                    pArticle:=pArticle || 
+                    '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_font_id THEN ' selected' END || '>' || C.family || '</option>';
+                END LOOP;
 
-            l_article:=l_article || 
-                    '</select>' ||
-                '</div>' ||
-            '</fieldset>' ||            
-        '</details>' ||
-        '<details name="logo-option"' || CASE WHEN l_logo_type='font' THEN ' open' END || '>' ||
-            '<summary>2. Write text in a selected font</summary>' ||
-            '<fieldset class="flex-items">' ||
-                '<legend>Enter logo text and select font</legend>' ||
-                '<div>' ||
-                    '<label for="logo-font-id">Select Font</label>' ||
-                    '<select id="logo-font-id">' ||
-                        '<button>' ||
-                          '<selectedcontent></selectedcontent>' ||
-                          '<span class="arrow"></span>' ||
-                        '</button>';
+        pArticle:=pArticle || 
+                '</select>' ||
+            '</div>' ||
+            '<div>' ||
+                '<label for="logo-text">Logo text</label>' ||
+                '<input type="text" id="logo-text" value="' || l_font_text || '"/>' ||
+            '</div>' ||
+        '</fieldset>';
+    END;
 
-                    FOR C IN (SELECT id, family FROM font ORDER BY 2)
-                    LOOP
-                        l_article:=l_article || 
-                        '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_font_id THEN ' selected' END || '>' || C.family || '</option>';
-                    END LOOP;
 
-            l_article:=l_article || 
-                    '</select>' ||
-                '</div>' ||
-                '<div>' ||
-                    '<label for="logo-text">Logo text</label>' ||
-                    '<input type="text" id="logo-text" value="' || l_font_text || '"/>' ||
-                '</div>' ||
-            '</fieldset>' ||
-        '</details>';
+    /*
+    ** CREATE HTML FOR PAGE OPTIONS FORM
+    */
+    PROCEDURE getLogoForm(pWebsiteId IN website.id%type,  pLogoType IN VARCHAR2, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        CASE pLogoType
+            WHEN 'image' THEN buildImageLogoForm(pWebsiteId, l_header, l_article);
+            WHEN 'font' THEN buildFontLogoForm(pWebsiteId, l_header, l_article);
+        END CASE;
 
         l_footer:=
         '<div class="flex-items">' ||
