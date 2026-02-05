@@ -428,14 +428,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
     FUNCTION buildMenulist(pWebsiteid IN NUMBER, pScope IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_html CLOB;
-        FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pParentId IN NUMBER DEFAULT NULL) RETURN VARCHAR2 IS
+        FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
         BEGIN
             RETURN (
                 '<button type="button" role="menuitem" tabindex="-1" ' || 
                     'data-endpoint="' || pEndpoint || '"' ||
-                    CASE WHEN pParentId IS NOT NULL THEN
-                    ' data-parent-id="' || pParentId || '"' 
-                    END ||
+                    CASE WHEN pData IS NOT NULL THEN ' ' || pData END ||
                     '>' ||
                     '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
                 '</button>'
@@ -447,14 +445,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'pink', '✎', 'Upload Media');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
         l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
-        l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo from Image');
-        l_html:=l_html || addMenuitem('logo/:ID', '', '0️⃣', 'Logo from Text');
-        l_html:=l_html || addMenuitem('logo/:ID', '', '😣', 'Logo from SVG');
+        l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo from Image', 'data-logo="image"');
+        l_html:=l_html || addMenuitem('logo/:ID', '', '0️⃣', 'Logo from Text', 'data-logo="font"');
+        l_html:=l_html || addMenuitem('logo/:ID', '', '😣', 'Logo from SVG', 'data-logo="svg"');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Manage Pages');
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
         
         FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
-            l_html:=l_html || addMenuitem('new-collection-item/:ID', 'cyan', 'B', 'New ' || C.navigation_label, C.article_id);
+            l_html:=l_html || addMenuitem('new-collection-item/:ID', 'cyan', 'B', 'New ' || C.navigation_label, 'data-parent-id="' || C.article_id || '"');
         END LOOP;
 
         l_html:=l_html || addMenuitem('create-website/:ID/:PAGE', 'red', '🌐', 'New Website');
