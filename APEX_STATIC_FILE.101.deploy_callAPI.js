@@ -24,10 +24,10 @@ const handleError = (error) => {
     dialog_article.replaceChildren();
     let message = "<p>" + error.name + ": " + error.message + "</p>";
     if (message.includes("Unauthorized")) {
-        message += "<p>refresh token:" + localStorage.getItem("refresh") + "</p>";
         sessionStorage.clear();
         localStorage.clear();
-        message += "<p>Logged out</p>";
+        message += "<p>You have to login in again because you have not connected from this location or device before.</p>";
+        message += '<button class="button" onClick="window.location.reload();">Continue</button>';
     }
     dialog_article.insertAdjacentHTML('afterbegin',message);
     
