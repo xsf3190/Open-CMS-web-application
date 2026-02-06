@@ -101,9 +101,9 @@ const logo_text = (e) => {
 }
 
 const changeHandler = (e) => {
-    console.log("changeHandler")
     const id = e.target.getAttribute("id");
-    console.log("id",id)
+    if (id==="superellipse-slider" || id==="radius-slider") return;
+
     logo.replaceChildren();
 
     if (id === "logo-img") {
@@ -117,6 +117,20 @@ const changeHandler = (e) => {
     }
 }
 
+const inputHandler = (e) => {
+    const img = logo.querySelector("img");
+    if (img) {
+        const id = e.target.getAttribute("id");
+        if (id === "superellipse-slider") {
+            const seValue = `superellipse(${e.target.value})`;
+            img.style.cornerShape = seValue;
+        } else if (id === "radius-slider") {
+            const brValue = `${e.target.value}px`;
+            img.style.borderRadius = brValue;
+        }
+    }
+}
+
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
     logo_type = element.dataset.logo;
@@ -126,6 +140,7 @@ export const init = (element) => {
             initDialog(data);
             dialog_footer.addEventListener("click", footerHandler);
             dialog_article.addEventListener("change", changeHandler);
+            dialog_article.addEventListener("input", inputHandler);
         })
         .catch((error) => {
             handleError(error);
