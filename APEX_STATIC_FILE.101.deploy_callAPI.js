@@ -26,8 +26,8 @@ const handleError = (error) => {
     if (message.includes("Unauthorized")) {
         sessionStorage.clear();
         localStorage.clear();
-        message += "<p>You have to login in again because you have not connected from this location or device before.</p>";
-        message += '<button class="button" onClick="window.location.reload();">Continue</button>';
+        message += "<p>You have to login in again because you have not previously authenticated from this location or device</p>";
+        output_dialog.querySelector(".close").classList.add("reload");
     }
     dialog_article.insertAdjacentHTML('afterbegin',message);
     
