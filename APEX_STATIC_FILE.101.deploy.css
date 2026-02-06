@@ -1053,6 +1053,12 @@ select,
   border-radius: 1rem;
 }
 
+.option-container {
+  display: grid;
+  grid-template: 1fr 1fr / 1fr 1fr 1fr;
+  gap: 1rem;
+}
+
 option::checkmark, select::picker-icon {
   display: none;
 }
@@ -1070,8 +1076,15 @@ option, selectedcontent {
   }
 }
 
+option img {
+  width: 100%;
+  max-width: 120px;
+  border-radius: 1rem;
+  border: 1px solid lightgray;
+  margin-bottom: 0.25rem;
+}
 
-option {
+option:not(:has(img)) {
   &:nth-child(even):not(:hover) {
     background: #ececec;
   }
@@ -1079,11 +1092,15 @@ option {
   &:hover {
     background: #cbe7ff;
   }
+
+  &[hidden] {
+    display: none;
+  }
 }
 
 selectedcontent {
   .detail {
-    display:none;
+    display: none;
   }
 }
 
