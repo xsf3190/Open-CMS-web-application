@@ -76,6 +76,9 @@ load_modules();
 ** DIALOG CLOSE BUTTON
 */
 const closeHandler = (e) => {
+    if (e.target.classList.contains("reload")) {
+        window.location.reload();
+    }
     e.target.closest("dialog").close();
 }
 dialog_close.addEventListener("click", closeHandler);
