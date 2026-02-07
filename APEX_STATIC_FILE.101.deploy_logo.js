@@ -73,6 +73,30 @@ const logo_img = (e) => {
         });
 }
 
+const logo_img_corner_shape = (e) => {
+    callAPI(endpoint,"PUT",{logo_img_corner_shape:e.value})
+        .then((data) => {
+            const live=dialog_footer.querySelector("[aria-live]");
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.message);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+}
+
+const logo_img_border_radius = (e) => {
+    callAPI(endpoint,"PUT",{logo_img_border_radius:e.value})
+        .then((data) => {
+            const live=dialog_footer.querySelector("[aria-live]");
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.message);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+}
+
 const logo_font = (e) => {
     removeSelectedImg();
     callAPI(endpoint,"PUT",{logo_type:"font",font_id:e.options[e.selectedIndex].value})
@@ -100,20 +124,26 @@ const logo_text = (e) => {
         });
 }
 
+/*
+** UPDATE DATABASE ON CHANGE EVENT
+*/
 const changeHandler = (e) => {
     const id = e.target.getAttribute("id");
-    if (id==="superellipse-slider" || id==="radius-slider") return;
-
-    logo.replaceChildren();
-
-    if (id === "logo-img") {
-        logo_img(e.target);
-    } 
-    else if (id === "logo-text") {
-        logo_text(e.target);
-    }
-    else if (id === "logo-font-id") {
-        logo_font(e.target);
+    if (id === "superellipse-slider") {
+        logo_img_corner_shape(e.target);
+    } else if (id === "radius-slider") {
+        logo_img_border_radius(e.target)
+    } else {
+        logo.replaceChildren();
+        if (id === "logo-img") {
+            logo_img(e.target);
+        } 
+        else if (id === "logo-text") {
+            logo_text(e.target);
+        }
+        else if (id === "logo-font-id") {
+            logo_font(e.target);
+        }
     }
 }
 
@@ -123,10 +153,12 @@ const inputHandler = (e) => {
         const id = e.target.getAttribute("id");
         if (id === "superellipse-slider") {
             const seValue = `superellipse(${e.target.value})`;
-            img.style.cornerShape = seValue;
+            // img.style.cornerShape = seValue;
+            document.documentElement.style.setProperty('--logo-img-corner-shape', seValue); 
         } else if (id === "radius-slider") {
             const brValue = `${e.target.value}px`;
-            img.style.borderRadius = brValue;
+            // img.style.borderRadius = brValue;
+            document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
         }
     }
 }
