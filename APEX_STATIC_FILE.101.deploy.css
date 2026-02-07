@@ -226,7 +226,7 @@ body>footer>a {
   }
 }
 
-/* MAIN HEADER STYLES INCLUDING LOGO AND DESKTOP NAVIGATION */
+/* MAIN HEADER STYLES INCLUDING LOGO AND SITE NAVIGATION */
 .topnav {
   --flex-wrap: nowrap;
   --flex-gap: 1rem;
@@ -238,11 +238,9 @@ body>footer>a {
   background-color: var(--color-bg);
 }
 
-.logo {
-  img {
-    max-height: 5rem;
-    border-radius: 16px;
-  }
+.logo img {
+    border-radius: var(--logo-img-border-radius), 0;
+    corner-shape: var(--logo-img-corner-shape);
 }
 
 .logo:not(:has(img)) {
