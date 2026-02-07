@@ -20,15 +20,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
          WHERE w.id=pWebsiteid;
 
         pArticle:=
-        '<fieldset class="flex-items">' ||
-            '<legend>Set logo from image</legend>' ||
+        '<fieldset class="flow">' ||
+            '<legend>Select and configure image logo</legend>' ||
             '<div>' ||
-                '<label for="logo-img">Select image</label>' ||
                 '<select id="logo-img">' ||
                     '<button>' ||
-                      '<selectedcontent></selectedcontent>' ||
-                      '<span class="arrow"></span>' ||
-                    '</button>';
+                        '<selectedcontent></selectedcontent>' ||
+                        '<span class="arrow"></span>' ||
+                    '</button>' ||
+                    '<div class="option-container">' ||
+                        '<option value="" hidden>' ||
+                            '<span>Search Images</span>' ||
+                        '</option>';
 
                 FOR C IN (
                     SELECT wa.article_id, a.id, a.cld_cloud_name, a.public_id
@@ -40,13 +43,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 )
                 LOOP
                     pArticle:=pArticle || 
-                    '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_logo_asset_id THEN ' selected' END || '>' || 
-                        '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">' ||
-                    '</option>';
+                        '<option value="' || TO_CHAR(C.id) || '">' || 
+                            '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">' ||
+                        '</option>';
                 END LOOP;
+                
 
         pArticle:=pArticle || 
+                    '</div>' ||
                 '</select>' ||
+            '</div>' ||
+            '<div>' ||
+                '<label for="superellipse-slider">Adjust for different shapes:</label>' ||
+                '<input type="range" id="superellipse-slider" min="-5" value="0" max="5" step="0.1" />' ||
+            '</div>' ||
+            '<div>' ||
+                '<label for="radius-slider">Adjust effect:</label>' ||
+                '<input type="range" id="radius-slider" min="0" value="45" max="90" step="1" />' ||
             '</div>' ||
         '</fieldset>';
         
