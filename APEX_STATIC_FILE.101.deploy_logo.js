@@ -52,112 +52,47 @@ const removeSelectedImg = () => {
     dialog_article.querySelector("#logo-img [selected]")?.removeAttribute("selected");
 }
 
-const logo_img = (e) => {
-    const selected = e.options[e.selectedIndex].querySelector("img");
-    let img = logo.querySelector("img");
-    if (!img) {
-        img = document.createElement("img");
-        img.setAttribute("alt","");
-        logo.appendChild(img);
-    }
-    img.src = selected.src;
-
-    callAPI(endpoint,"PUT",{logo_type:"img",asset_id:e.options[e.selectedIndex].value})
-        .then((data) => {
-            const live=dialog_footer.querySelector("[aria-live]");
-            live.replaceChildren();
-            live.insertAdjacentHTML('beforeend',data.message);
-        })
-        .catch((error) => {
-            handleError(error);
-        });
-}
-
-const logo_img_corner_shape = (e) => {
-    callAPI(endpoint,"PUT",{logo_img_corner_shape:e.value})
-        .then((data) => {
-            const live=dialog_footer.querySelector("[aria-live]");
-            live.replaceChildren();
-            live.insertAdjacentHTML('beforeend',data.message);
-        })
-        .catch((error) => {
-            handleError(error);
-        });
-}
-
-const logo_img_border_radius = (e) => {
-    callAPI(endpoint,"PUT",{logo_img_border_radius:e.value})
-        .then((data) => {
-            const live=dialog_footer.querySelector("[aria-live]");
-            live.replaceChildren();
-            live.insertAdjacentHTML('beforeend',data.message);
-        })
-        .catch((error) => {
-            handleError(error);
-        });
-}
-
-const logo_font = (e) => {
-    removeSelectedImg();
-    callAPI(endpoint,"PUT",{logo_type:"font",font_id:e.options[e.selectedIndex].value})
-        .then((data) => {
-            const live=dialog_footer.querySelector("[aria-live]");
-            live.replaceChildren();
-            live.insertAdjacentHTML('beforeend',data.message);
-        })
-        .catch((error) => {
-            handleError(error);
-        });
-}
-
-const logo_text = (e) => {
-    removeSelectedImg();
-    callAPI(endpoint,"PUT",{logo_type:"font",font_text:e.value})
-        .then((data) => {
-            logo.textContent = e.value;
-            const live=dialog_footer.querySelector("[aria-live]");
-            live.replaceChildren();
-            live.insertAdjacentHTML('beforeend',data.message);
-        })
-        .catch((error) => {
-            handleError(error);
-        });
-}
-
 /*
-** UPDATE DATABASE ON CHANGE EVENT
+** UPDATE DATABASE ON ALL CHANGE EVENTS
 */
 const changeHandler = (e) => {
     const id = e.target.getAttribute("id");
-    if (id === "superellipse-slider") {
-        logo_img_corner_shape(e.target);
-    } else if (id === "radius-slider") {
-        logo_img_border_radius(e.target)
-    } else {
-        logo.replaceChildren();
-        if (id === "logo-img") {
-            logo_img(e.target);
-        } 
-        else if (id === "logo-text") {
-            logo_text(e.target);
+
+    const value = (e.target.tagName === "SELECT") ? e.target.options[e.target.selectedIndex].value : e.target.value;
+
+    callAPI(endpoint,"PUT",{column_name:id,column_value:value})
+        .then((data) => {
+            const live=dialog_footer.querySelector("[aria-live]");
+            live.replaceChildren();
+            live.insertAdjacentHTML('beforeend',data.message);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+
+    if (id === "logo-img-id") {
+        let img = logo.querySelector("img");
+        if (!img) {
+            img = document.createElement("img");
+            img.setAttribute("alt","");
+            logo.appendChild(img);
         }
-        else if (id === "logo-font-id") {
-            logo_font(e.target);
-        }
+        img.src = e.target.options[e.target.selectedIndex].querySelector("img").src;
     }
 }
 
+/*
+** UPDATE UI ON INPUT EVENTS
+*/
 const inputHandler = (e) => {
     const img = logo.querySelector("img");
     if (img) {
         const id = e.target.getAttribute("id");
-        if (id === "superellipse-slider") {
+        if (id === "logo-img-corner-shape") {
             const seValue = `superellipse(${e.target.value})`;
-            // img.style.cornerShape = seValue;
             document.documentElement.style.setProperty('--logo-img-corner-shape', seValue); 
-        } else if (id === "radius-slider") {
+        } else if (id === "logo-img-border-radius") {
             const brValue = `${e.target.value}px`;
-            // img.style.borderRadius = brValue;
             document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
         }
     }
