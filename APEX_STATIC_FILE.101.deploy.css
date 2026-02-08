@@ -239,7 +239,7 @@ body>footer>a {
 }
 
 .logo img {
-    border-radius: var(--logo-img-border-radius), 0;
+    border-radius: var(--logo-img-border-radius, 0);
     corner-shape: var(--logo-img-corner-shape);
 }
 
