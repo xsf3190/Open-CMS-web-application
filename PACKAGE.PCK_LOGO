@@ -10,12 +10,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
 
     PROCEDURE buildImageLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
         l_logo_type website.logo_type%type;
-        l_logo_asset_id website.logo_asset_id%type;
+        l_logo_img_id website.logo_img_id%type;
     BEGIN
         pHeader:='<span>Set Website Logo from uploaded image</span>';
 
-        SELECT w.logo_type, w.logo_asset_id
-          INTO l_logo_type, l_logo_asset_id
+        SELECT w.logo_type, w.logo_img_id
+          INTO l_logo_type, l_logo_img_id
           FROM website w
          WHERE w.id=pWebsiteid;
 
@@ -54,11 +54,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '</select>' ||
             '</div>' ||
             '<div>' ||
-                '<label for="superellipse-slider">Adjust for different shapes:</label>' ||
+                '<label for="superellipse-slider">Change border shape:</label>' ||
                 '<input type="range" id="superellipse-slider" min="-5" value="0" max="5" step="0.1" />' ||
             '</div>' ||
             '<div>' ||
-                '<label for="radius-slider">Adjust effect:</label>' ||
+                '<label for="radius-slider">Adjust shape:</label>' ||
                 '<input type="range" id="radius-slider" min="0" value="45" max="90" step="1" />' ||
             '</div>' ||
         '</fieldset>';
@@ -154,19 +154,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_home_article_id article.id%type;
+        l_column_name user_tab_columns.column_name%type;
+        l_column_value VARCHAR2(100);
+        l_ddl VARCHAR2(200);
         l_message LONG;
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        SELECT column_name, column_value 
+          INTO l_column_name, l_column_value 
+          FROM JSON_TABLE(pBodyText, '$' COLUMNS (column_name, column_value));
+
+        IF (INSTR(l_column_name,'logo_font')>0) THEN
+            
+        END IF;
+
+        l_ddl:='UPDATE ' || l_table_name || ' SET updated_date=current_timestamp,' || 
+
          FOR C IN (
-            SELECT logo_type, asset_id, font_id, font_text, svg
-            FROM JSON_TABLE(pBodyText, '$' COLUMNS (logo_type, asset_id, font_id, font_text, svg))
+            SELECT logo_type, asset_id, logo_img_corner_shape, logo_img_border_radius, font_id, font_text, svg
+            FROM JSON_TABLE(pBodyText, '$' COLUMNS (logo_type, asset_id, logo_img_corner_shape, logo_img_border_radius, font_id, font_text, svg))
         ) LOOP
             UPDATE website
                SET logo_type=C.logo_type,
                    logo_asset_id=C.asset_id,
+                   logo_img_corner_shape=C.logo_img_corner_shape, 
+                   logo_img_border_radius=C.logo_img_border_radius,
                    logo_svg=C.svg,
                    logo_updated_date=current_timestamp
              WHERE id=pWebsiteid;
