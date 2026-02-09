@@ -48,8 +48,30 @@ const footerHandler = async (e) => {
         }
 };
 
-const removeSelectedImg = () => {
-    dialog_article.querySelector("#logo-img [selected]")?.removeAttribute("selected");
+/*
+** LOAD SELECTED IMAGE
+*/
+const loadImg = (src) => {
+    let img = logo.querySelector("img");
+    if (!img) {
+        logo.textContent = "";
+        img = document.createElement("img");
+        img.setAttribute("alt","");
+        logo.appendChild(img);
+    }
+    img.src = src;
+}
+
+/*
+** LOAD SELECTED FONT
+*/
+const loadFont = (menu, text) => {
+    logo.querySelector("img")?.remove();
+    const fontFile = new FontFace(text,menu);
+    document.fonts.add(fontFile);
+    fontFile.load();
+    logo.textContent = text;
+    document.documentElement.style.setProperty('--font-family-logo', text); 
 }
 
 /*
@@ -62,6 +84,15 @@ const changeHandler = (e) => {
 
     callAPI(endpoint,"PUT",{column_name:id,column_value:value})
         .then((data) => {
+            if (id === "logo-img-id") {
+                loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
+            }
+            else if (id === "logo-font-id") {
+                loadFont(data.menu, e.target.options[e.target.selectedIndex].text);
+            }
+            else if (id === "logo-font-text") {
+                loadFont(data.menutext, e.target.value);
+            }
             const live=dialog_footer.querySelector("[aria-live]");
             live.replaceChildren();
             live.insertAdjacentHTML('beforeend',data.message);
@@ -69,16 +100,6 @@ const changeHandler = (e) => {
         .catch((error) => {
             handleError(error);
         });
-
-    if (id === "logo-img-id") {
-        let img = logo.querySelector("img");
-        if (!img) {
-            img = document.createElement("img");
-            img.setAttribute("alt","");
-            logo.appendChild(img);
-        }
-        img.src = e.target.options[e.target.selectedIndex].querySelector("img").src;
-    }
 }
 
 /*
