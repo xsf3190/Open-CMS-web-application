@@ -1026,12 +1026,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH source AS
             (
-                SELECT '/images/logo.avif' AS deploy_filename, logo_asset_id, logo_updated_date AS updated_date
+                SELECT '/images/logo.avif' AS deploy_filename, logo_img_id, logo_updated_date AS updated_date
                   FROM website
                  WHERE id=pWebsiteid
                    AND logo_type='img'
             )
-            SELECT s.deploy_filename, s.logo_asset_id, s.updated_date, wf.sha1,
+            SELECT s.deploy_filename, s.logo_img_id, s.updated_date, wf.sha1,
                     'https://res.cloudinary.com/' || a.cld_cloud_name || '/w_200/' || a.public_id as src_url,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf, asset a
@@ -1039,7 +1039,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wf.site_id(+)=pSiteid
                AND wf.path(+)=s.deploy_filename
                AND wf.mime_type(+)='avif'
-               AND a.id=s.logo_asset_id
+               AND a.id=s.logo_img_id
         ) LOOP
             IF (C.build=0) THEN
                 l_files.put(C.deploy_filename, C.sha1);
