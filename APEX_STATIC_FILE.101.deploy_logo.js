@@ -15,6 +15,10 @@ const logo = document.querySelector(".logo");
 let isSending = false;
 
 const footerHandler = async (e) => {
+    if (e.target.classList.contains("reload")) {
+        window.location.reload();
+        return;
+    }
     if (e.target.classList.contains("publish")) {
         if (isSending) {
             console.log("Prevent double sends");
@@ -92,6 +96,12 @@ const changeHandler = (e) => {
             }
             else if (id === "logo-font-text") {
                 loadFont(data.menutext, e.target.value);
+            }
+            else if (id === "logo-font-size") {
+                document.documentElement.style.setProperty('--logo-font-size', value + 'cqi'); 
+            }
+            else if (id === "logo-font-wght") {
+                document.documentElement.style.setProperty('--logo-font-wght', value); 
             }
             const live=dialog_footer.querySelector("[aria-live]");
             live.replaceChildren();
