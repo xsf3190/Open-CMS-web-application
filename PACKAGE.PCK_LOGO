@@ -157,6 +157,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_logo_type website.logo_type%type;
         l_column_name user_tab_columns.column_name%type;
         l_column_value VARCHAR2(100);
+        l_menu font.menu%type;
+        l_menu_text font.menu%type;
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
@@ -175,7 +177,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         END IF;
 
         IF (l_logo_type='font') THEN
-            EXECUTE IMMEDIATE 'UPDATE website SET logo_updated_date=current_timestamp, logo_type=:B1 WHERE id=:B2' USING l_logo_type, pWebsiteId;
+            UPDATE website SET logo_updated_date=current_timestamp, logo_type=l_logo_type WHERE id=pWebsiteId;
 
             SELECT article_id
               INTO l_home_article_id
@@ -193,6 +195,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                     INSERT INTO article_chars(article_id, context, chars_normal)
                     VALUES (l_home_article_id, 'logo', l_column_value);
                 END IF;
+
+                pck_fonts.getFontFiles(pWebsiteId, pContext=>'logo', pArticleId=>l_home_article_id);
+                
+                SELECT 'url("' || src_url || '")' 
+                  INTO l_menu_text
+                  FROM website_fontface 
+                 WHERE website_id=pWebsiteid 
+                   AND context='logo';
             END IF;
 
             IF (l_column_name='logo_font_id') THEN
@@ -209,6 +219,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                     INSERT INTO website_font(website_id, font_id, context)
                     VALUES (pWebsiteid,l_column_value, 'logo');
                 END IF;
+                SELECT 'url("' || menu || '")' INTO l_menu FROM font WHERE id=TO_NUMBER(l_column_value);
             END IF;
         ELSE
             EXECUTE IMMEDIATE 'UPDATE website SET logo_updated_date=current_timestamp, logo_type=:B1,' || l_column_name || '=:B2 WHERE id=:B3' USING l_logo_type, l_column_value, pWebsiteId;
@@ -216,6 +227,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
+        l_json.put('menu',l_menu);
+        l_json.put('menutext',l_menu_text);
         l_json.put('message','Logo ' || l_logo_type || ' updated successfully');
         apex_util.prn(l_json.to_clob,false);
 
