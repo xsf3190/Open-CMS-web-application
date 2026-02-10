@@ -245,7 +245,7 @@ body>footer>a {
 
 .logo:not(:has(img)) {
   font-family: var(--font-family-logo);
-  font-size: var(--step-1);
+  font-size: var(--logo-font-size, 1cqi);
   text-box: cap alphabetic;
 }
 
