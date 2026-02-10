@@ -18,6 +18,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
     --
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pArticleId IN article.id%type);
+    --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER);
     --
     PROCEDURE loadGoogleFonts;
@@ -704,30 +706,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             subset, 
             variable, 
             axes,
-            lastModified
+            lastModified,
+            menu,
+            colorCapabilities
         )
         WITH 
         data AS
         (
-            SELECT family, category, lastModified,
+            SELECT family, category, lastModified, menu, colorCapabilities,
                 CASE WHEN variant='italic' THEN variant END italic,
                 tag,"start" as tag_start, "end" as tag_end, subset
-            FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, category, lastModified, NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$'),  
+            FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, category, lastModified, menu, NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$'),  
                 NESTED '$.axes[*]' COLUMNS(tag varchar2(4) PATH '$.tag', "start" number PATH '$.start', "end" number PATH '$.end'),
-                NESTED PATH '$.subsets[*]' COLUMNS (subset VARCHAR2(50) PATH '$')))
+                NESTED PATH '$.subsets[*]' COLUMNS (subset VARCHAR2(50) PATH '$'),
+                NESTED PATH '$.colorCapabilities[*]' COLUMNS (colorCapabilities VARCHAR2(50) PATH '$' )))
         ), 
         data2 as
         (
-            SELECT family, category, TO_DATE(lastModified,'YYYY-MM-DD') lastModified, 
+            SELECT family, category, TO_DATE(lastModified,'YYYY-MM-DD') lastModified, menu, 
                 MAX(DECODE(italic,'italic',0))  as ital_start, MAX(DECODE(italic,'italic',1)) as ital_end,
                 MAX(DECODE(tag,'wdth',tag_start)) as wdth_start, MAX(DECODE(tag,'wdth',tag_end)) as wdth_end, 
                 MAX(DECODE(tag,'wght',tag_start)) as wght_start, MAX(DECODE(tag,'wght',tag_end)) as wght_end, 
                 MAX(DECODE(tag,'opsz',tag_start)) as opsz_start, MAX(DECODE(tag,'opsz',tag_end)) as opsz_end, 
                 MAX(DECODE(tag,'slnt',tag_start)) as slnt_start, MAX(DECODE(tag,'slnt',tag_end)) as slnt_end,
                 LISTAGG(tag,',') WITHIN GROUP (ORDER BY null) axes,
-                LISTAGG(subset,'|') WITHIN GROUP (ORDER BY subset) subset
+                LISTAGG(subset,'|') WITHIN GROUP (ORDER BY subset) subset,
+                LISTAGG(colorCapabilities,'|') WITHIN GROUP (ORDER BY colorCapabilities) colorCapabilities
             FROM data
-            GROUP BY family, category, lastModified
+            GROUP BY family, category, lastModified, menu
         )
         SELECT family, category, 
             CASE WHEN axes IS NOT NULL THEN ital_start END ital_start, 
@@ -740,19 +746,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             subset,
             CASE WHEN axes IS NULL THEN 0 ELSE 1 END,
             axes,
-            lastModified
+            lastModified,
+            menu,
+            colorCapabilities
         FROM data2;
 
         /* Update font table from staging table */
         MERGE INTO font t
         USING
         (
-            SELECT family, category, lastmodified, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes
+            SELECT family, category, lastmodified, menu, colorcapabilities, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes
             FROM google_font
         ) s
         ON (t.family=s.family)
         WHEN MATCHED THEN UPDATE SET
             t.category=s.category,
+            t.menu=s.menu,
+            t.colorcapabilities=s.colorcapabilities,
             t.last_modified=s.lastmodified,
             t.ital_start=s.ital_start, t.ital_end=s.ital_end,
             t.wdth_start=s.wdth_start, t.wdth_end=s.wdth_end, 
@@ -764,8 +774,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             t.axes=s.axes,
             t.updated_date=current_timestamp
         WHEN NOT MATCHED THEN 
-            INSERT (id, family, category, last_modified, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes, created_date) 
-            VALUES (seq_font.nextval, s.family, s.category, s.lastmodified, s.ital_start, s.ital_end, s.wdth_start, s.wdth_end, s.wght_start, s.wght_end, s.opsz_start, s.opsz_end, s.slnt_start, s.slnt_end, s.italic, s.variable, s.axes, current_timestamp);
+            INSERT (id, family, category, menu, colorcapabilities, last_modified, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes, created_date) 
+            VALUES (seq_font.nextval, s.family, s.category, s.menu, s.colorcapabilities, s.lastmodified, s.ital_start, s.ital_end, s.wdth_start, s.wdth_end, s.wght_start, s.wght_end, s.opsz_start, s.opsz_end, s.slnt_start, s.slnt_end, s.italic, s.variable, s.axes, current_timestamp);
         
         l_nb_fonts:=sql%rowcount;
         pck_core.log('Uploaded ' ||l_nb_fonts || ' Google Fonts');
