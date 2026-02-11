@@ -97,12 +97,7 @@ const changeHandler = (e) => {
             else if (id === "logo-font-text") {
                 loadFont(data.menutext, e.target.value);
             }
-            else if (id === "logo-font-size") {
-                document.documentElement.style.setProperty('--logo-font-size', value + 'cqi'); 
-            }
-            else if (id === "logo-font-wght") {
-                document.documentElement.style.setProperty('--logo-font-wght', value); 
-            }
+
             const live=dialog_footer.querySelector("[aria-live]");
             live.replaceChildren();
             live.insertAdjacentHTML('beforeend',data.message);
@@ -116,16 +111,21 @@ const changeHandler = (e) => {
 ** UPDATE UI ON INPUT EVENTS
 */
 const inputHandler = (e) => {
-    const img = logo.querySelector("img");
-    if (img) {
-        const id = e.target.getAttribute("id");
-        if (id === "logo-img-corner-shape") {
-            const seValue = `superellipse(${e.target.value})`;
-            document.documentElement.style.setProperty('--logo-img-corner-shape', seValue); 
-        } else if (id === "logo-img-border-radius") {
-            const brValue = `${e.target.value}px`;
-            document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
-        }
+    const id = e.target.getAttribute("id");
+
+    if (id === "logo-font-size") {
+        document.documentElement.style.setProperty('--logo-font-size', e.target.value + 'cqi');
+    }
+    else if (id === "logo-font-wght") {
+        document.documentElement.style.setProperty('--logo-font-wght', e.target.value); 
+    }
+    else if (id === "logo-img-corner-shape") {
+        const seValue = `superellipse(${e.target.value})`;
+        document.documentElement.style.setProperty('--logo-img-corner-shape', seValue); 
+    }
+    else if (id === "logo-img-border-radius") {
+        const brValue = `${e.target.value}px`;
+        document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
     }
 }
 
