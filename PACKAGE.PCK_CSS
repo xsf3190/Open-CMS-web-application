@@ -117,7 +117,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         */
         FOR C IN (
             SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius, w.logo_inline_size,
-                    w.logo_type, w.logo_img_border_radius, w.logo_img_corner_shape
+                    w.logo_type, w.logo_img_border_radius, w.logo_img_corner_shape,
+                    w.logo_font_size, w.logo_font_wght
               FROM website w
              WHERE w.id=pWebsiteId
             )
@@ -167,7 +168,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             '--img-border-radius: ' || C.img_border_radius || ';' ||
             '--logo-inline-size: ' || C.logo_inline_size || ';' ||
             '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
-            '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';';
+            '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
+            '--logo-font-size: ' || C.logo_font_size || ';' ||
+            '--logo-font-wght: ' || NVL(C.logo_font_wght,400) || ';';
+            
+
 
             l_root_css:=l_root_css || 
             '}';
