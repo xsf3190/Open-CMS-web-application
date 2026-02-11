@@ -68,12 +68,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     PROCEDURE buildFontLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
         l_logo_type website.logo_type%type;
         l_font_id website_font.font_id%type;
+        l_logo_font_size website.logo_font_size%type;
         l_font_text article_chars.chars_normal%type;
     BEGIN
         pHeader:='<span>Create Website Logo using selected font</span>';
 
-        SELECT w.logo_type, wf.font_id, ac.chars_normal 
-          INTO l_logo_type, l_font_id, l_font_text
+        SELECT w.logo_type, w.logo_font_size, wf.font_id, ac.chars_normal 
+          INTO l_logo_type, l_logo_font_size, l_font_id, l_font_text
           FROM website w, website_article wa, website_font wf, article_chars ac
          WHERE w.id=pWebsiteid
            AND wa.website_id=w.id
@@ -84,7 +85,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
            AND ac.context(+)='logo';
 
         pArticle:=
-        '<fieldset class="flex-items">' ||
+        '<fieldset class="flow">' ||
             '<legend>Enter logo text and select font</legend>' ||
             '<div>' ||
                 '<label for="logo-font-id">Select Font</label>' ||
@@ -107,6 +108,29 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '<label for="logo-font-text">Logo text</label>' ||
                 '<input type="text" id="logo-font-text" value="' || l_font_text || '"/>' ||
             '</div>' ||
+            '<div>' ||
+                '<label for="logo-font-size">Adjust size</label>' ||
+                '<input type="range" id="logo-font-size" min="2" value="' || TO_CHAR(l_logo_font_size) || '" max="5" step="0.1" />' ||
+            '</div>';
+
+        FOR C IN (
+            SELECT wf.wght, f.wght_start, f.wght_end, wf.wdth, f.wdth_start, f.wdth_end, wf.slnt, f.slnt_start, f.slnt_end
+              FROM website_font wf, font f
+             WHERE website_id=pWebsiteid
+               AND wf.context='logo'
+               AND f.id=wf.font_id
+        ) LOOP
+            IF (C.wght_start IS NOT NULL) THEN
+                pArticle:=pArticle ||
+                '<div>' ||
+                    '<label for="logo-font-wght">Adjust weight</label>' ||
+                    '<input type="range" id="logo-font-wght" min="' || TO_CHAR(C.wght_start) || '" value="' || TO_CHAR(C.wght) || '" max="'|| TO_CHAR(C.wght_end) || '" step="1" />' ||
+                '</div>';
+
+            END IF;
+        END LOOP;
+
+        pArticle:=pArticle || 
         '</fieldset>';
     END;
 
@@ -164,7 +188,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT REPLACE(column_name,'-','_'), CASE column_name WHEN 'logo-img-corner-shape' THEN 'superellipse(' || column_value || ')' WHEN 'logo-img-border-radius' THEN column_value || 'px' ELSE column_value END
+        SELECT REPLACE(column_name,'-','_'), 
+                CASE column_name 
+                    WHEN 'logo-img-corner-shape' THEN 'superellipse(' || column_value || ')' 
+                    WHEN 'logo-img-border-radius' THEN column_value || 'px'
+                    WHEN 'logo-font-size' THEN column_value || 'cqi'
+                    ELSE column_value 
+                END
           INTO l_column_name, l_column_value 
           FROM JSON_TABLE(pBodyText, '$' COLUMNS (column_name, column_value));
 
@@ -177,7 +207,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         END IF;
 
         IF (l_logo_type='font') THEN
-            UPDATE website SET logo_updated_date=current_timestamp, logo_type=l_logo_type WHERE id=pWebsiteId;
+            UPDATE website 
+               SET logo_updated_date=current_timestamp,
+                   logo_type=l_logo_type, 
+                   logo_font_size=CASE WHEN l_column_name='logo_font_size' THEN l_column_value ELSE logo_font_size END,
+                   logo_font_wght=CASE WHEN l_column_name='logo_font_wght' THEN TO_NUMBER(l_column_value) ELSE logo_font_wght END  
+             WHERE id=pWebsiteId;
 
             SELECT article_id
               INTO l_home_article_id
