@@ -183,6 +183,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         IF (n=0) THEN
             pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
+            pck_core.log(l_fontface);
 
             l_font_family:=getValue('font-family');
             l_font_style:=getValue('font-style');
