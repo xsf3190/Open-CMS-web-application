@@ -173,7 +173,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     END;
 
     /*
-    ** UPDATE WEBSITE LOGO. METHODS ARE MUTUALLY EXCLUSIVE.
+    ** UPDATE WEBSITE LOGO. 
+    ** IMAGE | FONT | SVG  ARE MUTUALLY EXCLUSIVE.
     */
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -233,6 +234,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
 
                 pck_fonts.getFontFiles(pWebsiteId, pContext=>'logo', pArticleId=>l_home_article_id);
                 
+                /* l_menu_text IS ? */
                 SELECT 'url("' || src_url || '")' 
                   INTO l_menu_text
                   FROM website_fontface 
