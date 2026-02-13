@@ -183,7 +183,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         IF (n=0) THEN
             pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
-            pck_core.log(l_fontface);
 
             l_font_family:=getValue('font-family');
             l_font_style:=getValue('font-style');
@@ -194,8 +193,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_deploy_filename:='/fonts/' || pContext || '.' || l_font_style || CASE WHEN l_font_weight>400 THEN '.bold' END || '.woff2';
 
             DELETE website_fontface WHERE website_id=pWebsiteId AND deploy_filename=l_deploy_filename;
-
-            pck_core.log('insert website_fontface:'||pContext||':'||l_deploy_filename);
 
             INSERT INTO website_fontface(website_id, context, font_family, font_style, font_weight, font_stretch, src_url, api_url, deploy_filename)
                 VALUES(pWebsiteId, pContext, l_font_family, l_font_style, l_font_weight, l_font_stretch, l_src_url, l_api_url, l_deploy_filename);
@@ -655,7 +652,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
          WHERE website_id=pWebsiteId
            AND context=l_context;
 
-        getFontFiles(pWebsiteId, pContext=>l_context, pArticleId=>pArticleId);
+        -- getFontFiles(pWebsiteId, pContext=>l_context, pArticleId=>pArticleId);
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
