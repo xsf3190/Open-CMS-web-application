@@ -94,9 +94,6 @@ const changeHandler = (e) => {
             else if (id === "logo-font-id") {
                 loadFont(data.menu, e.target.options[e.target.selectedIndex].text);
             }
-            else if (id === "logo-font-text") {
-                loadFont(data.menutext, e.target.value);
-            }
 
             const live=dialog_footer.querySelector("[aria-live]");
             live.replaceChildren();
@@ -115,6 +112,9 @@ const inputHandler = (e) => {
 
     if (id === "logo-font-size") {
         document.documentElement.style.setProperty('--logo-font-size', e.target.value + 'cqi');
+    }
+    else if (id === "logo-font-text") {
+        logo.textContent = e.target.value;
     }
     else if (id === "logo-font-wght") {
         document.documentElement.style.setProperty('--logo-font-wght', e.target.value); 
