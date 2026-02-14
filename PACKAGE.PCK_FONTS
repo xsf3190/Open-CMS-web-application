@@ -24,6 +24,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE loadGoogleFonts;
     --
+    PROCEDURE loadGoogleFontMetadata;
+    --
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
 end "PCK_FONTS";
@@ -853,6 +855,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         ) 
         SELECT id, tag, tag_start, tag_end
         FROM data;
+        
+    END;
+
+    /*
+    **  Load Google font metadata
+    */
+    PROCEDURE loadGoogleFontMetadata IS 
+        l_clob CLOB;
+        l_nb_fonts PLS_INTEGER;
+    BEGIN
+        pck_api.callGoogleAPI('https://fonts.google.com/metadata/fonts',pData=>l_clob);
+
+        EXECUTE IMMEDIATE('truncate table google_font_metadata');
+        
+        INSERT INTO google_font_metadata
+        (
+            axis, display_name, min_value, max_value, default_value, precision, description
+        )
+        SELECT tag AS axis, displayName AS display_name, min AS min_value, max AS max_value, defaultvalue AS default_value, precision, description
+        FROM JSON_TABLE(l_clob, '$.axisRegistry[*]' COLUMNS(tag, displayName, min, max, defaultValue, precision, description));
         
     END;
 
