@@ -69,13 +69,30 @@ const loadImg = (src) => {
 /*
 ** LOAD SELECTED FONT
 */
-const loadFont = (menu, text) => {
-    logo.querySelector("img")?.remove();
-    const fontFile = new FontFace(text,menu);
-    document.fonts.add(fontFile);
-    fontFile.load();
-    logo.textContent = text;
-    document.documentElement.style.setProperty('--font-family-logo', text); 
+// const loadFont = (menu, text) => {
+//     logo.querySelector("img")?.remove();
+//     const fontFile = new FontFace(text,menu);
+//     document.fonts.add(fontFile);
+//     fontFile.load();
+//     logo.textContent = text;
+//     document.documentElement.style.setProperty('--font-family-logo', text); 
+// }
+const loadFont = (font_family, data) => {
+    for (const fontface of data.urls) {
+        const fontFile = new FontFace(font_family,fontface.source);
+        fontFile.style = fontface.style;
+        fontFile.weight = fontface.weight;
+        if (fontface.stretch) {
+            fontFile.stretch = fontface.stretch;
+        }
+        document.fonts.add(fontFile);
+        fontFile.load();
+    };
+    const font_variations = dialog_article.querySelector(".font-variations");
+    font_variations.replaceChildren();
+    font_variations.insertAdjacentHTML('afterbegin',data.variations);
+
+    document.documentElement.style.setProperty('--font-family-logo', font_family); 
 }
 
 /*
@@ -92,7 +109,8 @@ const changeHandler = (e) => {
                 loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
             }
             else if (id === "logo-font-id") {
-                loadFont(data.menu, e.target.options[e.target.selectedIndex].text);
+                // loadFont(data.menu, e.target.options[e.target.selectedIndex].text);
+                loadFont(e.target.options[e.target.selectedIndex].text, data);
             }
 
             const live=dialog_footer.querySelector("[aria-live]");
