@@ -69,14 +69,6 @@ const loadImg = (src) => {
 /*
 ** LOAD SELECTED FONT
 */
-// const loadFont = (menu, text) => {
-//     logo.querySelector("img")?.remove();
-//     const fontFile = new FontFace(text,menu);
-//     document.fonts.add(fontFile);
-//     fontFile.load();
-//     logo.textContent = text;
-//     document.documentElement.style.setProperty('--font-family-logo', text); 
-// }
 const loadFont = (font_family, data) => {
     for (const fontface of data.urls) {
         const fontFile = new FontFace(font_family,fontface.source);
@@ -123,6 +115,36 @@ const changeHandler = (e) => {
 }
 
 /*
+** TOGGLE BUTTON HANDLER
+*/
+const toggleHandler = (e) => {
+    const id = e.target.getAttribute("id");
+
+    if (id === "ital") {
+        let value;
+        const toggle = e.target;
+        if (toggle.getAttribute("aria-pressed") == "false") {
+            toggle.setAttribute("aria-pressed", "true");
+            value = "1";
+        } else {
+            toggle.setAttribute("aria-pressed", "false");
+            value = "0";
+        }
+        callAPI(endpoint,"PUT",{column_name:id,column_value:value})
+            .then((data) => {
+                logo.fontStyle = 'italic';
+
+                const live=dialog_footer.querySelector("[aria-live]");
+                live.replaceChildren();
+                live.insertAdjacentHTML('beforeend',data.message);
+            })
+            .catch((error) => {
+                handleError(error);
+            });
+    }
+}
+
+/*
 ** UPDATE UI ON INPUT EVENTS
 */
 const inputHandler = (e) => {
@@ -134,8 +156,11 @@ const inputHandler = (e) => {
     else if (id === "logo-font-text") {
         logo.textContent = e.target.value;
     }
-    else if (id === "logo-font-wght") {
+    else if (id === "wght") {
         document.documentElement.style.setProperty('--logo-font-wght', e.target.value); 
+    }
+    else if (id === "wdth") {
+        document.documentElement.style.setProperty('--logo-font-wdth', e.target.value + "%"); 
     }
     else if (id === "logo-img-corner-shape") {
         const seValue = `superellipse(${e.target.value})`;
@@ -157,6 +182,7 @@ export const init = (element) => {
             dialog_footer.addEventListener("click", footerHandler);
             dialog_article.addEventListener("change", changeHandler);
             dialog_article.addEventListener("input", inputHandler);
+            dialog_article.addEventListener("click", toggleHandler);
         })
         .catch((error) => {
             handleError(error);
