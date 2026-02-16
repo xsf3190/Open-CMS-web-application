@@ -815,31 +815,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         AND f.family=g.family;
 
         /*
-        ** LOAD font_custom_axis TABLE
+        ** LOAD VARIABLE FONT AXES. 
+        ** NOTE THAT "ital" AXIS ALREADY COMPUTED
         */
-        INSERT INTO font_custom_axis
-        (
-            axis
-        )
-        WITH data AS
-        (
-            select distinct axes from google_font
-        )
-        SELECT DISTINCT axis FROM 
-            (
-                SELECT column_value AS axis 
-                FROM data, TABLE(apex_string.split(axes,','))
-                WHERE column_value NOT IN ('ital','wght','slnt','wdth','opsz')
-            )
-        WHERE axis NOT IN (SELECT axis FROM font_custom_axis WHERE description IS NULL);
+        DELETE font_axes;
 
-        l_nb_fonts:=sql%rowcount;
-        pck_core.log('Uploaded ' ||l_nb_fonts || ' Custom variable font axes');
-
-        
-        DELETE font_custom_axes;
-
-        INSERT INTO font_custom_axes
+        INSERT INTO font_axes
         (
             font_id, axis, axis_start, axis_end
         )
@@ -847,14 +828,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         data AS
         (
             SELECT f.id,  tag, "start" as tag_start, "end" as tag_end
-            FROM font f, font_custom_axis fx, 
+            FROM font f,
                 JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family,
                     NESTED '$.axes[*]' COLUMNS(tag varchar2(4) PATH '$.tag', "start" number PATH '$.start', "end" number PATH '$.end'))) g
             WHERE f.family=g.family
-            AND fx.axis=tag
+            UNION ALL
+            SELECT id, 'ital', ital_start, ital_end 
+              FROM font 
+             WHERE variable=1 
+               AND ital_start+ital_end=1
         ) 
         SELECT id, tag, tag_start, tag_end
-        FROM data;
+        FROM data
+        WHERE tag IS NOT NULL
+        ORDER BY id, tag;
         
     END;
 
@@ -867,9 +854,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     BEGIN
         pck_api.callGoogleAPI('https://fonts.google.com/metadata/fonts',pData=>l_clob);
 
-        EXECUTE IMMEDIATE('truncate table google_font_metadata');
+        EXECUTE IMMEDIATE('truncate table font_metadata');
         
-        INSERT INTO google_font_metadata
+        INSERT INTO font_metadata
         (
             axis, display_name, min_value, max_value, default_value, precision, description
         )
