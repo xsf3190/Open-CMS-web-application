@@ -246,6 +246,8 @@ body>footer>a {
 .logo:not(:has(img)) {
   font-family: var(--font-family-logo);
   font-size: var(--logo-font-size, 1cqi);
+  font-weight: var(--logo-font-wght);
+  font-stretch: var(--logo-font-wdth);
   text-box: cap alphabetic;
 }
 
@@ -1127,39 +1129,75 @@ selectedcontent {
 }
 
 /* SWITCH BUTTON */
-input:where([type="checkbox"][role="switch"]) {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  position: relative;
-  font-size: inherit;
-  width: 2em;
-  height: 1em;
-  box-sizing: content-box;
-  border: 1px solid;
-  border-radius: 1em;
-  vertical-align: text-bottom;
-  margin: auto;
+button[aria-pressed] {
+  display: block;
+  box-sizing: border-box;
+  border: none;
   color: inherit;
+  background: none;
+  font: inherit;
+  font-weight: 550;
+  line-height: inherit;
+  text-align: left;
+  padding: .4em 0 .4em 4em;
+  position: relative;
 }
 
-input:where([type="checkbox"][role="switch"])::before {
+button[aria-pressed]:focus,
+button[aria-pressed]:hover {
+  color: #00f;
+  outline: none;
+}
+
+button[aria-pressed]:focus::before,
+button[aria-pressed]:hover::before {
+  box-shadow: 0 0 0.5em #333;
+}
+
+button[aria-pressed]:focus::after,
+button[aria-pressed]:hover::after {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='rgba(0,0,0,.25)'/%3E%3C/svg%3E");
+  background-size: 30%;
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+button[aria-pressed]::before,
+button[aria-pressed]::after {
   content: "";
   position: absolute;
-  top: 50%;
-  left: 0;
-  transform: translate(0, -50%);
-  box-sizing: border-box;
-  width: 0.7em;
-  height: 0.7em;
-  margin: 0 0.15em;
-  border: 1px solid;
-  border-radius: 50%;
-  background: currentcolor;
+  height: 1.5em;
+  transition: all 0.25s ease;
 }
 
-input:where([type="checkbox"][role="switch"]):checked::before {
-  left: 1em;
+button[aria-pressed]::before {
+  left: 0;
+  top: 0.2em;
+  width: 3em;
+  border: 0.2em solid #767676;
+  background: #767676;
+  border-radius: 1.1em;
+}
+
+button[aria-pressed]::after {
+  left: 0;
+  top: 0.25em;
+  background-color: #fff;
+  background-position: center center;
+  border-radius: 50%;
+  width: 1.5em;
+  border: 0.15em solid #767676;
+}
+
+button[aria-pressed=true]::after {
+  left: 1.6em;
+  border-color: #36a829;
+  color: #36a829;
+}
+
+button[aria-pressed=true]::before {
+  background-color: #36a829;
+  border-color: #36a829;
 }
 
 /* EDITOR STYLES */
