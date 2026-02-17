@@ -87,6 +87,12 @@ const loadFont = (font_family, data) => {
     document.documentElement.style.setProperty('--font-family-logo', font_family); 
 }
 
+const liveRegion = (data) => {
+    const live=dialog_footer.querySelector("[aria-live]");
+    live.replaceChildren();
+    live.insertAdjacentHTML('beforeend',data.message);
+}
+
 /*
 ** UPDATE DATABASE ON ALL CHANGE EVENTS
 */
@@ -101,13 +107,9 @@ const changeHandler = (e) => {
                 loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
             }
             else if (id === "logo-font-id") {
-                // loadFont(data.menu, e.target.options[e.target.selectedIndex].text);
                 loadFont(e.target.options[e.target.selectedIndex].text, data);
             }
-
-            const live=dialog_footer.querySelector("[aria-live]");
-            live.replaceChildren();
-            live.insertAdjacentHTML('beforeend',data.message);
+            liveRegion(data);
         })
         .catch((error) => {
             handleError(error);
@@ -132,11 +134,8 @@ const toggleHandler = (e) => {
         }
         callAPI(endpoint,"PUT",{column_name:id,column_value:value})
             .then((data) => {
-                logo.fontStyle = 'italic';
-
-                const live=dialog_footer.querySelector("[aria-live]");
-                live.replaceChildren();
-                live.insertAdjacentHTML('beforeend',data.message);
+                logo.style.fontStyle = (value === "0") ? 'normal' : 'italic';
+                liveRegion(data);
             })
             .catch((error) => {
                 handleError(error);
@@ -161,6 +160,9 @@ const inputHandler = (e) => {
     }
     else if (id === "wdth") {
         document.documentElement.style.setProperty('--logo-font-wdth', e.target.value + "%"); 
+    }
+    else if (id === "slnt") {
+        document.documentElement.style.setProperty('--logo-font-slnt', e.target.value); 
     }
     else if (id === "logo-img-corner-shape") {
         const seValue = `superellipse(${e.target.value})`;
