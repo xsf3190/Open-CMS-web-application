@@ -89,9 +89,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
              ORDER BY fa.axis
         ) LOOP
             l_variations:=l_variations || 
-            '<div>' ||
-                '<label for="' || C.axis || '">' || C.display_name || '</label>' ||
-                '<input type="range" id="' || C.axis || '" min="' || TO_CHAR(C.axis_start) || '" value="' || TO_CHAR(C.value) || '" max="'|| TO_CHAR(C.axis_end) || '" step="1" />' ||
+            '<div>';
+            IF (C.axis_end-C.axis_start=1) THEN
+                l_variations:=l_variations || 
+                    '<button type="button" id="' || C.axis || '" aria-pressed="' || CASE WHEN C.value='0' THEN 'false' ELSE 'true' END || '">' || C.display_name || '</button>';
+            ELSE
+                l_variations:=l_variations || 
+                    '<label for="' || C.axis || '">' || C.display_name || '</label>' ||
+                    '<input type="range" id="' || C.axis || '" min="' || TO_CHAR(C.axis_start) || '" value="' || TO_CHAR(C.value) || '" max="'|| TO_CHAR(C.axis_end) || '" step="1" />';
+            END IF;
+            l_variations:=l_variations || 
             '</div>';
         END LOOP;
         l_variations:=l_variations || 
@@ -306,11 +313,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 ** Set text parameter to support all European languages
                 */
                 l_text:='abcdefghijklmnopqrstuvwxyz';
-                -- l_text:=l_text || UPPER(l_text);
+                l_text:=l_text || UPPER(l_text);
+                l_text:=l_text || '0123456789';
                 -- more to come 
 
                 l_api_url:=l_api_url || '&text=' || utl_url.escape(l_text,TRUE,'UTF-8');
                 pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
+
+                UPDATE website_font SET editor_fontfaces=l_fontfaces WHERE website_id=pWebsiteid AND font_id=l_column_value AND context='logo';
 
                 l_urls:= new JSON_ARRAY_T;
                 FOR i IN 1..n LOOP
