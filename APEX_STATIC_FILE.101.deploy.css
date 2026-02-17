@@ -241,6 +241,7 @@ body>footer>a {
 .logo img {
     border-radius: var(--logo-img-border-radius, 0);
     corner-shape: var(--logo-img-corner-shape);
+    width: var(--space-3xl);
 }
 
 .logo:not(:has(img)) {
@@ -248,6 +249,7 @@ body>footer>a {
   font-size: var(--logo-font-size, 1cqi);
   font-weight: var(--logo-font-wght);
   font-stretch: var(--logo-font-wdth);
+  font-variation-settings: "slnt" var(--logo-font-slnt);
   text-box: cap alphabetic;
 }
 
