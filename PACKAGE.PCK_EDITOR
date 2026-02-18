@@ -613,7 +613,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 FOR C IN (
                     SELECT domain_name FROM website WHERE id=pWebsiteId
                 ) LOOP 
-                    l_link:='<a href="https://' || C.domain_name || '">' || C.domain_name || ' is LIVE</a>';
+                    l_link:='<a href="https://' || C.domain_name || '">' || C.domain_name || ' IS LIVE</a>';
                 END LOOP;
             WHEN 'TEST' THEN
                 pck_deploy.deployEditorSite(pWebsiteid);
