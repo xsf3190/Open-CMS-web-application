@@ -61,6 +61,7 @@ const loadImg = (src) => {
         logo.textContent = "";
         img = document.createElement("img");
         img.setAttribute("alt","");
+        img.dataset.type = "img";
         logo.appendChild(img);
     }
     img.src = src;
@@ -109,6 +110,16 @@ const changeHandler = (e) => {
             else if (id === "logo-font-id") {
                 loadFont(e.target.options[e.target.selectedIndex].text, data);
             }
+            else if (id === "logo-svg") {
+                logo.replaceChildren();
+                logo.insertAdjacentHTML('beforeend',value);
+            }
+            else if (id === "logo-svg-inline-size") {
+                document.documentElement.style.setProperty('--logo-svg-inline-size', "var(" + value + ")"); 
+            }
+            else if (id === "logo-img-inline-size") {
+                document.documentElement.style.setProperty('--logo-img-inline-size', "var(" + value + ")"); 
+            }
             liveRegion(data);
         })
         .catch((error) => {
@@ -117,9 +128,9 @@ const changeHandler = (e) => {
 }
 
 /*
-** TOGGLE BUTTON HANDLER
+**  BUTTON HANDLER
 */
-const toggleHandler = (e) => {
+const clickHandler = (e) => {
     const id = e.target.getAttribute("id");
 
     if (id === "ital") {
@@ -140,6 +151,8 @@ const toggleHandler = (e) => {
             .catch((error) => {
                 handleError(error);
             });
+    } else if (id === "apply-svg") {
+        console.log("apply svg button clicked");
     }
 }
 
@@ -184,7 +197,7 @@ export const init = (element) => {
             dialog_footer.addEventListener("click", footerHandler);
             dialog_article.addEventListener("change", changeHandler);
             dialog_article.addEventListener("input", inputHandler);
-            dialog_article.addEventListener("click", toggleHandler);
+            dialog_article.addEventListener("click", clickHandler);
         })
         .catch((error) => {
             handleError(error);
