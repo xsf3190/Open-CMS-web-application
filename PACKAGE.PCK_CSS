@@ -181,7 +181,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 '--logo-font-' || C1.axis || ': ' || C1.value || ';';
             END LOOP;
 
-
             l_root_css:=l_root_css || 
             '}';
         END LOOP;
