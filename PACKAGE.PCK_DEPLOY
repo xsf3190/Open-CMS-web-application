@@ -392,27 +392,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
-    ** BUILD LOGO TEXT
-    */
-    FUNCTION buildLogo(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
-        l_logo_text article_chars.chars_normal%type;
-    BEGIN
-        FOR C IN (
-            SELECT ac.chars_normal 
-              FROM website w, website_article wa, article_chars ac
-             WHERE w.id=pWebsiteId
-               AND w.logo_type='font'
-               AND wa.website_id=w.id
-               AND wa.display_order=1
-               AND ac.article_id(+)=wa.article_id
-               AND ac.context(+)='logo'
-        ) LOOP
-            l_logo_text:=C.chars_normal;
-        END LOOP;
-        RETuRN (l_logo_text);
-    END;
-
-    /*
     ** BUILD NAVIGATION ELEMENT COMMON TO ALL PAGES
     */
     FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2 IS
@@ -663,7 +642,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE buildPageBody(
         pWebsiteId IN website.id%type, 
         pArticleid IN article.id%type,
-        pLogoText IN article_chars.chars_normal%type,
         pNav IN VARCHAR2, 
         pColorScheme IN VARCHAR2,
         pDropdown in VARCHAR2, 
@@ -692,7 +670,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pBody:=null;
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
-                    w.max_width, w.logo_type, NVL2(w.favicon,'1',null) favicon
+                    w.max_width, w.logo_type, w.logo_font_text, NVL2(w.favicon,'1',null) favicon
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -775,7 +753,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 WHEN 'img' THEN
                     l_logo:='<span class="logo"><img src="/images/logo.avif" alt="Image of website logo" fetchpriority="high"></span>';
                 WHEN 'font' THEN
-                    l_logo:='<span class="logo">' || pLogoText || '</span>';
+                    l_logo:='<span class="logo">' || C.logo_font_text || '</span>';
                 ELSE
                     l_logo:='<span class="logo"></span>';
             END CASE;
@@ -839,7 +817,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_dogface_empty_blob BLOB:=EMPTY_BLOB();
 
         l_dropdown VARCHAR2(4000);
-        l_logo_text article_chars.chars_normal%type;
         l_nav VARCHAR2(4000);
         l_color_scheme LONG;
         l_common_header website_article.header_html%type;
@@ -1021,7 +998,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  2.2 Build LOGO img file
+        **  2.2 Build LOGO img file (thumbnail)
         */
         FOR C IN (
             WITH source AS
@@ -1088,7 +1065,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
             n:=n+1;
             IF (n=1) THEN
-                l_logo_text:=buildLogo(pWebsiteId);
                 l_nav:=buildNav(pWebsiteId);
                 l_color_scheme:=buildColorscheme();
                 l_dropdown:=buildDropdown(pWebsiteId);
@@ -1096,7 +1072,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_common_footer:=buildCommonFooter(pWebsiteid);
                 -- l_favicon:=buildFavicon(pWebsiteid);
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo_text, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
