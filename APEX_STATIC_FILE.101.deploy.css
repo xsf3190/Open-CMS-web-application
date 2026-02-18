@@ -238,10 +238,16 @@ body>footer>a {
   background-color: var(--color-bg);
 }
 
-.logo img {
+.logo img[data-type="img"] {
     border-radius: var(--logo-img-border-radius, 0);
     corner-shape: var(--logo-img-corner-shape);
-    width: var(--space-3xl);
+    width: var(--logo-img-inline-size);
+    height: auto;
+}
+
+.logo img[data-type="svg"], .logo svg {
+    width: var(--logo-svg-inline-size);
+    height: auto;
 }
 
 .logo:not(:has(img)) {
