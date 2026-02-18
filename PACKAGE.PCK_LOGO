@@ -64,17 +64,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         '</fieldset>';
     END;
 
-    FUNCTION buildAxisInput(pAxis IN VARCHAR2, pMin IN NUMBER, pMax IN NUMBER, pValue IN NUMBER DEFAULT NULL) RETURN VARCHAR2 IS
-    BEGIN
-        RETURN(
-        '<div>' ||
-            '<label for="' || pAxis || '">Adjust weight</label>' ||
-            '<input type="range" id="' || pAxis || '" min="' || TO_CHAR(pMin) || '" value="' || TO_CHAR(pValue) || '" max="'|| TO_CHAR(pMax) || '" step="1" />' ||
-        '</div>');
-    END;
-
+    /*
+    ** CREATE HTML FOR VARIABLE FONT AXES
+    */
     FUNCTION buildFontVariations(pWebsiteid IN website.id%type, pFontid IN font.id%type, pContext IN website_font.context%type) RETURN VARCHAR2 IS
         l_variations LONG;
+        n PLS_INTEGER:=0;
     BEGIN
         l_variations:=
         '<div class="font-variations flow">';
@@ -88,35 +83,79 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                AND fv.context(+)=pContext
              ORDER BY fa.axis
         ) LOOP
+            n:=n+1;
             l_variations:=l_variations || 
             '<div>';
+            -- For accessibility implement toggle as button
             IF (C.axis_end-C.axis_start=1) THEN
                 l_variations:=l_variations || 
                     '<button type="button" id="' || C.axis || '" aria-pressed="' || CASE WHEN C.value='0' THEN 'false' ELSE 'true' END || '">' || C.display_name || '</button>';
             ELSE
                 l_variations:=l_variations || 
                     '<label for="' || C.axis || '">' || C.display_name || '</label>' ||
-                    '<input type="range" id="' || C.axis || '" min="' || TO_CHAR(C.axis_start) || '" value="' || TO_CHAR(C.value) || '" max="'|| TO_CHAR(C.axis_end) || '" step="1" />';
+                    '<input type="range" id="' || C.axis || '" min="' || TO_CHAR(C.axis_start) || '"' || CASE WHEN C.value IS NOT NULL THEN ' value="' || TO_CHAR(C.value) || '"' END || ' max="'|| TO_CHAR(C.axis_end) || '" step="1" />';
             END IF;
             l_variations:=l_variations || 
             '</div>';
         END LOOP;
+        -- Build weight select lisy for static fonts
+        IF (n=0) THEN
+            l_variations:=l_variations || 
+            '<div>' ||
+                '<label for="wght">Weight</label>' ||
+                '<select id="wght">' ||
+                    '<button>' ||
+                      '<selectedcontent></selectedcontent>' ||
+                      '<span class="arrow"></span>' ||
+                    '</button>';
+                    FOR C IN (SELECT wght_normal, wght_italic FROM font_static_wght WHERE font_id=pFontid ORDER BY 1)
+                    LOOP
+                        IF (C.wght_italic IS NOT NULL) THEN
+                            n:=1;
+                        END IF;
+                        l_variations:=l_variations || 
+                        '<option value="' || TO_CHAR(C.wght_normal) || '">' || 
+                            CASE C.wght_normal
+                                WHEN 100 THEN 'Thin'
+                                WHEN 200 THEN 'Extra Light'
+                                WHEN 300 THEN 'Light'
+                                WHEN 400 THEN 'Normal'
+                                WHEN 500 THEN 'Medium'
+                                WHEN 600 THEN 'Semi Bold'
+                                WHEN 700 THEN 'Bold'
+                                WHEN 800 THEN 'Extra Bold'
+                                WHEN 900 THEN 'Ultra Bold'
+                            END
+                        || '</option>';
+                    END LOOP;
+                l_variations:=l_variations || 
+                '</select>' ||
+            '</div>';
+            IF (n=1) THEN
+                l_variations:=l_variations || 
+                '<div>' ||
+                    '<button type="button" id="ital" aria-pressed="0">Italic</button>' ||
+                '</div>';
+            END IF;
+        END IF;
         l_variations:=l_variations || 
         '</div>';
 
         RETURN (l_variations);
     END;
 
+    /*
+    ** CREATE HTML FOR FONT LOGO FORM
+    */
     PROCEDURE buildFontLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
-        l_logo_type website.logo_type%type;
         l_font_id website_font.font_id%type;
         l_logo_font_size website.logo_font_size%type;
         l_logo_font_text website.logo_font_text%type;
     BEGIN
         pHeader:='<span>Create Website Logo using selected font</span>';
 
-        SELECT w.logo_type, w.logo_font_size, w.logo_font_text, wf.font_id
-          INTO l_logo_type, l_logo_font_size, l_logo_font_text, l_font_id
+        SELECT w.logo_font_size, NVL(w.logo_font_text,w.domain_name), wf.font_id
+          INTO l_logo_font_size, l_logo_font_text, l_font_id
           FROM website w, website_font wf
          WHERE w.id=pWebsiteid
            AND wf.website_id(+)=w.id
@@ -214,8 +253,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_fontface JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
-
-        
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -236,7 +273,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         ELSIF (INSTR(l_column_name,'svg')>0) THEN
             l_logo_type:='svg';
         END IF;
-        pck_core.log('l_column_name:'||l_column_name);
 
         SELECT COUNT(*) INTO n FROM user_tab_columns WHERE table_name='WEBSITE' AND column_name=UPPER(l_column_name);
 
@@ -268,78 +304,68 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 VALUES (pWebsiteid,l_column_value, 'logo');
             END IF;
             /*
-            ** USE GOOGLE MENU URL FOR THE FONT IF LOGO TEXT NULL
+            ** BUILD FONT PROPERTIES FORM
             */
+
+            /*
+            ** Build input range controls for variable font axes
+            */
+            l_variations:=buildFontVariations(pWebsiteid, l_column_value, 'logo');
+
+            /*
+            ** Build Google Fonts CSS API url
+            */
+            n:=0;
             FOR C IN (
-                SELECT w.logo_font_text, f.menu
-                  FROM website w, font f 
-                 WHERE w.id=pWebsiteid 
-                   AND f.id=l_column_value
+                SELECT 'https://fonts.googleapis.com/css2?family=' ||
+                        REPLACE(f.family,' ','+') || ':' || 
+                        LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY fa.axis) || 
+                        '@' AS axes,
+                        LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY fa.axis) AS ranges
+                  FROM font f, font_axes fa
+                 WHERE f.id=TO_NUMBER(l_column_value)
+                   AND fa.font_id=f.id
+                 GROUP BY f.family
             ) LOOP
-                IF (C.logo_font_text IS NULL) THEN
-                    l_menu_text:='url("' || C.menu || '")';
+                l_api_url:=C.axes || C.ranges;
+                n:=1;
+                IF (INSTR(C.axes,'ital')>0) THEN
+                    l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
+                    n:=2;
                 END IF;
-                /*
-                ** Build input range controls for variable font axes
-                */
-                l_variations:=buildFontVariations(pWebsiteid, l_column_value, 'logo');
+            END LOOP;
 
-                /*
-                ** Build Google Fonts CSS API url
-                */
-                n:=0;
-                FOR C IN (
-                    SELECT 'https://fonts.googleapis.com/css2?family=' ||
-                            REPLACE(f.family,' ','+') || ':' || 
-                            LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY fa.axis) || 
-                            '@' AS axes,
-                            LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY fa.axis) AS ranges
-                      FROM font f, font_axes fa
-                     WHERE f.id=TO_NUMBER(l_column_value)
-                       AND fa.font_id=f.id
-                     GROUP BY f.family
-                ) LOOP
-                    l_api_url:=C.axes || C.ranges;
-                    n:=1;
-                    IF (INSTR(C.axes,'ital')>0) THEN
-                        l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
-                        n:=2;
-                    END IF;
-                END LOOP;
+            /* "n" is number of variable font files */
 
-                /* "n" is number of variable font files */
+            /*
+            ** Set text parameter to support all European languages
+            */
+            l_text:='abcdefghijklmnopqrstuvwxyz';
+            l_text:=l_text || UPPER(l_text);
+            l_text:=l_text || '0123456789';
+            -- more to come 
 
-                /*
-                ** Set text parameter to support all European languages
-                */
-                l_text:='abcdefghijklmnopqrstuvwxyz';
-                l_text:=l_text || UPPER(l_text);
-                l_text:=l_text || '0123456789';
-                -- more to come 
+            l_api_url:=l_api_url || '&text=' || utl_url.escape(l_text,TRUE,'UTF-8');
+            pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
 
-                l_api_url:=l_api_url || '&text=' || utl_url.escape(l_text,TRUE,'UTF-8');
-                pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
+            UPDATE website_font SET editor_fontfaces=l_fontfaces WHERE website_id=pWebsiteid AND font_id=l_column_value AND context='logo';
 
-                UPDATE website_font SET editor_fontfaces=l_fontfaces WHERE website_id=pWebsiteid AND font_id=l_column_value AND context='logo';
+            l_urls:= new JSON_ARRAY_T;
+            FOR i IN 1..n LOOP
+                l_fontface:= new JSON_OBJECT_T;
+                l_fontface.put('family',REGEXP_SUBSTR(l_fontfaces,'font-family: (.+?);',1,i,null,1));
+                l_fontface.put('style',REGEXP_SUBSTR(l_fontfaces,'font-style: (.+?);',1,i,null,1));
+                l_fontface.put('weight',REGEXP_SUBSTR(l_fontfaces,'font-weight: (.+?);',1,i,null,1));
+                l_fontface.put('stretch',REGEXP_SUBSTR(l_fontfaces,'font-stretch: (.+?);',1,i,null,1));
+                l_fontface.put('source',REPLACE(REPLACE(REGEXP_SUBSTR(l_fontfaces,'url(.+?)\)',1,i),'(','("'),')','")'));
 
-                l_urls:= new JSON_ARRAY_T;
-                FOR i IN 1..n LOOP
-                    l_fontface:= new JSON_OBJECT_T;
-                    l_fontface.put('family',REGEXP_SUBSTR(l_fontfaces,'font-family: (.+?);',1,i,null,1));
-                    l_fontface.put('style',REGEXP_SUBSTR(l_fontfaces,'font-style: (.+?);',1,i,null,1));
-                    l_fontface.put('weight',REGEXP_SUBSTR(l_fontfaces,'font-weight: (.+?);',1,i,null,1));
-                    l_fontface.put('stretch',REGEXP_SUBSTR(l_fontfaces,'font-stretch: (.+?);',1,i,null,1));
-                    l_fontface.put('source',REPLACE(REPLACE(REGEXP_SUBSTR(l_fontfaces,'url(.+?)\)',1,i),'(','("'),')','")'));
-
-                    l_urls.append(l_fontface);
-                END LOOP;
+                l_urls.append(l_fontface);
             END LOOP;
         END IF;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('urls',l_urls);
-        l_json.put('menutext',l_menu_text);
         l_json.put('variations',l_variations);
         l_json.put('message',l_column_name || ' updated successfully to ' || l_column_value);
         apex_util.prn(l_json.to_clob,false);
