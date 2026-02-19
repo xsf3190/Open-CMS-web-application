@@ -157,6 +157,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
     END;
 
+    
+
     PROCEDURE deployLiveSite(pWebsiteid IN website.id%type) IS
         l_files JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
@@ -642,6 +644,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE buildPageBody(
         pWebsiteId IN website.id%type, 
         pArticleid IN article.id%type,
+        pLogo IN VARCHAR2, 
         pNav IN VARCHAR2, 
         pColorScheme IN VARCHAR2,
         pDropdown in VARCHAR2, 
@@ -652,25 +655,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pBody IN OUT NOCOPY CLOB
     ) IS
         l_title article_chars.first_heading%type;
+        l_logo VARCHAR2(200);
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
         l_main article.body_html%type;
         l_footer website_article.footer_html%type;
         l_collection CLOB;
         l_article_links LONG;
-        l_logo LONG;
-        l_viewbox VARCHAR2(50);
-        l_width PLS_INTEGER;
-        l_height PLS_INTEGER;
-        l_clob CLOB;
-
+        
+        -- l_clob CLOB;
         n PLS_INTEGER;
         n1 PLS_INTEGER;
     BEGIN
         pBody:=null;
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
-                    w.max_width, w.logo_type, w.logo_font_text, NVL2(w.favicon,'1',null) favicon
+                    w.max_width, NVL2(w.favicon,'1',null) favicon
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -690,8 +690,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
             l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
             
-            l_clob:=C.header_html || C.body_html || C.footer_html || '<p>' || C.excerpt || '</p>';
-            pck_fonts.getCharsUsed(pArticleId, l_clob);
+            -- l_clob:=C.header_html || C.body_html || C.footer_html || '<p>' || C.excerpt || '</p>';
+            -- pck_fonts.getCharsUsed(pArticleId, l_clob);
 
             IF (C.parent_id IS NOT NULL) THEN
                 n:=0;
@@ -747,16 +747,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /*
             ** CONFIGURE LOGO.
             */
-            CASE C.logo_type
-                WHEN 'svg' THEN
-                    l_logo:='<span class="logo"><img src="/images/logo.svg" alt="Image of website logo" fetchpriority="high"></span>';
-                WHEN 'img' THEN
-                    l_logo:='<span class="logo"><img src="/images/logo.avif" alt="Image of website logo" fetchpriority="high"></span>';
-                WHEN 'font' THEN
-                    l_logo:='<span class="logo">' || C.logo_font_text || '</span>';
-                ELSE
-                    l_logo:='<span class="logo"></span>';
-            END CASE;
+            l_logo:='<span class="logo">' || pLogo || '</span>';
 
             pBody:=
             '<!DOCTYPE HTML>' ||
@@ -809,6 +800,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         l_sha1 VARCHAR2(40);
         n PLS_INTEGER;
+        l_width PLS_INTEGER;
+        l_height PLS_INTEGER;
 
         l_dogface_requested CLOB;
         l_dogface_required CLOB;
@@ -817,6 +810,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_dogface_empty_blob BLOB:=EMPTY_BLOB();
 
         l_dropdown VARCHAR2(4000);
+        l_logo VARCHAR2(200);
+        l_viewbox VARCHAR2(50);
         l_nav VARCHAR2(4000);
         l_color_scheme LONG;
         l_common_header website_article.header_html%type;
@@ -912,7 +907,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         **
         ** 1. submit all asset paths and their sha1 to hosting service
         ** 2. receive array of assets to upload - i.e new path or sha1
-        ** 3. upload assets set in Netlify "required" array
+        ** 3. upload "required" assets
         **
         **  Each website page comprises following assets:
         **
@@ -964,17 +959,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  2.1 Build LOGO and FAVICON svg files
+        **  2.0 Build FAVICON svg file
         */
         FOR C IN (
             WITH source AS
             (
-                SELECT '/images/logo.svg' AS deploy_filename, logo_svg AS file_content, logo_updated_date AS updated_date
-                  FROM website
-                 WHERE id=pWebsiteid
-                   AND logo_type='svg'
-                 UNION ALL
-                SELECT '/images/favicon.svg', favicon, favicon_updated_date
+                SELECT '/images/favicon.svg' AS deploy_filename, favicon AS file_content, favicon_updated_date AS updated_date
                   FROM website
                  WHERE id=pWebsiteid
             )
@@ -998,7 +988,42 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  2.2 Build LOGO img file (thumbnail)
+        **  2.1 Build LOGO svg file
+        */
+        FOR C IN (
+            WITH source AS
+            (
+                SELECT '/images/logo.svg' AS deploy_filename, logo_svg AS file_content, logo_updated_date AS updated_date
+                  FROM website
+                 WHERE id=pWebsiteid
+                   AND logo_type='svg'
+            )
+            SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
+                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.site_id(+)=pSiteid
+               AND wf.path(+)=s.deploy_filename
+               AND wf.mime_type(+)='image'
+        ) LOOP
+            l_viewbox:=regexp_substr(C.file_content,'viewBox="(.+?)"',1,1,null,1);
+            l_width:=REGEXP_SUBSTR(l_viewbox, '[^ ]+', 1, 1)+REGEXP_SUBSTR(l_viewbox, '[^ ]+', 1, 3);
+            l_height:=REGEXP_SUBSTR(l_viewbox, '[^ ]+', 1, 2)+REGEXP_SUBSTR(l_viewbox, '[^ ]+', 1, 4);
+            l_logo:='<img data-type="svg" src="' || C.deploy_filename || '" width="' || l_width || '" height="' || l_height || '" fetchpriority="high" alt="">';
+
+            IF (C.build=0) THEN
+                l_files.put(C.deploy_filename, C.sha1);
+                CONTINUE;
+            END IF;
+
+            IF (C.file_content IS NOT NULL) THEN
+                logDeployment(pWebsiteId, pSiteId, 'Download IMAGE - ' || C.deploy_filename);
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
+            END IF;
+        END LOOP;
+
+        /*
+        **  2.2 Build LOGO img file
         */
         FOR C IN (
             WITH source AS
@@ -1009,7 +1034,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                    AND logo_type='img'
             )
             SELECT s.deploy_filename, s.logo_img_id, s.updated_date, wf.sha1,
-                    'https://res.cloudinary.com/' || a.cld_cloud_name || '/w_200/' || a.public_id as src_url,
+                    'https://res.cloudinary.com/' || a.cld_cloud_name || '/w_200/' || a.public_id as src_url, a.width, a.height,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf, asset a
              WHERE wf.website_id(+)=pWebsiteid
@@ -1018,6 +1043,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                AND wf.mime_type(+)='avif'
                AND a.id=s.logo_img_id
         ) LOOP
+            l_logo:='<img data-type="img" src="' || C.deploy_filename || '" width="' || C.width || '" height="' || C.height || '" fetchpriority="high" alt="">';
             IF (C.build=0) THEN
                 l_files.put(C.deploy_filename, C.sha1);
                 CONTINUE;
@@ -1070,9 +1096,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_dropdown:=buildDropdown(pWebsiteId);
                 l_common_header:=buildCommonHeader(pWebsiteid);
                 l_common_footer:=buildCommonFooter(pWebsiteid);
-                -- l_favicon:=buildFavicon(pWebsiteid);
+                -- logo is svg, img or text
+                IF (l_logo IS NULL) THEN
+                    SELECT logo_font_text INTO l_logo FROM website WHERE id=pWebsiteid;
+                END IF;
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
@@ -1080,35 +1109,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         **  4. Build FONT files. 
         */
         
-        pck_fonts.getFontFiles(pWebsiteid);  /* Sets website_fontfaces.created_date */
-        
-        FOR C IN (
-            SELECT ff.deploy_filename, ff.src_url, wf.sha1,
-                    CASE WHEN wf.deployed_date IS NULL OR ff.created_date>wf.deployed_date THEN 1 ELSE 0 END build
-              FROM website_fontface ff, website_files wf
-             WHERE ff.website_id=pWebsiteid
-               AND wf.website_id(+)=pWebsiteid
-               AND wf.site_id(+)=pSiteid
-               AND wf.path(+)=ff.deploy_filename
-               AND wf.mime_type(+)='woff2'
-        ) LOOP
-            IF (C.build=0) THEN
-                l_files.put(C.deploy_filename, C.sha1);
-                CONTINUE;
-            END IF;
-
-            /* 
-            **  DEPLOY FONT FILE FROM GOOGLE
-            */
-            logDeployment(pWebsiteId, pSiteId, 'Download Google Font - '|| C.deploy_filename);
-            l_blob_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
-            addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_blob_download);
-        END LOOP;
         
         /*
         **  5. Build CSS files - core, ckeditor and website-specific styles
         */
-        pck_css.buildWebsiteCss(pWebsiteid); -- sets website.css_updated_date
+        pck_css.buildWebsiteCss(pWebsiteid,'editor'); -- sets website.css_updated_date
 
         FOR C IN (
             WITH source AS
