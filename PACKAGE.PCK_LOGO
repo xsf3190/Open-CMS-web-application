@@ -8,14 +8,42 @@ end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
 
+    FUNCTION getInlineSizes(pLogotype IN VARCHAR2, pInlinesize IN VARCHAR2) RETURN VARCHAR2 IS
+        TYPE tt_sizes IS RECORD(name VARCHAR2(15), value VARCHAR2(15));
+        TYPE t_sizes IS TABLE OF tt_sizes INDEX BY PLS_INTEGER;
+        l_sizes t_sizes:=t_sizes(
+            1=>tt_sizes('Small','--space-l'), 
+            2=>tt_sizes('Medium','--space-xl'), 
+            3=>tt_sizes('Large','--space-2xl'), 
+            4=>tt_sizes('Extra Large','--space-3xl')
+        );
+        l_select VARCHAR2(500);
+    BEGIN
+        l_select:=
+        '<label for="logo-' || pLogotype || '-inline-size">Adjust Size</label>' ||
+        '<select id="logo-' || pLogotype || '-inline-size">' ||
+            '<button>' ||
+                '<selectedcontent></selectedcontent>' ||
+                '<span class="arrow"></span>' ||
+            '</button>';
+            FOR i IN 1..l_sizes.COUNT LOOP
+                l_select:=l_select || 
+                '<option value="' || l_sizes(i).value || '"' || CASE WHEN l_sizes(i).value=pInlineSize THEN ' selected' END || '>' || l_sizes(i).name || '</option>';
+            END LOOP;
+        l_select:=l_select || 
+        '</select>';
+        RETURN(l_select);
+    END;
+
     PROCEDURE buildImageLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
         l_logo_type website.logo_type%type;
         l_logo_img_id website.logo_img_id%type;
+        l_logo_img_inline_size website.logo_img_inline_size%type;
     BEGIN
         pHeader:='<span>Create Website Logo from an uploaded image</span>';
 
-        SELECT w.logo_type, w.logo_img_id
-          INTO l_logo_type, l_logo_img_id
+        SELECT w.logo_type, w.logo_img_id, w.logo_img_inline_size
+          INTO l_logo_type, l_logo_img_id, l_logo_img_inline_size
           FROM website w
          WHERE w.id=pWebsiteid;
 
@@ -54,6 +82,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '</select>' ||
             '</div>' ||
             '<div>' ||
+                getInlineSizes('img',l_logo_img_inline_size) ||
+            '</div>' ||
+            '<div>' ||
                 '<label for="logo-img-corner-shape">Change border shape:</label>' ||
                 '<input type="range" id="logo-img-corner-shape" min="-5" value="0" max="5" step="0.1" />' ||
             '</div>' ||
@@ -62,6 +93,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '<input type="range" id="logo-img-border-radius" min="0" value="45" max="90" step="1" />' ||
             '</div>' ||
         '</fieldset>';
+    END;
+
+    PROCEDURE buildSvgLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
+    BEGIN
+        pHeader:='<span>Create Website Logo from SVG code</span>';
+
+        FOR C IN (
+            SELECT w.logo_svg, w.logo_svg_inline_size
+              FROM website w
+             WHERE w.id=pWebsiteid
+        ) LOOP
+            pArticle:=
+            '<fieldset class="flow">' ||
+                '<legend>Include SVG code for Logo</legend>' ||
+                '<div>' ||
+                    '<textarea id="logo-svg">' || 
+                        C.logo_svg ||
+                    '</textarea>' ||
+                '</div>' ||
+                '<div>' ||
+                    getInlineSizes('svg',C.logo_svg_inline_size) ||
+                '</div>' ||
+                '<button type="button" class="button apply-svg">APPLY</button>' ||
+            '</fieldset>';
+        END LOOP;
     END;
 
     /*
@@ -105,8 +161,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '<label for="wght">Weight</label>' ||
                 '<select id="wght">' ||
                     '<button>' ||
-                      '<selectedcontent></selectedcontent>' ||
-                      '<span class="arrow"></span>' ||
+                        '<selectedcontent></selectedcontent>' ||
+                        '<span class="arrow"></span>' ||
                     '</button>';
                     FOR C IN (SELECT wght_normal, wght_italic FROM font_static_wght WHERE font_id=pFontid ORDER BY 1)
                     LOOP
@@ -211,6 +267,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         CASE pLogoType
             WHEN 'image' THEN buildImageLogoForm(pWebsiteId, l_header, l_article);
             WHEN 'font' THEN buildFontLogoForm(pWebsiteId, l_header, l_article);
+            WHEN 'svg' THEN buildSvgLogoForm(pWebsiteId, l_header, l_article);
         END CASE;
 
         l_footer:=
@@ -241,7 +298,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_session_data pck_sec.t_session_data;
         l_logo_type website.logo_type%type;
         l_column_name user_tab_columns.column_name%type;
-        l_column_value VARCHAR2(100);
+        l_column_value VARCHAR2(4000);
         l_table_updated PLS_INTEGER;
         l_menu font.menu%type;
         l_menu_text font.menu%type;
@@ -252,6 +309,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_urls JSON_ARRAY_T;
         l_fontface JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
+        l_message VARCHAR2(100);
         n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -363,11 +421,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             END LOOP;
         END IF;
 
+        l_message:=l_column_name || ' updated' || CASE WHEN l_column_name<>'logo_svg' THEN ' to ' || l_column_value END;
+
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('urls',l_urls);
         l_json.put('variations',l_variations);
-        l_json.put('message',l_column_name || ' updated successfully to ' || l_column_value);
+        l_json.put('message',l_message);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
