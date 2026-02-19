@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
-    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type);
+    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type, pEnv IN VARCHAR2);
     --
 end;
 /
@@ -86,7 +86,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     /* 
     ** Build page CSS root
     */ 
-    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type) IS
+    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type, pEnv IN VARCHAR2) IS
         l_fluid_types fluid_type_t;
 
         TYPE t_rgb_arr IS VARRAY(3) OF PLS_INTEGER;
@@ -104,20 +104,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         /* 
         ** BUIKD @FONT-FACE RULES 
         */
-        FOR C IN (
-            SELECT fontface
-              FROM website_font
-             WHERE website_id=pWebsiteid
-        ) LOOP
-            l_fontfaces:=l_fontfaces || C.fontface;
-        END LOOP;
+        IF (pEnv='editor') THEN
+            FOR C IN (
+                SELECT editor_fontfaces
+                  FROM website_font
+                 WHERE website_id=pWebsiteid
+            ) LOOP
+                l_fontfaces:=l_fontfaces || C.editor_fontfaces;
+            END LOOP;
+        END IF;
 
         /* 
         ** BUILD :ROOT RULES 
         */
         FOR C IN (
-            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius, w.logo_inline_size,
-                    w.logo_type, w.logo_img_border_radius, w.logo_img_corner_shape,
+            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, 
+                    w.logo_type, w.img_border_radius, w.logo_img_inline_size,
+                    w.logo_img_border_radius, w.logo_img_corner_shape,
+                    w.logo_svg_inline_size,
                     w.logo_font_size
               FROM website w
              WHERE w.id=pWebsiteId
@@ -166,9 +170,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             l_root_css:=l_root_css || 
             '--max-width: ' || C.max_width || ';' || 
             '--img-border-radius: ' || C.img_border_radius || ';' ||
-            '--logo-inline-size: ' || C.logo_inline_size || ';' ||
+            '--logo-img-inline-size: ' || 'var(' || C.logo_img_inline_size || ');' ||
             '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
             '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
+            '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');' ||
             '--logo-font-size: ' || C.logo_font_size || ';';
             
             FOR C1 IN (
