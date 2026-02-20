@@ -252,10 +252,9 @@ body>footer>a {
 
 .logo:not(:has(img)) {
   font-family: var(--font-family-logo);
-  font-size: var(--logo-font-size, 1cqi);
+  font-size: var(--logo-font-size);
   font-weight: var(--logo-font-wght);
   font-stretch: var(--logo-font-wdth);
-  font-variation-settings: "slnt" var(--logo-font-slnt);
   text-box: cap alphabetic;
 }
 
@@ -1136,8 +1135,8 @@ selectedcontent {
   font-size:75%;
 }
 
-/* SWITCH BUTTON */
-button[aria-pressed] {
+/* SWITCH/TOGGLE BUTTON */
+.toggle[aria-pressed] {
   display: block;
   box-sizing: border-box;
   border: none;
@@ -1151,34 +1150,34 @@ button[aria-pressed] {
   position: relative;
 }
 
-button[aria-pressed]:focus,
-button[aria-pressed]:hover {
+.toggle[aria-pressed]:focus,
+.toggle[aria-pressed]:hover {
   color: #00f;
   outline: none;
 }
 
-button[aria-pressed]:focus::before,
-button[aria-pressed]:hover::before {
+.toggle[aria-pressed]:focus::before,
+.toggle[aria-pressed]:hover::before {
   box-shadow: 0 0 0.5em #333;
 }
 
-button[aria-pressed]:focus::after,
-button[aria-pressed]:hover::after {
+.toggle[aria-pressed]:focus::after,
+.toggle[aria-pressed]:hover::after {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='rgba(0,0,0,.25)'/%3E%3C/svg%3E");
   background-size: 30%;
   background-repeat: no-repeat;
   background-position: center center;
 }
 
-button[aria-pressed]::before,
-button[aria-pressed]::after {
+.toggle[aria-pressed]::before,
+.toggle[aria-pressed]::after {
   content: "";
   position: absolute;
   height: 1.5em;
   transition: all 0.25s ease;
 }
 
-button[aria-pressed]::before {
+.toggle[aria-pressed]::before {
   left: 0;
   top: 0.2em;
   width: 3em;
@@ -1187,7 +1186,7 @@ button[aria-pressed]::before {
   border-radius: 1.1em;
 }
 
-button[aria-pressed]::after {
+.toggle[aria-pressed]::after {
   left: 0;
   top: 0.25em;
   background-color: #fff;
@@ -1197,13 +1196,13 @@ button[aria-pressed]::after {
   border: 0.15em solid #767676;
 }
 
-button[aria-pressed=true]::after {
+.toggle[aria-pressed=true]::after {
   left: 1.6em;
   border-color: #36a829;
   color: #36a829;
 }
 
-button[aria-pressed=true]::before {
+.toggle[aria-pressed=true]::before {
   background-color: #36a829;
   border-color: #36a829;
 }
