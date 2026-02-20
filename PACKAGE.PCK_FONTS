@@ -22,6 +22,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER);
     --
+    FUNCTION getLanguage(pLanguageCode IN VARCHAR2) RETURN CLOB;
+    --
     PROCEDURE loadGoogleFonts;
     --
     PROCEDURE loadGoogleFontMetadata;
@@ -31,6 +33,41 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
 end "PCK_FONTS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
+
+    /*
+    **  LANGUAGE SUPPORT
+    */
+    FUNCTION getLanguage(pLanguageCode IN VARCHAR2) RETURN CLOB IS
+        l_unicode_range language.unicode_range%type;
+        l_urlencoded language.urlencoded%type;
+        l_range_split pls_integer;
+        r1 pls_integer;
+        r2 pls_integer;
+        l_text CLOB;
+        l_chars CLOB;
+    BEGIN
+        SELECT unicode_range, urlencoded INTO l_unicode_range, l_urlencoded FROM language WHERE code=pLanguageCode;
+        IF (l_urlencoded IS NOT NULL) THEN
+            RETURN (l_urlencoded);
+        END IF;
+        FOR C IN (SELECT LTRIM(column_value,'U+') AS range FROM TABLE(apex_string.split(l_unicode_range,', '))) 
+        LOOP
+            l_range_split:=INSTR(C.range,'-');
+            IF (l_range_split>0) THEN
+                r1:=TO_NUMBER(SUBSTR(C.range,1,l_range_split-1),'XXXX');
+                r2:=TO_NUMBER(SUBSTR(C.range,l_range_split+1),'XXXX');
+                FOR i IN r1..r2 LOOP
+                    l_text:=l_text || '\' || LPAD(LTRIM(TO_CHAR(i,'XXXX')),4,'0');
+                END LOOP;
+            ELSE
+                l_text:=l_text || '\' || LPAD(LTRIM(TO_CHAR(TO_NUMBER(C.range,'XXXX'),'XXXX')),4,'0');
+            END IF;
+        END LOOP;
+        l_chars:=UNISTR(l_text);
+        l_urlencoded:=utl_url.escape(l_chars,TRUE,'UTF-8');
+        UPDATE language SET urlencoded=l_urlencoded, character_count=LENGTH(l_chars) WHERE code=pLanguageCode;
+        RETURN (l_urlencoded);
+    END;
 
     /* 
     ** Return distict characters sorted 
