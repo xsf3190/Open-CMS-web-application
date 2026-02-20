@@ -114,12 +114,14 @@ const changeHandler = (e) => {
                 logo.replaceChildren();
                 logo.insertAdjacentHTML('beforeend',value);
             }
-            else if (id === "logo-svg-inline-size") {
-                document.documentElement.style.setProperty('--logo-svg-inline-size', "var(" + value + ")"); 
+            else if (id.endsWith("size")) {
+                const sizeValue = (id.includes("font")) ? "--step-" + value : value;
+                document.documentElement.style.setProperty("--" + id, "var(" + sizeValue + ")"); 
             }
-            else if (id === "logo-img-inline-size") {
-                document.documentElement.style.setProperty('--logo-img-inline-size', "var(" + value + ")"); 
+            else {
+                document.documentElement.style.setProperty("--logo-font-" + id, value); 
             }
+
             liveRegion(data);
         })
         .catch((error) => {
@@ -128,32 +130,33 @@ const changeHandler = (e) => {
 }
 
 /*
-**  BUTTON HANDLER
+**  BUTTON HANDLER. ALL BUTTONS ARE TOGGLE SWITCHES.
 */
 const clickHandler = (e) => {
+    if (!e.target.classList.contains("toggle")) return;
+
     const id = e.target.getAttribute("id");
 
-    if (id === "ital") {
-        let value;
-        const toggle = e.target;
-        if (toggle.getAttribute("aria-pressed") == "false") {
-            toggle.setAttribute("aria-pressed", "true");
-            value = "1";
-        } else {
-            toggle.setAttribute("aria-pressed", "false");
-            value = "0";
-        }
-        callAPI(endpoint,"PUT",{column_name:id,column_value:value})
-            .then((data) => {
-                logo.style.fontStyle = (value === "0") ? 'normal' : 'italic';
-                liveRegion(data);
-            })
-            .catch((error) => {
-                handleError(error);
-            });
-    } else if (id === "apply-svg") {
-        console.log("apply svg button clicked");
+    if (!getComputedStyle(document.documentElement).getPropertyValue('--logo-font-' + id)) return;
+
+    let value;
+    const toggle = e.target;
+    if (toggle.getAttribute("aria-pressed") == "false") {
+        toggle.setAttribute("aria-pressed", "true");
+        value = "1";
+    } else {
+        toggle.setAttribute("aria-pressed", "false");
+        value = "0";
     }
+    callAPI(endpoint,"PUT",{column_name:id,column_value:value})
+        .then((data) => {
+            document.documentElement.style.setProperty('--logo-font-' + id, value); 
+            liveRegion(data);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
+
 }
 
 /*
@@ -162,10 +165,7 @@ const clickHandler = (e) => {
 const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
 
-    if (id === "logo-font-size") {
-        document.documentElement.style.setProperty('--logo-font-size', e.target.value + 'cqi');
-    }
-    else if (id === "logo-font-text") {
+    if (id === "logo-font-text") {
         logo.textContent = e.target.value;
     }
     else if (id === "wght") {
