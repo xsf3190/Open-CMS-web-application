@@ -17,19 +17,37 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             3=>tt_sizes('Large','--space-2xl'), 
             4=>tt_sizes('Extra Large','--space-3xl')
         );
+        l_fontsizes t_sizes:=t_sizes(
+            1=>tt_sizes('Small','--step-0'), 
+            2=>tt_sizes('Medium','--step-1'), 
+            3=>tt_sizes('Large','--step-2'), 
+            4=>tt_sizes('x-Large','--step-3'),
+            5=>tt_sizes('xx-Large','--step-4'),
+            6=>tt_sizes('xxx-Large','--step-5'),
+            7=>tt_sizes('xxxx-Large','--step-6')
+        );
+        l_for  VARCHAR2(30);
         l_select VARCHAR2(500);
     BEGIN
+        l_for:='logo-' || pLogotype || CASE WHEN pLogotype='font' THEN '-size' ELSE '-inline-size' END;
         l_select:=
-        '<label for="logo-' || pLogotype || '-inline-size">Adjust Size</label>' ||
-        '<select id="logo-' || pLogotype || '-inline-size">' ||
+        '<label for="' || l_for || '">Adjust Size</label>' ||
+        '<select id="' || l_for || '">' ||
             '<button>' ||
                 '<selectedcontent></selectedcontent>' ||
                 '<span class="arrow"></span>' ||
             '</button>';
-            FOR i IN 1..l_sizes.COUNT LOOP
-                l_select:=l_select || 
-                '<option value="' || l_sizes(i).value || '"' || CASE WHEN l_sizes(i).value=pInlineSize THEN ' selected' END || '>' || l_sizes(i).name || '</option>';
-            END LOOP;
+            IF (pLogotype='font') THEN
+                FOR i IN 1..l_fontsizes.COUNT LOOP
+                    l_select:=l_select || 
+                    '<option value="' || l_fontsizes(i).value || '"' || CASE WHEN l_fontsizes(i).value=pInlineSize THEN ' selected' END || '>' || l_fontsizes(i).name || '</option>';
+                END LOOP;
+            ELSE
+                FOR i IN 1..l_sizes.COUNT LOOP
+                    l_select:=l_select || 
+                    '<option value="' || l_sizes(i).value || '"' || CASE WHEN l_sizes(i).value=pInlineSize THEN ' selected' END || '>' || l_sizes(i).name || '</option>';
+                END LOOP;
+            END IF;
         l_select:=l_select || 
         '</select>';
         RETURN(l_select);
@@ -154,7 +172,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             l_variations:=l_variations || 
             '</div>';
         END LOOP;
-        -- Build weight select lisy for static fonts
+        -- Build weight select element for static fonts
         IF (n=0) THEN
             l_variations:=l_variations || 
             '<div>' ||
@@ -207,15 +225,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_font_id website_font.font_id%type;
         l_logo_font_size website.logo_font_size%type;
         l_logo_font_text website.logo_font_text%type;
+        l_maxchars user_tab_columns.data_length%type;
     BEGIN
         pHeader:='<span>Create Website Logo using selected font</span>';
 
-        SELECT w.logo_font_size, NVL(w.logo_font_text,w.domain_name), wf.font_id
-          INTO l_logo_font_size, l_logo_font_text, l_font_id
-          FROM website w, website_font wf
+        SELECT w.logo_font_size, NVL(w.logo_font_text,w.domain_name), wf.font_id, c.data_length
+          INTO l_logo_font_size, l_logo_font_text, l_font_id, l_maxchars
+          FROM website w, website_font wf, user_tab_columns c
          WHERE w.id=pWebsiteid
            AND wf.website_id(+)=w.id
-           AND wf.context(+)='logo';
+           AND wf.context(+)='logo'
+           AND c.table_name='WEBSITE'
+           AND c.column_name='LOGO_FONT_TEXT';
 
         pArticle:=
         '<fieldset class="flow">' ||
@@ -239,11 +260,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             '</div>' ||
             '<div>' ||
                 '<label for="logo-font-text">Logo text</label>' ||
-                '<input type="text" id="logo-font-text" value="' || l_logo_font_text || '"/>' ||
+                '<input type="text" id="logo-font-text" value="' || l_logo_font_text || '" maxlength="' || TO_CHAR(l_maxchars) || '"/>' ||
             '</div>' ||
             '<div>' ||
-                '<label for="logo-font-size">Adjust size</label>' ||
-                '<input type="range" id="logo-font-size" min="2" value="' || TO_CHAR(l_logo_font_size) || '" max="5" step="0.1" />' ||
+                getInlineSizes('font',l_logo_font_size) ||
             '</div>' ||
             buildFontVariations(pWebsiteid, l_font_id, 'logo');
 
@@ -305,7 +325,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_variations LONG;
         l_fontfaces VARCHAR2(1000);
         l_api_url VARCHAR2(500);
-        l_text VARCHAR2(100);
+        l_variable font.variable%type;
         l_urls JSON_ARRAY_T;
         l_fontface JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
@@ -318,7 +338,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 CASE column_name 
                     WHEN 'logo-img-corner-shape' THEN 'superellipse(' || column_value || ')' 
                     WHEN 'logo-img-border-radius' THEN column_value || 'px'
-                    WHEN 'logo-font-size' THEN column_value || 'cqi'
                     ELSE column_value 
                 END
           INTO l_column_name, l_column_value 
@@ -373,41 +392,48 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             /*
             ** Build Google Fonts CSS API url
             */
-            n:=0;
-            FOR C IN (
-                SELECT 'https://fonts.googleapis.com/css2?family=' ||
-                        REPLACE(f.family,' ','+') || ':' || 
-                        LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY fa.axis) || 
-                        '@' AS axes,
-                        LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY fa.axis) AS ranges
-                  FROM font f, font_axes fa
-                 WHERE f.id=TO_NUMBER(l_column_value)
-                   AND fa.font_id=f.id
-                 GROUP BY f.family
-            ) LOOP
-                l_api_url:=C.axes || C.ranges;
-                n:=1;
-                IF (INSTR(C.axes,'ital')>0) THEN
-                    l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
-                    n:=2;
-                END IF;
-            END LOOP;
+            SELECT 'https://fonts.googleapis.com/css2?family=' ||
+                        REPLACE(family,' ','+') || ':', variable
+              INTO l_api_url, l_variable
+              FROM font
+             WHERE id=TO_NUMBER(l_column_value);
 
-            /* "n" is number of variable font files */
+            IF (l_variable=1) THEN
+                FOR C IN (
+                    SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY fa.axis) || 
+                            '@' AS axes,
+                            LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY fa.axis) AS ranges
+                      FROM font_axes fa
+                     WHERE fa.font_id=TO_NUMBER(l_column_value)
+                     GROUP BY fa.font_id
+                ) LOOP
+                    l_api_url:=l_api_url || C.axes || C.ranges;
+                    IF (INSTR(C.axes,'ital')>0) THEN
+                        l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
+                    END IF;
+                END LOOP;
+            ELSE
+                FOR C IN (
+                    SELECT wght_normal, wght_italic
+                      FROM font_static_wght
+                     WHERE font_id=TO_NUMBER(l_column_value)
+                     ORDER BY ABS(wght_normal - 400)
+                     FETCH FIRST ROW ONLY
+                ) LOOP
+                    IF (C.wght_italic IS NOT NULL) THEN
+                        l_api_url:=l_api_url || 'ital,wght@0,' || C.wght_normal || ';1,' || C.wght_normal;
+                    ELSE
+                        l_api_url:=l_api_url || 'wght@' || C.wght_normal;
+                    END IF;
+                END LOOP;
+            END IF;
 
-            /*
-            ** Set text parameter to support all European languages
-            */
-            l_text:='abcdefghijklmnopqrstuvwxyz';
-            l_text:=l_text || UPPER(l_text);
-            l_text:=l_text || '0123456789';
-            -- more to come 
-
-            l_api_url:=l_api_url || '&text=' || utl_url.escape(l_text,TRUE,'UTF-8');
+            l_api_url:=l_api_url || '&text=' || pck_fonts.getLanguage('en');
             pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
 
             UPDATE website_font SET editor_fontfaces=l_fontfaces WHERE website_id=pWebsiteid AND font_id=l_column_value AND context='logo';
 
+            n:=REGEXP_COUNT(l_fontfaces,'@font-face');
             l_urls:= new JSON_ARRAY_T;
             FOR i IN 1..n LOOP
                 l_fontface:= new JSON_OBJECT_T;
