@@ -254,7 +254,8 @@ body>footer>a {
   font-family: var(--font-family-logo);
   font-size: var(--logo-font-size);
   font-weight: var(--logo-font-wght);
-  font-stretch: var(--logo-font-wdth);
+  font-style: var(--logo-font-style);
+  font-variation-settings: var(--font-variation-settings);
   text-box: cap alphabetic;
 }
 
