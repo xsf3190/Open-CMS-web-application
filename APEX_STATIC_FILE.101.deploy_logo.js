@@ -70,9 +70,9 @@ const loadImg = (src) => {
 /*
 ** LOAD SELECTED FONT
 */
-const loadFont = (font_family, data) => {
+const loadFont = (data) => {
     for (const fontface of data.urls) {
-        const fontFile = new FontFace(font_family,fontface.source);
+        const fontFile = new FontFace(fontface.family,fontface.source);
         fontFile.style = fontface.style;
         fontFile.weight = fontface.weight;
         if (fontface.stretch) {
@@ -81,11 +81,15 @@ const loadFont = (font_family, data) => {
         document.fonts.add(fontFile);
         fontFile.load();
     };
-    const font_variations = dialog_article.querySelector(".font-variations");
-    font_variations.replaceChildren();
-    font_variations.insertAdjacentHTML('afterbegin',data.variations);
-
-    document.documentElement.style.setProperty('--font-family-logo', font_family); 
+    document.fonts.ready.then(()=>{
+        document.documentElement.style.setProperty('--font-family-logo', data.urls[0].family);
+        console.log(`Loaded ${data.urls[0].family}`);
+    });
+    if (data.variations) {
+        const font_variations = dialog_article.querySelector(".font-variations");
+        font_variations.replaceChildren();
+        font_variations.insertAdjacentHTML('afterbegin',data.variations);
+    }
 }
 
 const liveRegion = (data) => {
@@ -97,18 +101,18 @@ const liveRegion = (data) => {
 /*
 ** UPDATE DATABASE ON ALL CHANGE EVENTS
 */
-const changeHandler = (e) => {
+const changeHandler = async (e) => {
     const id = e.target.getAttribute("id");
 
     const value = (e.target.tagName === "SELECT") ? e.target.options[e.target.selectedIndex].value : e.target.value;
 
     callAPI(endpoint,"PUT",{column_name:id,column_value:value})
         .then((data) => {
+            if (data.urls) {
+                loadFont(data);
+            }
             if (id === "logo-img-id") {
                 loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
-            }
-            else if (id === "logo-font-id") {
-                loadFont(e.target.options[e.target.selectedIndex].text, data);
             }
             else if (id === "logo-svg") {
                 logo.replaceChildren();
@@ -118,8 +122,8 @@ const changeHandler = (e) => {
                 const sizeValue = (id.includes("font")) ? "--step-" + value : value;
                 document.documentElement.style.setProperty("--" + id, "var(" + sizeValue + ")"); 
             }
-            else {
-                document.documentElement.style.setProperty("--logo-font-" + id, value); 
+            else if (id==="wght") {
+                document.documentElement.style.setProperty('--logo-font-wght', value);
             }
 
             liveRegion(data);
@@ -137,7 +141,7 @@ const clickHandler = (e) => {
 
     const id = e.target.getAttribute("id");
 
-    if (!getComputedStyle(document.documentElement).getPropertyValue('--logo-font-' + id)) return;
+    // if (!getComputedStyle(document.documentElement).getPropertyValue('--logo-font-' + id)) return;
 
     let value;
     const toggle = e.target;
@@ -150,7 +154,12 @@ const clickHandler = (e) => {
     }
     callAPI(endpoint,"PUT",{column_name:id,column_value:value})
         .then((data) => {
-            document.documentElement.style.setProperty('--logo-font-' + id, value); 
+            if (id==="ital") {
+                const varStyle = (value==="0") ? "normal" : "italic";
+                document.documentElement.style.setProperty('--logo-font-style', varStyle);
+            } else {
+                document.documentElement.style.setProperty('--logo-font-' + id, value); 
+            }
             liveRegion(data);
         })
         .catch((error) => {
@@ -168,15 +177,6 @@ const inputHandler = (e) => {
     if (id === "logo-font-text") {
         logo.textContent = e.target.value;
     }
-    else if (id === "wght") {
-        document.documentElement.style.setProperty('--logo-font-wght', e.target.value); 
-    }
-    else if (id === "wdth") {
-        document.documentElement.style.setProperty('--logo-font-wdth', e.target.value + "%"); 
-    }
-    else if (id === "slnt") {
-        document.documentElement.style.setProperty('--logo-font-slnt', e.target.value); 
-    }
     else if (id === "logo-img-corner-shape") {
         const seValue = `superellipse(${e.target.value})`;
         document.documentElement.style.setProperty('--logo-img-corner-shape', seValue); 
@@ -184,6 +184,9 @@ const inputHandler = (e) => {
     else if (id === "logo-img-border-radius") {
         const brValue = `${e.target.value}px`;
         document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
+    }
+    else if (id.length===4) {
+        document.documentElement.style.setProperty("--logo-font-" + id, e.target.value); 
     }
 }
 
