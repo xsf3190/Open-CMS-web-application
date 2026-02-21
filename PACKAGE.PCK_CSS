@@ -98,7 +98,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         l_rgb_lightest VARCHAR2(6);
         
         l_fontfaces VARCHAR2(4000);
-        l_root_css VARCHAR2(4000);
+        l_root_css CLOB;
         l_css website.css%type;
     BEGIN
         /* 
@@ -118,9 +118,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ** BUILD :ROOT RULES 
         */
         FOR C IN (
-            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, 
-                    w.logo_type, w.img_border_radius, w.logo_img_inline_size,
-                    w.logo_img_border_radius, w.logo_img_corner_shape,
+            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius, 
+                    w.logo_type,
+                    w.logo_img_inline_size, w.logo_img_border_radius, w.logo_img_corner_shape,
                     w.logo_svg_inline_size,
                     w.logo_font_size
               FROM website w
@@ -174,17 +174,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
             '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
             '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');' ||
-            '--logo-font-size: ' || C.logo_font_size || ';';
-            
-            FOR C1 IN (
-                SELECT axis, value || CASE WHEN axis='wdth' THEN '%' END AS value
-                  FROM font_variation 
-                 WHERE website_id=pWebsiteId 
-                 AND context='logo'
-            ) LOOP
-                l_root_css:=l_root_css || 
-                '--logo-font-' || C1.axis || ': ' || C1.value || ';';
-            END LOOP;
+            '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
+
+            IF (pEnv='editor') THEN
+                FOR C1 IN (
+                    SELECT m.axis, NVL(fa.value,m.default_value) value
+                      FROM font_metadata m, font_axes_value fa
+                     WHERE fa.website_id(+)=pWebsiteId
+                       AND fa.axis(+)=m.axis
+                       AND fa.context(+)='logo'
+                     ORDER BY axis
+                ) LOOP
+                    l_root_css:=l_root_css || 
+                    '--logo-font-' || C1.axis || ': ' || C1.value || ';';
+                END LOOP;
+            ELSE
+                FOR C1 IN (
+                    SELECT axis, value || CASE WHEN axis='wdth' THEN '%' END AS value
+                      FROM font_axes_value
+                     WHERE website_id=pWebsiteId 
+                     AND context='logo'
+                ) LOOP
+                    l_root_css:=l_root_css || 
+                    '--logo-font-' || C1.axis || ': ' || C1.value || ';';
+                END LOOP;
+            END IF;
 
             l_root_css:=l_root_css || 
             '}';
@@ -213,6 +227,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 '--color-theme-offset: #0ea5e9;' ||
             '}' || CASE WHEN i=2 THEN '}' END;
         END LOOP;
+
+        l_root_css:=l_root_css || 
+        '.logo:not(:has(img)) {' ||
+            'font-variation-settings:';
+        FOR C IN (
+            SELECT m.axis
+              FROM font_metadata m
+             ORDER BY 1
+        ) LOOP
+            l_root_css:=l_root_css || 
+            '"' || C.axis || '" var(--logo-font-' || C.axis || '),';
+        END LOOP;
+        l_root_css:=RTRIM(l_root_css,',') || 
+        '}';
 
         l_css:=l_fontfaces || l_root_css;
         UPDATE website 
