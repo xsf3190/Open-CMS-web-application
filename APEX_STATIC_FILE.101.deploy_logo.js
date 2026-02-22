@@ -71,8 +71,13 @@ const loadImg = (src) => {
 ** LOAD SELECTED FONT
 */
 const loadFont = (data) => {
+    let family = document.querySelector("#logo-font-id selectedContent").textContent;
+    const wght = document.querySelector("#wght selectedContent");
+    if (wght) {
+        family+=" "+wght.textContent;
+    }
     for (const fontface of data.urls) {
-        const fontFile = new FontFace(fontface.family,fontface.source);
+        const fontFile = new FontFace(family,fontface.source);
         fontFile.style = fontface.style;
         fontFile.weight = fontface.weight;
         if (fontface.stretch) {
@@ -82,13 +87,18 @@ const loadFont = (data) => {
         fontFile.load();
     };
     document.fonts.ready.then(()=>{
-        document.documentElement.style.setProperty('--font-family-logo', data.urls[0].family);
-        console.log(`Loaded ${data.urls[0].family}`);
+        document.documentElement.style.setProperty('--font-family-logo', family);
+        console.log(`Loaded ${family}`);
     });
     if (data.variations) {
         const font_variations = dialog_article.querySelector(".font-variations");
         font_variations.replaceChildren();
         font_variations.insertAdjacentHTML('afterbegin',data.variations);
+
+        /* Reset font custom variables if new font loaded */
+        document.documentElement.style.setProperty('--logo-font-style', "normal");
+        document.documentElement.style.setProperty('--logo-font-wght', 400);
+        document.documentElement.style.setProperty('--logo-font-wdth', 100);
     }
 }
 
@@ -122,7 +132,7 @@ const changeHandler = async (e) => {
                 const sizeValue = (id.includes("font")) ? "--step-" + value : value;
                 document.documentElement.style.setProperty("--" + id, "var(" + sizeValue + ")"); 
             }
-            else if (id==="wght") {
+            else if (id==="wght" && !e.target.classList.contains("slider")) {
                 document.documentElement.style.setProperty('--logo-font-wght', value);
             }
 
@@ -173,8 +183,11 @@ const clickHandler = (e) => {
 */
 const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
-
-    if (id === "logo-font-text") {
+    
+    if (e.target.classList.contains("slider")) {
+        document.documentElement.style.setProperty("--logo-font-" + id, e.target.value); 
+    }
+    else if (id === "logo-font-text") {
         logo.textContent = e.target.value;
     }
     else if (id === "logo-img-corner-shape") {
@@ -184,9 +197,6 @@ const inputHandler = (e) => {
     else if (id === "logo-img-border-radius") {
         const brValue = `${e.target.value}px`;
         document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
-    }
-    else if (id.length===4) {
-        document.documentElement.style.setProperty("--logo-font-" + id, e.target.value); 
     }
 }
 
