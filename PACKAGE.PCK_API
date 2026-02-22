@@ -694,7 +694,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     PROCEDURE callGoogleAPI(pUrl IN VARCHAR2, pData IN OUT NOCOPY CLOB)
     IS
         l_google_api_key users.google_api_key%type;
-        l_error_message LONG;
+        l_error_part1 VARCHAR2(500);
+        l_error_part2 VARCHAR2(500);
     BEGIN
         /* Get user's Google api key if requesting webfonts list - e.g. in daily backup job */
         IF (INSTR(pUrl,'webfonts')>0) THEN
@@ -718,9 +719,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
             RETURN;
         END IF;
 
-        pck_core.log(pData);
+        /* Google returns html document on error. 
+        ** Error details in <p></p> and <pre></pre> 
+        */
 
-        RAISE_APPLICATION_ERROR(-20040,'Failure in call to Google Fonts API');
+        pData:=REPLACE(pData,chr(10));
+
+        l_error_part1:=REGEXP_SUBSTR(pData, '<p>(.+?)</p>',1,2);
+        l_error_part2:=REGEXP_SUBSTR(pData, '<pre>(.+?)</pre>',1,1);
+
+        RAISE_APPLICATION_ERROR(-20040,'Google Fonts API fail - ' || l_error_part1 || ':' || l_error_part2);
     END;    
 
     /*
