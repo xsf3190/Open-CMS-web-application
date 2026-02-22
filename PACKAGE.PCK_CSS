@@ -98,8 +98,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         l_rgb_lightest VARCHAR2(6);
         
         l_fontfaces VARCHAR2(4000);
+        l_font_variation_settings VARCHAR2(4000);
         l_root_css CLOB;
         l_css website.css%type;
+
+        l_variable font.variable%type;
     BEGIN
         /* 
         ** BUIKD @FONT-FACE RULES 
@@ -157,12 +160,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 '--font-family-ui: system-ui;';
             
             FOR C1 IN (
-                SELECT wf.context, f.family
+                SELECT wf.context, f.family, f.variable
                   FROM font f, website_font wf
                  WHERE f.id=wf.font_id
                    AND wf.website_id=pWebsiteId
                  ORDER BY wf.context
             ) LOOP
+                l_variable:=C1.variable;
                 l_root_css:=l_root_css || 
                 '--font-family-' || C1.context || ':"' || C1.family || '",system-ui;';
             END LOOP;
@@ -176,21 +180,39 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');' ||
             '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
 
+            /*
+            ** CREATE CUSTOM VARIABLES FOR ALL FONT AXES
+            */
             IF (pEnv='editor') THEN
                 FOR C1 IN (
-                    SELECT m.axis, NVL(fa.value,m.default_value) value
+                    SELECT REPLACE(m.axis,'ital','style') axis, NVL(fa.value,m.default_value) value
                       FROM font_metadata m, font_axes_value fa
                      WHERE fa.website_id(+)=pWebsiteId
                        AND fa.axis(+)=m.axis
                        AND fa.context(+)='logo'
                      ORDER BY axis
                 ) LOOP
+                    -- ital custom variable depends on whether font is variable
                     l_root_css:=l_root_css || 
-                    '--logo-font-' || C1.axis || ': ' || C1.value || ';';
+                    '--logo-font-' || C1.axis || ': ';
+                    IF (C1.axis='style') THEN
+                        l_root_css:=l_root_css || 
+                        CASE C1.value WHEN 0 THEN 'normal' WHEN 1 THEN 'italic' END;
+                    ELSE
+                        l_root_css:=l_root_css || 
+                        C1.value;
+                    END IF;
+                    l_root_css:=l_root_css || ';';
+                    IF (C1.axis<>'style') THEN
+                        l_font_variation_settings:=l_font_variation_settings ||
+                        '"' || C1.axis || '" var(--logo-font-' || C1.axis || '),';
+                    END IF;
                 END LOOP;
+                l_root_css:=l_root_css ||
+                '--font-variation-settings: ' || RTRIM(l_font_variation_settings,',') || ';';
             ELSE
                 FOR C1 IN (
-                    SELECT axis, value || CASE WHEN axis='wdth' THEN '%' END AS value
+                    SELECT axis, value
                       FROM font_axes_value
                      WHERE website_id=pWebsiteId 
                      AND context='logo'
@@ -227,20 +249,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 '--color-theme-offset: #0ea5e9;' ||
             '}' || CASE WHEN i=2 THEN '}' END;
         END LOOP;
-
-        l_root_css:=l_root_css || 
-        '.logo:not(:has(img)) {' ||
-            'font-variation-settings:';
-        FOR C IN (
-            SELECT m.axis
-              FROM font_metadata m
-             ORDER BY 1
-        ) LOOP
-            l_root_css:=l_root_css || 
-            '"' || C.axis || '" var(--logo-font-' || C.axis || '),';
-        END LOOP;
-        l_root_css:=RTRIM(l_root_css,',') || 
-        '}';
 
         l_css:=l_fontfaces || l_root_css;
         UPDATE website 
