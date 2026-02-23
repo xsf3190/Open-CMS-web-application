@@ -113,7 +113,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_second_heading article_chars.second_heading%type;
 
     BEGIN
-        DELETE article_chars WHERE article_id=pArticleId AND context<>'logo';
+        DELETE article_chars WHERE article_id=pArticleId;
         
         /* 
         ** REMOVE <code></code>  AND <p>&nbsp;</p>
