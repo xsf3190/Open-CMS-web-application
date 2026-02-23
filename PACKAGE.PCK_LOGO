@@ -34,7 +34,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         '<label for="' || l_for || '">Adjust Size</label>';
         IF (pLogotype='font') THEN
             l_html:=l_html || 
-            '<input type="range" id="' || l_for || '" min="0" max="6" step="1" list="steps"/>' ||
+            '<input type="range" id="' || l_for || '" class="slider" min="0" max="6" step="1" list="steps"/>' ||
             '<datalist id="steps">';
             FOR i IN 1..l_fontsizes.COUNT LOOP
                 l_html:=l_html || 
@@ -181,7 +181,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             ELSE
                 l_variations:=l_variations || 
                     '<label for="' || C.axis || '">' || C.display_name || '</label>' ||
-                    '<input type="range" id="' || C.axis || '" min="' || TO_CHAR(C.axis_start) || '"' || CASE WHEN C.value IS NOT NULL THEN ' value="' || TO_CHAR(C.value) || '"' END || ' max="'|| TO_CHAR(C.axis_end) || '" step="1" />';
+                    '<input type="range" id="' || C.axis || '" class="slider" min="' || TO_CHAR(C.axis_start) || '"' || CASE WHEN C.value IS NOT NULL THEN ' value="' || TO_CHAR(C.value) || '"' END || ' max="'|| TO_CHAR(C.axis_end) || '" step="1" />';
             END IF;
             l_variations:=l_variations || 
             '</div>';
@@ -384,7 +384,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         n:=REGEXP_COUNT(l_fontfaces,'@font-face');
         FOR i IN 1..n LOOP
             l_fontface:= new JSON_OBJECT_T;
-            l_fontface.put('family',REGEXP_SUBSTR(l_fontfaces,'font-family: (.+?);',1,i,null,1) || pWght);
+            -- l_fontface.put('family',REGEXP_SUBSTR(l_fontfaces,'font-family: (.+?);',1,i,null,1) || pWght);
             l_fontface.put('style',REGEXP_SUBSTR(l_fontfaces,'font-style: (.+?);',1,i,null,1));
             l_fontface.put('weight',REGEXP_SUBSTR(l_fontfaces,'font-weight: (.+?);',1,i,null,1));
             l_fontface.put('stretch',REGEXP_SUBSTR(l_fontfaces,'font-stretch: (.+?);',1,i,null,1));
