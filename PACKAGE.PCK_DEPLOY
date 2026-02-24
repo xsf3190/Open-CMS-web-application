@@ -158,7 +158,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     
-
+    /*
+    **  DEPLY LIVE SITE. BUILD OPTIMIZED FONT FILES
+    */
     PROCEDURE deployLiveSite(pWebsiteid IN website.id%type) IS
         l_files JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
