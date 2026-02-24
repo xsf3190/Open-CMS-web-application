@@ -346,21 +346,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /* 
-    **  CALL GOOGLE FONTS API TO GET URL OF EACH FONT USED IN THE WEBSITE - CALLED BY DEPLOYMENT
+    **  BUILD OPTIMIZED FONT FILES FOR EACH FONT USED IN THE WEBSITE
+    **  GO LIVE PROCESS ONLY.
+    **  NOTE THAT EDITOR SITES USE FULL LANGUAGE FONTS DIRECTLY FROM GOOGLE
     */
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type) IS
+        l_api_url VARCHAR2(100);
         l_fontfaces VARCHAR2(4000);
     BEGIN
-        /* Get distinct set of characters for each font style / weight for each context */
+        /*
+        **  POPULATE ARTICLE_CHARS TABLE FOR EACH ARTICLE WITH CONTENT
+        */
         FOR C IN (
-            SELECT context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic 
-              FROM article_chars 
-             WHERE article_id IN (
-                SELECT COALESCE(a.id,wa.article_id)
-                FROM website_article wa, article a
-                WHERE wa.website_id=pWebsiteId
-                AND a.parent_id(+)=wa.article_id
-            )
+            SELECT a.id, a.body_html || wa.header_html || wa.footer_html AS content
+              FROM website_article wa, article a
+             WHERE wa.website_id=pWebsiteId
+               AND wa.article_id=NVL(a.parent_id,a.id)
+               AND a.body_html IS NOT NULL
+        ) LOOP
+            getCharsUsed(pArticleid=>C.id, pContent=>C.content);
+        END LOOP; 
+
+        /* Get distinct set of characters in website for each font style / weight for each context */
+        FOR C IN (
+            SELECT ac.context, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic 
+              FROM article_chars ac, website_article wa, article a
+             WHERE wa.website_id=pWebsiteId
+               AND wa.article_id=NVL(a.parent_id,a.id)
+               AND ac.article_id=a.id
         ) LOOP
             g_chars_used(C.context).chars_bold_italic:=distinct_chars(g_chars_used(C.context).chars_bold_italic || C.chars_bold_italic);
             g_chars_used(C.context).chars_bold_normal:=distinct_chars(g_chars_used(C.context).chars_bold_normal || C.chars_bold_normal);
@@ -369,85 +382,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
 
         FOR C IN (
-            SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, 
-                CASE WHEN f.slnt_start IS NOT NULL THEN 'slnt' ELSE 'ital' END ital_axis, 
-                NVL(f.slnt_start,1) ital_value,
-                CASE 
-                    WHEN variable=1 AND NVL(wght_end,400)>=700 THEN 1
-                    WHEN variable=0 THEN
-                    (
-                        SELECT CASE WHEN MAX(wght_normal)>=700 THEN 1 ELSE 0 END
-                        FROM font_static_wght 
-                        WHERE font_id=f.id
-                    )
-                    ELSE 0
-                END bold
-              FROM website_font wf, font f
+            SELECT logo_font_text FROM website WHERE id=pWebsiteId AND logo_font_text IS NOT NULL
+        ) LOOP
+            g_chars_used('logo').chars_normal:=distinct_chars(g_chars_used('logo').chars_normal || C.logo_font_text);
+        END LOOP;
+
+        /*
+        **  BUILD THE GOOGLE API URL
+        */
+        FOR C IN (
+            SELECT f.family, wf.context, fav.axis, fav.value
+              FROM website_font wf, font_axes_value fav, font f
              WHERE wf.website_id=pWebsiteId
-               AND wf.font_id=f.id
+               AND f.id=wf.font_id
+               AND fav.website_id(+)=wf.website_id
+               AND fav.context(+)=wf.context
+               
+             ORDER BY f.family, wf.context, CASE WHEN ASCII(fav.axis)>100 THEN 1 ELSE 2 END
         ) LOOP
-            prepareAPICall(pWebsiteid, C.font_id, C.family, C.context, C.italic, C.bold, C.ital_axis, C.ital_value,
-                g_chars_used(C.context).chars_bold_italic, g_chars_used(C.context).chars_bold_normal, g_chars_used(C.context).chars_italic, g_chars_used(C.context).chars_normal);
-        END LOOP;
-
+            l_api_url:='https://fonts.googleapis.com/css2?family=' || REPLACE(C.family,' ','+') || ':';
+            IF (g_chars_used(C.context).chars_bold_italic IS NOT NULL) THEN
+                l_api_url:=l_api_url || 'ital,wght';
+            END IF;
         /*
-        ** DELETE ANY UNUSED FONT-FACES
-        */
-        FOR C IN (
-            SELECT ff.context
-              FROM website_fontface ff
-             WHERE ff.website_id=pWebsiteid
-        ) LOOP
-            IF (g_chars_used(C.context).chars_normal IS NULL) THEN
-                deleteFontface(pWebsiteId, C.context, 'fonts/' || C.context || '.normal.woff2');
-            END IF;
-
-            IF (g_chars_used(C.context).chars_bold_normal IS NULL) THEN
-                deleteFontface(pWebsiteId, C.context,'fonts/' || C.context || '.normal.bold.woff2');
-            END IF;
-
-            IF (g_chars_used(C.context).chars_italic IS NULL) THEN
-                deleteFontface(pWebsiteId, C.context,'fonts/' || C.context || '.italic.woff2');
-            END IF;
-
-            IF (g_chars_used(C.context).chars_bold_italic IS NULL) THEN
-                deleteFontface(pWebsiteId, C.context,'fonts/' || C.context || '.italic.bold.woff2');
-            END IF;
+            l_api_url:=l_api_url || '&text=' || '?';
+            */
         END LOOP;
-
-        /* 
-        ** Update CSS font-face rules for the website 
-        */
-        FOR C IN (
-            SELECT ff.context, ff.font_family, ff.font_style, ff.font_weight, ff.font_stretch, ff.deploy_filename,
-                    ROW_NUMBER() OVER (PARTITION BY context ORDER BY null) rn, COUNT(*) OVER (PARTITION BY context) nb
-              FROM website_fontface ff
-             WHERE ff.website_id=pWebsiteid
-        ) LOOP
-            l_fontfaces:=l_fontfaces ||
-                '@font-face {' ||
-                    'font-family:' || C.font_family || ';' ||
-                    'font-style:' || C.font_style || ';' ||
-                    'font-weight:' || C.font_weight || ';' ||
-                    CASE WHEN C.font_stretch IS NOT NULL THEN
-                    'font-stretch:' || C.font_stretch || ';' 
-                    END
-                    ||
-                    'font-display:swap;' ||
-                    'src: url("' || C.deploy_filename || '") format("woff2");' ||
-                '}';
-            IF (C.rn=C.nb) THEN
-                UPDATE website_font 
-                   SET fontface=l_fontfaces, updated_date=current_timestamp
-                 WHERE website_id=pWebsiteid AND context=C.context;
-                l_fontfaces:=null;
-            END IF;
-        END LOOP;
-
-        /*
-        ** FINALLY, REBUILD WEBSITE CSS RULES FOR FONTFACE AND ROOT
-        */
-        -- pck_css.buildWebsiteCss(pWebsiteid);
+        dbms_output.put_line(l_api_url);
     END;
 
 
