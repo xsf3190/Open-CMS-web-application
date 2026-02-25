@@ -1,24 +1,8 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
-    TYPE tt_chars_used IS RECORD (
-            chars_normal VARCHAR2(500),
-            chars_italic VARCHAR2(500),
-            chars_bold_normal VARCHAR2(500),
-            chars_bold_italic VARCHAR2(500)
-    );
-    TYPE t_chars_used IS TABLE OF tt_chars_used INDEX BY VARCHAR2(40);
-    g_chars_used t_chars_used:=t_chars_used( 
-        'headings' => tt_chars_used(null,null,null,null), 
-        'text' => tt_chars_used(null,null,null,null), 
-        'logo' => tt_chars_used(null,null,null,null));
-    --
     PROCEDURE getCharsUsed(pArticleId IN article.id%type, pContent IN OUT NOCOPY CLOB);
     --
-    PROCEDURE getFontface(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pFamily IN VARCHAR2, pApiParams IN VARCHAR2, pChars IN VARCHAR2);
-    --
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
-    --
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pArticleId IN article.id%type);
     --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER);
     --
@@ -149,7 +133,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_headings_italic:=distinct_chars(l_headings_italic);
         l_headings:=distinct_chars(l_headings);
 
-        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, first_heading, second_heading)
+        INSERT INTO article_chars(article_id, context, chars_italic, chars_normal, first_heading, second_heading)
         VALUES (pArticleId, 'headings', l_headings_italic, l_headings, l_first_heading, l_second_heading);
 
         l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
@@ -187,173 +171,156 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);   
     END;
 
-    /* 
-    **  CALL GOOGLE FONTS API.
+    /*
+     *  DOWNLOAD OPTIMIZED @font-face RULES FROM GOOGLE
     */
-    PROCEDURE getFontface(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pFamily IN VARCHAR2, pApiParams IN VARCHAR2, pChars IN VARCHAR2) IS
-        l_fontface VARCHAR2(2000);
+    PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pItalic IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2, pFontface OUT VARCHAR2) IS
+        l_api_url VARCHAR2(200);
+        l_api_val VARCHAR2(100);
+        l_static_wght_normal font_axes_value.value%type;
+        l_static_wght_italic font_axes_value.value%type;
+        l_fontfaces CLOB;
+        l_url VARCHAR2(500);
+        l_blob BLOB;
+        l_blob_size NUMBER;
 
-        l_font_family website_fontface.font_family%type;
-        l_font_style website_fontface.font_style%type;
-        l_font_weight website_fontface.font_weight%type;
-        l_font_stretch website_fontface.font_stretch%type;
-        l_src_url website_fontface.src_url%type;
-        l_deploy_filename  website_fontface.deploy_filename%type;
-
-        l_api_url VARCHAR2(500):='https://fonts.googleapis.com/css2?family=';
-
-        n PLS_INTEGER;
-    
-        FUNCTION getValue(pKeyword IN VARCHAR) RETURN VARCHAR2 IS
-            j PLS_INTEGER;
-            k PLS_INTEGER;
-            l PLS_INTEGER;
+        FUNCTION getClosestNumberInRange(pFontid IN NUMBER, pWght IN NUMBER) RETURN NUMBER IS
         BEGIN
-            j:=INSTR(l_fontface,pKeyword,1,1);
-            k:=INSTR(l_fontface,':',j,1);
-            l:=INSTR(l_fontface,';',k,1);
-            RETURN (SUBSTR(l_fontface,k+2,l-k-2));
+            FOR C IN (
+                SELECT axis_start, axis_end FROM font_axes WHERE font_id=pFontid AND axis='wght'
+            ) LOOP
+                IF (pWght < C.axis_start) THEN
+                    RETURN C.axis_start;
+                ELSIF (pWght > C.axis_end) THEN
+                    RETURN C.axis_end;
+                ELSE
+                    RETURN pWght;
+                END IF;
+            END LOOP;
         END;
 
     BEGIN
-        l_api_url:=l_api_url || REPLACE(pFamily,' ','+') || pApiParams || '&text=' || utl_url.escape(pChars,TRUE,'UTF-8');
-
-        SELECT COUNT(*) INTO n FROM website_fontface WHERE website_id=pWebsiteId AND api_url=l_api_url;
-
-        IF (n=0) THEN
-            pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
-
-            l_font_family:=getValue('font-family');
-            l_font_style:=getValue('font-style');
-            l_font_weight:=getValue('font-weight');
-            l_font_stretch:=getValue('font-stretch');
-            l_src_url:=getValue('src: url');
-            l_src_url:=SUBSTR(l_src_url,INSTR(l_src_url,'(')+1,INSTR(l_src_url,')')-INSTR(l_src_url,'(')-1);
-            l_deploy_filename:='/fonts/' || pContext || '.' || l_font_style || CASE WHEN l_font_weight>400 THEN '.bold' END || '.woff2';
-
-            DELETE website_fontface WHERE website_id=pWebsiteId AND deploy_filename=l_deploy_filename;
-
-            INSERT INTO website_fontface(website_id, context, font_family, font_style, font_weight, font_stretch, src_url, api_url, deploy_filename)
-                VALUES(pWebsiteId, pContext, l_font_family, l_font_style, l_font_weight, l_font_stretch, l_src_url, l_api_url, l_deploy_filename);
-        END IF;
-    END;
-
-    /*
-    ** SOME STATIC FONTS HAVE JUMPS BETWEEN WEIGHTS - E.G. 400,800
-    ** THIS FUNCTiON GETS THE CLOSEST WEIGHT TO THE DEFAULT BROWSER BOLD WEIGHT (700)
-    */
-    FUNCTION getClosestBold(pFontid IN font.id%type, pStyle IN VARCHAR2) RETURN NUMBER
-    IS
-        l_closest_bold_wght font_static_wght.wght_normal%type;
-    BEGIN
-        CASE pStyle
-            WHEN 'normal' THEN
-                SELECT wght_normal
-                INTO l_closest_bold_wght
-                FROM font_static_wght 
-                WHERE font_id=pFontid
-                ORDER BY ABS(wght_normal - 700)
-                FETCH FIRST ROW ONLY;
-            WHEN 'italic' THEN
-                SELECT wght_italic
-                INTO l_closest_bold_wght
-                FROM font_static_wght 
-                WHERE font_id=pFontid
-                ORDER BY ABS(wght_italic - 700)
-                FETCH FIRST ROW ONLY;
-        END CASE;
-        RETURN (l_closest_bold_wght);
-        
-        EXCEPTION WHEN NO_DATA_FOUND /* I.E. VARIABLE FONT */
-            THEN RETURN (700);
-    END;
-
-    /*
-    ** BUILD URL PARAMETERS FOR VALID CALL TO GOOGLE FONTS API
-    */
-    PROCEDURE prepareAPICall(pWebsiteid IN NUMBER, pFontid IN NUMBER, pFamily IN VARCHAR2, pContext IN VARCHAR2, pItalicSupported IN PLS_INTEGER, pBoldSupported IN PLS_INTEGER, pItalAxis IN VARCHAR2, pItalValue IN VARCHAR2,
-                pBoldItalic IN VARCHAR2, pBoldNormal IN VARCHAR2, pItalic IN VARCHAR2, pNormal IN VARCHAR2) 
-    IS
-        l_api_url VARCHAR2(500);
-    BEGIN
-        IF (pItalic IS NOT NULL) THEN
-            IF (pItalicSupported=1) THEN
-                l_api_url:=':' || pItalAxis || '@' || pItalValue;
-                getFontface(pWebsiteId, pContext, pFamily, l_api_url, pItalic);
-            END IF;
-        END IF;
-
-        IF (pBoldItalic IS NOT NULL) THEN
-            IF (pItalicSupported=1 AND pBoldSupported=1) THEN
-                l_api_url:=':' || pItalAxis || ',wght@' || pItalValue || ',' || getClosestBold(pFontid,'italic');
-                getFontface(pWebsiteId, pContext, pFamily, l_api_url, pBoldItalic);
-            END IF;
-        END IF;
-
-        IF (pNormal IS NOT NULL) THEN
-            l_api_url:=null;
-            getFontface(pWebsiteId, pContext, pFamily, l_api_url, pNormal);
-        END IF;
-
-        IF (pBoldNormal IS NOT NULL) THEN
-            IF (pBoldSupported=1) THEN
-                l_api_url:=':wght@' || getClosestBold(pFontid,'normal');
-                getFontface(pWebsiteId, pContext, pFamily, l_api_url, pBoldNormal);
-            END IF;
-        END IF;
-    END;
-
-    /* 
-    **  CALL GOOGLE FONTS API TO GET URL OF THE FONT USED IN AN ARTICLE FOR A SPECIFIC CONTEXT, E.g "headings", "text"
-    **  CALLED WHEN USER SELECTS FONT FOR A CONTEXT
-    */
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pArticleId IN article.id%type) IS
-    BEGIN
-        DELETE website_fontface WHERE website_id=pWebsiteId AND context=pContext;
-
         FOR C IN (
-            SELECT wf.font_id, wf.context, f.variable, f.italic, f.family, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic, 
-                CASE WHEN f.slnt_start IS NOT NULL THEN 'slnt' ELSE 'ital' END ital_axis, 
-                NVL(f.slnt_start,1) ital_value,
-                CASE 
-                    WHEN variable=1 AND NVL(wght_end,400)>=700 THEN 1
-                    WHEN variable=0 THEN
-                    (
-                        SELECT CASE WHEN MAX(wght_normal)>=700 THEN 1 ELSE 0 END
-                        FROM font_static_wght 
-                        WHERE font_id=f.id
-                    )
-                    ELSE 0
-                END bold
-              FROM website_font wf, font f, article_chars ac
+            SELECT wf.font_id, f.family, f.variable
+              FROM website_font wf, font f
              WHERE wf.website_id=pWebsiteId
                AND wf.context=pContext
-               AND wf.font_id=f.id
-               AND ac.context=wf.context
-               AND ac.article_id=pArticleId
+               AND f.id=wf.font_id
         ) LOOP
-            prepareAPICall(pWebsiteid, C.font_id, C.family, pContext, C.italic, C.bold, C.ital_axis, C.ital_value,
-                C.chars_bold_italic, C.chars_bold_normal, C.chars_italic, C.chars_normal);
+            l_api_url:='https://fonts.googleapis.com/css2?family=' || REPLACE(C.family,' ','+') || ':';
+
+            CASE C.variable
+                WHEN 1 THEN
+                    FOR C1 IN (
+                        SELECT NVL(fav.axis,fa.axis) axis, fav.value, fm.default_value
+                          FROM font_axes fa, font_axes_value fav, font_metadata fm
+                         WHERE fa.font_id=C.font_id
+                           AND fm.axis=fa.axis
+                           AND fav.website_id(+)=pWebsiteId
+                           AND fav.context(+)=pContext
+                           AND fav.axis(+)=fa.axis
+                         ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, axis
+                    ) LOOP
+                        l_api_url:=l_api_url || C1.axis || ',';
+                        CASE C1.axis
+                            WHEN 'ital' THEN
+                                l_api_val:=l_api_val|| pItalic || ',';
+                            WHEN 'wght' THEN
+                                IF (C1.value is NULL) THEN
+                                    CASE pContext
+                                        WHEN 'logo' THEN
+                                            l_api_val:=l_api_val || '400,';
+                                        WHEN 'headings' THEN
+                                            l_api_val:=l_api_val || getClosestNumberInRange(C.font_id, 700) || ',';
+                                        WHEN 'text' THEN
+                                            IF INSTR(pStyles,'bold')>0 THEN
+                                                l_api_val:=l_api_val || getClosestNumberInRange(C.font_id, 700) || ',';
+                                            ELSE
+                                                l_api_val:=l_api_val || '400,';
+                                            END IF;
+                                    END CASE;
+                                ELSE
+                                    l_api_val:=l_api_val || C1.value || ',';
+                                END IF;
+                            ELSE
+                                l_api_val:=l_api_val || NVL(C1.value,C1.default_value) || ',';
+                        END CASE;
+                    END LOOP;
+                    l_api_url:=RTRIM(l_api_url,',') || '@' || RTRIM(l_api_val,',');
+
+                WHEN 0 THEN
+                    BEGIN
+                        SELECT fav.value
+                          INTO l_static_wght_normal
+                          FROM font_axes_value fav
+                         WHERE fav.website_id=pWebsiteId
+                           AND fav.context=pContext
+                           AND fav.axis='wght';
+
+                        l_api_url:=l_api_url || 'ital,wght@' || pItalic || ',' || l_static_wght_normal;
+
+                    EXCEPTION WHEN NO_DATA_FOUND THEN
+                        SELECT wght_normal, wght_italic
+                          INTO l_static_wght_normal, l_static_wght_italic
+                          FROM font_static_wght
+                         WHERE font_id=C.font_id
+                         ORDER BY ABS(wght_normal - CASE WHEN pContext='headings' THEN 700 ELSE 400 END)
+                         FETCH FIRST ROW ONLY;
+
+                    END;
+                    l_api_url:=l_api_url || 'ital,wght@' || pItalic || ',' || l_static_wght_normal;
+            END CASE;
+
+            l_api_url:=l_api_url || '&display=swap';
+            l_api_url:=l_api_url || '&text=' || pText;
+
+            pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
+
+            l_url:=REGEXP_SUBSTR(l_fontfaces,'url\((.+?)\)',1,1,null,1);
+            dbms_output.put_line(l_url);
+
+            l_blob:=apex_web_service.make_rest_request_b(p_url=>l_url, p_http_method=>'GET');
+            l_blob_size:=dbms_lob.getlength(l_blob);
+
+            pFontface:=
+                chr(10) || 
+                '/* ' || chr(10) || 
+                C.family || ' used for ' || pContext || ' - ' || LENGTH(pText) || ' ' || pStyles || ' characters - ' || apex_string_util.to_display_filesize(l_blob_size) || chr(10) || 
+                l_api_url || chr(10) ||
+                '*/' || chr(10) ||
+                l_fontfaces;
+            
         END LOOP;
     END;
 
-    PROCEDURE deleteFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pDeployFilename IN VARCHAR2) IS
-    BEGIN
-        DELETE website_fontface 
-         WHERE website_id=pWebsiteid 
-           AND context=pContext
-           AND deploy_filename=pDeployFilename;
-    END;
-
     /* 
-    **  BUILD OPTIMIZED FONT FILES FOR EACH FONT USED IN THE WEBSITE
-    **  GO LIVE PROCESS ONLY.
-    **  NOTE THAT EDITOR SITES USE FULL LANGUAGE FONTS DIRECTLY FROM GOOGLE
+    **  BUILD OPTIMIZED FONT FILES FOR EACH FONT USED IN A LIVE WEBSITE
+    **  NB. EDITOR SITES USE FULL LANGUAGE FONTS DIRECTLY FROM GOOGLE
     */
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type) IS
-        l_api_url VARCHAR2(100);
-        l_fontfaces VARCHAR2(4000);
+        TYPE tt_chars_used IS RECORD (
+            normal article_chars.chars_normal%type,
+            italic article_chars.chars_italic%type,
+            bold_normal article_chars.chars_bold_normal%type,
+            bold_italic article_chars.chars_bold_italic%type
+        );
+        TYPE t_chars_used IS TABLE OF tt_chars_used INDEX BY VARCHAR2(40);
+        l_chars_used t_chars_used:=t_chars_used( 
+            'headings' => tt_chars_used(null,null,null,null), 
+            'text' => tt_chars_used(null,null,null,null), 
+            'logo' => tt_chars_used(null,null,null,null));
+
+        l_fontface VARCHAR2(1000);
+        l_fontfaces CLOB;
+        l_context VARCHAR2(8);
+        l_html_size PLS_INTEGER:=0;
+        l_pages PLS_INTEGER:=0;
+        l_cpu_used_start NUMBER;
+        l_elapsed NuMBER;
+
     BEGIN
+        l_cpu_used_start:=dbms_utility.get_cpu_time();
+
         /*
         **  POPULATE ARTICLE_CHARS TABLE FOR EACH ARTICLE WITH CONTENT
         */
@@ -364,6 +331,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND a.body_html IS NOT NULL
         ) LOOP
+            l_pages:=l_pages+1;
+            l_html_size:=l_html_size + dbms_lob.getlength(C.content);
             getCharsUsed(pArticleid=>C.id, pContent=>C.content);
         END LOOP; 
 
@@ -375,40 +344,50 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND ac.article_id=a.id
         ) LOOP
-            g_chars_used(C.context).chars_bold_italic:=distinct_chars(g_chars_used(C.context).chars_bold_italic || C.chars_bold_italic);
-            g_chars_used(C.context).chars_bold_normal:=distinct_chars(g_chars_used(C.context).chars_bold_normal || C.chars_bold_normal);
-            g_chars_used(C.context).chars_italic:=distinct_chars(g_chars_used(C.context).chars_italic || C.chars_italic);
-            g_chars_used(C.context).chars_normal:=distinct_chars(g_chars_used(C.context).chars_normal || C.chars_normal);
+            l_chars_used(C.context).bold_italic:=distinct_chars(l_chars_used(C.context).bold_italic || C.chars_bold_italic);
+            l_chars_used(C.context).bold_normal:=distinct_chars(l_chars_used(C.context).bold_normal || C.chars_bold_normal);
+            l_chars_used(C.context).italic:=distinct_chars(l_chars_used(C.context).italic || C.chars_italic);
+            l_chars_used(C.context).normal:=distinct_chars(l_chars_used(C.context).normal || C.chars_normal);
         END LOOP;
 
+        -- Logo text is a column in WEBSITE table
         FOR C IN (
             SELECT logo_font_text FROM website WHERE id=pWebsiteId AND logo_font_text IS NOT NULL
         ) LOOP
-            g_chars_used('logo').chars_normal:=distinct_chars(g_chars_used('logo').chars_normal || C.logo_font_text);
+            l_chars_used('logo').normal:=distinct_chars(l_chars_used('logo').normal || C.logo_font_text);
         END LOOP;
 
-        /*
-        **  BUILD THE GOOGLE API URL
-        */
-        FOR C IN (
-            SELECT f.family, wf.context, fav.axis, fav.value
-              FROM website_font wf, font_axes_value fav, font f
-             WHERE wf.website_id=pWebsiteId
-               AND f.id=wf.font_id
-               AND fav.website_id(+)=wf.website_id
-               AND fav.context(+)=wf.context
-               
-             ORDER BY f.family, wf.context, CASE WHEN ASCII(fav.axis)>100 THEN 1 ELSE 2 END
-        ) LOOP
-            l_api_url:='https://fonts.googleapis.com/css2?family=' || REPLACE(C.family,' ','+') || ':';
-            IF (g_chars_used(C.context).chars_bold_italic IS NOT NULL) THEN
-                l_api_url:=l_api_url || 'ital,wght';
+        l_context:=l_chars_used.FIRST;
+        WHILE l_context IS NOT NULL LOOP
+            IF (l_chars_used(l_context).normal IS NOT NULL) THEN
+                downloadFontface(pWebsiteid, l_context, '0', l_chars_used(l_context).normal, 'normal', l_fontface);
+                l_fontfaces:=l_fontfaces || l_fontface;
             END IF;
-        /*
-            l_api_url:=l_api_url || '&text=' || '?';
-            */
+
+            IF (l_chars_used(l_context).italic IS NOT NULL) THEN
+                downloadFontface(pWebsiteid, l_context,  '1', l_chars_used(l_context).italic, 'italic', l_fontface);
+                l_fontfaces:=l_fontfaces || l_fontface;
+            END IF;
+
+            IF (l_chars_used(l_context).bold_normal IS NOT NULL) THEN
+                downloadFontface(pWebsiteid, l_context,  '0', l_chars_used(l_context).bold_normal, 'bold normal', l_fontface);
+                l_fontfaces:=l_fontfaces || l_fontface;
+            END IF;
+            
+            IF (l_chars_used(l_context).bold_italic IS NOT NULL) THEN
+                downloadFontface(pWebsiteid, l_context,  '1', l_chars_used(l_context).bold_italic, 'bold italic', l_fontface);
+                l_fontfaces:=l_fontfaces || l_fontface;
+            END IF;
+            
+            l_context:=l_chars_used.NEXT(l_context);
         END LOOP;
-        dbms_output.put_line(l_api_url);
+
+        l_elapsed:=(dbms_utility.get_cpu_time() - l_cpu_used_start)/100;
+
+        l_fontfaces:='/* Scanned ' || l_pages || ' pages in ' || TO_CHAR(l_elapsed)|| ' seconds (' || apex_string_util.to_display_filesize(l_html_size) || ' html) */' || chr(10) || chr(10) || l_fontfaces;
+        
+        dbms_output.put_line(l_fontfaces);
+
     END;
 
 
