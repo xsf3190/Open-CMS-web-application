@@ -550,8 +550,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     PROCEDURE processNetlifyError(pMethod IN VARCHAR2, pUrl IN VARCHAR2, pData IN CLOB) IS
         l_error_message LONG;
     BEGIN
+        
         l_error_message:=pMethod || ' ' || pUrl || ' https status:' || apex_web_service.g_status_code;
         FOR C IN (SELECT error_message FROM JSON_TABLE(pData,'$' COLUMNS (error_message)) WHERE error_message IS NOT NULL) LOOP
+            pck_core.log(C.error_message);
             l_error_message:=l_error_message || chr(10) || 'API message: ' || C.error_message;
         END LOOP;
         RAISE_APPLICATION_ERROR(-20030,l_error_message);
