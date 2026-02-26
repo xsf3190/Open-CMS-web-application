@@ -166,6 +166,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_json JSON_OBJECT_T;
         l_clob CLOB;
     BEGIN
+        /*
+        ** Font files and supporting font face css rules are deployed to live site
+        ** All other files are "copied" from editor site
+        */
+        pck_fonts.getFontFiles(pWebsiteid);
+        pck_css.buildWebsiteCss(pWebsiteid, 'live');
+
+        -- Temporary table website_fontfiles populated by pck_fonts procedure
+
         FOR C IN (
             SELECT netlify_site_id, netlify_site_id_custom
               FROM website 
@@ -177,6 +186,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                   FROM website_files
                  WHERE website_id=pWebsiteid
                    AND site_id=C.netlify_site_id
+                   AND path<>'css/website-styles.min.css'
+                 UNION ALL
+                SELECT path, sha1
+                  FROM website_fontfiles_temp
+                 UNION ALL
+                SELECT path, sha1
+                  FROM website_cssfiles_temp
             ) LOOP
                 l_files.put(C1.path, C1.sha1);
             END LOOP;
@@ -184,14 +200,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_json.put('files',l_files);
             pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id_custom || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
             
-            /* Cancel deploy if any file required */
+            /* Upload required files to hosting platform */
+            
             FOR C1 IN (
-                SELECT id, sha1 
-                  FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) 
-                 WHERE sha1 IS NOT NULL
+                SELECT j.id, j.sha1, wf.path, wf.content
+                  FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) j, website_fontfiles_temp wf
+                 WHERE j.sha1 IS NOT NULL
+                   AND j.sha1=wf.sha1
             ) LOOP
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/cancel', pMethod=>'POST', pData=>l_clob);
-                RAISE_APPLICATION_ERROR(-20000,'pck_deploy.deployLiveSite FAILED. ONE OR MORE SHA1 REQUIRED.');
+                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/files/' || C1.path, pMethod=>'PUT', pBody=>C1.content, pData=>l_clob);
+            END LOOP;
+
+            FOR C1 IN (
+                SELECT j.id, j.sha1, wc.path, wc.content
+                  FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) j, website_cssfiles_temp wc
+                 WHERE j.sha1 IS NOT NULL
+                   AND j.sha1=wc.sha1
+            ) LOOP
+                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/files/' || C1.path, pMethod=>'PUT', pBody=>C1.content, pData=>l_clob);
             END LOOP;
 
             UPDATE website
