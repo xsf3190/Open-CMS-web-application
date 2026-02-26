@@ -179,10 +179,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_api_val VARCHAR2(100);
         l_static_wght_normal font_axes_value.value%type;
         l_static_wght_italic font_axes_value.value%type;
-        l_fontfaces CLOB;
-        l_url VARCHAR2(500);
+        l_fontface CLOB;
         l_blob BLOB;
         l_blob_size NUMBER;
+        l_url website_fontfiles_temp.path%type;
+        l_url_new website_fontfiles_temp.path%type;
+        l_sha1 website_fontfiles_temp.sha1%type;
+        n PLS_INTEGER;
 
         FUNCTION getClosestNumberInRange(pFontid IN NUMBER, pWght IN NUMBER) RETURN NUMBER IS
         BEGIN
@@ -274,13 +277,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_api_url:=l_api_url || '&display=swap';
             l_api_url:=l_api_url || '&text=' || pText;
 
-            pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
+            pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
 
-            l_url:=REGEXP_SUBSTR(l_fontfaces,'url\((.+?)\)',1,1,null,1);
-            dbms_output.put_line(l_url);
+            l_url:=REGEXP_SUBSTR(l_fontface,'url\((.+?)\)',1,1,null,1);
 
             l_blob:=apex_web_service.make_rest_request_b(p_url=>l_url, p_http_method=>'GET');
             l_blob_size:=dbms_lob.getlength(l_blob);
+
+            l_sha1:=LOWER(dbms_crypto.hash(src => l_blob, typ => dbms_crypto.hash_sh1));
+            l_url_new:='/fonts/' || pContext || '.' || pStyles || '.woff2';
 
             pFontface:=
                 chr(10) || 
@@ -288,7 +293,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 C.family || ' used for ' || pContext || ' - ' || LENGTH(pText) || ' ' || pStyles || ' characters - ' || apex_string_util.to_display_filesize(l_blob_size) || chr(10) || 
                 l_api_url || chr(10) ||
                 '*/' || chr(10) ||
-                l_fontfaces;
+                l_fontface;
+
+            SELECT COUNT(*) INTO n FROM dual WHERE EXISTS (SELECT null  FROM website_files WHERE sha1=l_sha1 AND path=l_url_new);
+            IF (n=0) THEN
+                INSERT INTO website_fontfiles_temp(path, sha1, fontface, content) values (l_url_new, l_sha1, REPLACE(l_fontface, l_url, l_url_new), l_blob);
+            END IF;
             
         END LOOP;
     END;
@@ -370,12 +380,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END IF;
 
             IF (l_chars_used(l_context).bold_normal IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context,  '0', l_chars_used(l_context).bold_normal, 'bold normal', l_fontface);
+                downloadFontface(pWebsiteid, l_context,  '0', l_chars_used(l_context).bold_normal, 'bold.normal', l_fontface);
                 l_fontfaces:=l_fontfaces || l_fontface;
             END IF;
             
             IF (l_chars_used(l_context).bold_italic IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context,  '1', l_chars_used(l_context).bold_italic, 'bold italic', l_fontface);
+                downloadFontface(pWebsiteid, l_context,  '1', l_chars_used(l_context).bold_italic, 'bold.italic', l_fontface);
                 l_fontfaces:=l_fontfaces || l_fontface;
             END IF;
             
@@ -386,7 +396,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_fontfaces:='/* Scanned ' || l_pages || ' pages in ' || TO_CHAR(l_elapsed)|| ' seconds (' || apex_string_util.to_display_filesize(l_html_size) || ' html) */' || chr(10) || chr(10) || l_fontfaces;
         
-        dbms_output.put_line(l_fontfaces);
+        -- dbms_output.put_line(l_fontfaces);
 
     END;
 
