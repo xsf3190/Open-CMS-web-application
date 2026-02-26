@@ -66,21 +66,19 @@ const changeHandler = (e) => {
         callAPI(endpoint,'PUT', obj)
             .then((data) => {
                 const font_family = e.target.options[e.target.selectedIndex].text;
-                if (font_family!=="system-ui") {
-                    for (const fontface of data.urls) {
-                        const fontFile = new FontFace(font_family,fontface.src_url);
-                        fontFile.style = fontface.font_style;
-                        fontFile.weight = fontface.font_weight;
-                        if (fontface.font_stretch) {
-                            fontFile.stretch = fontface.font_stretch;
-                        }
-                        document.fonts.add(fontFile);
-                        fontFile.load();
-                    };
-                    document.fonts.ready.then(()=>{
-                        console.log(`Loaded ${font_family}`);
-                    });
-                }
+                for (const fontface of data.urls) {
+                    const fontFile = new FontFace(font_family,fontface.source);
+                    fontFile.style = fontface.style;
+                    fontFile.weight = fontface.weight;
+                    if (fontface.stretch) {
+                        fontFile.stretch = fontface.stretch;
+                    }
+                    document.fonts.add(fontFile);
+                    fontFile.load();
+                };
+                document.fonts.ready.then(()=>{
+                    console.log(`Loaded ${font_family}`);
+                });
                 document.documentElement.style.setProperty('--font-family-' + context, font_family); 
                 loader.style.opacity=0;
             })
