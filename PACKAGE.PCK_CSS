@@ -103,9 +103,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         l_css website.css%type;
 
         l_variable font.variable%type;
+        l_sha1 website_cssfiles_temp.sha1%type;
     BEGIN
         /* 
-        ** BUIKD @FONT-FACE RULES 
+        ** BUILD @FONT-FACE RULES 
         */
         IF (pEnv='editor') THEN
             FOR C IN (
@@ -114,6 +115,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                  WHERE website_id=pWebsiteid
             ) LOOP
                 l_fontfaces:=l_fontfaces || C.editor_fontfaces;
+            END LOOP;
+        ELSIF (pEnv='live') THEN
+            FOR C IN (
+                SELECT fontface
+                  FROM website_fontfiles_temp
+            ) LOOP
+                l_fontfaces:=l_fontfaces || C.fontface;
             END LOOP;
         END IF;
 
@@ -164,7 +172,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                   FROM font f, website_font wf
                  WHERE f.id=wf.font_id
                    AND wf.website_id=pWebsiteId
-                 ORDER BY wf.context
+                 ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
             ) LOOP
                 l_variable:=C1.variable;
                 l_root_css:=l_root_css || 
@@ -212,13 +220,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 '--font-variation-settings: ' || RTRIM(l_font_variation_settings,',') || ';';
             ELSE
                 FOR C1 IN (
-                    SELECT axis, value
+                    SELECT context, axis, value
                       FROM font_axes_value
                      WHERE website_id=pWebsiteId 
-                     AND context='logo'
                 ) LOOP
                     l_root_css:=l_root_css || 
-                    '--logo-font-' || C1.axis || ': ' || C1.value || ';';
+                    '--' || C1.context || '-font-' || C1.axis || ': ' || C1.value || ';';
                 END LOOP;
             END IF;
 
@@ -251,12 +258,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END LOOP;
 
         l_css:=l_fontfaces || l_root_css;
+
+        l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
+
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES ('css/website-styles.min.css', l_sha1, l_css);
+
+/*
+        l_css:=l_fontfaces || l_root_css;
         UPDATE website 
            SET css=l_css, 
                css_updated_date=current_timestamp
          WHERE id=pWebsiteid
            AND (dbms_lob.compare(css,l_css)<>0 OR css IS NULL);
-
+*/
     END;
 
 end;
