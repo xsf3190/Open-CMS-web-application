@@ -444,6 +444,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'blue', '✎', 'Edit Content');
         l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'pink', '✎', 'Upload Media');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
+        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '🌐', 'Fonts');
         l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
         l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo from Image', 'data-logo="image"');
         l_html:=l_html || addMenuitem('logo/:ID', '', '0️⃣', 'Logo from Text', 'data-logo="font"');
