@@ -1,10 +1,14 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
-    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type, pEnv IN VARCHAR2);
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type);
+    --
+    PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type);
     --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
+
+    PATH_NAME CONSTANT website_cssfiles_temp.path%type:='css/website-styles.min.css';
 
     TYPE fluid_type_rt IS RECORD(
         property VARCHAR2(30),
@@ -83,166 +87,78 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         RETURN l_fluid_type;
     END;
 
-    /* 
-    ** Build page CSS root
-    */ 
-    PROCEDURE buildWebsiteCss(pWebsiteId IN website.id%type, pEnv IN VARCHAR2) IS
+    /*
+    **  BUILD TYPOGRAPHY TOKENS
+    */
+    FUNCTION getTypography(pWebsiteid IN website.id%type) RETURN VARCHAR2 IS
         l_fluid_types fluid_type_t;
-
-        TYPE t_rgb_arr IS VARRAY(3) OF PLS_INTEGER;
-        l_rgb_arr t_rgb_arr:=t_rgb_arr();
-
-        TYPE t_rgb_tint_arr IS VARRAY(3) OF VARCHAR2(6);
-        l_rgb_light VARCHAR2(6);
-        l_rgb_lighter VARCHAR2(6);
-        l_rgb_lightest VARCHAR2(6);
-        
-        l_fontfaces VARCHAR2(4000);
-        l_font_variation_settings VARCHAR2(4000);
-        l_root_css CLOB;
-        l_css website.css%type;
-
-        l_variable font.variable%type;
-        l_sha1 website_cssfiles_temp.sha1%type;
+        l_tokens LONG;
     BEGIN
-        /* 
-        ** BUILD @FONT-FACE RULES 
-        */
-        IF (pEnv='editor') THEN
-            FOR C IN (
-                SELECT editor_fontfaces
-                  FROM website_font
-                 WHERE website_id=pWebsiteid
-            ) LOOP
-                l_fontfaces:=l_fontfaces || C.editor_fontfaces;
-            END LOOP;
-        ELSIF (pEnv='live') THEN
-            FOR C IN (
-                SELECT fontface
-                  FROM website_fontfiles_temp
-            ) LOOP
-                l_fontfaces:=l_fontfaces || C.fontface;
-            END LOOP;
-        END IF;
-
-        /* 
-        ** BUILD :ROOT RULES 
-        */
         FOR C IN (
-            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale, w.img_border_radius, 
-                    w.logo_type,
-                    w.logo_img_inline_size, w.logo_img_border_radius, w.logo_img_corner_shape,
-                    w.logo_svg_inline_size,
-                    w.logo_font_size
+            SELECT w.max_width, w.min_font_size, w.min_width_px, w.min_scale, w.max_font_size, w.max_width_px, w.max_scale
               FROM website w
              WHERE w.id=pWebsiteId
             )
         LOOP
-            /* Build design tokens */
+            l_tokens:=
+            '--max-width: ' || C.max_width || ';' ||
+            '--font-family-ui: system-ui;';
 
             l_fluid_types:=getFluidTypes(C.min_font_size, C.min_width_px, C.min_scale, C.max_font_size, C.max_width_px, C.max_scale);
-
-            l_root_css:=l_root_css ||
-            ':root {' ||
-                '-webkit-text-size-adjust: none;' ||
-                'text-size-adjust: none;' ||
-                '--color-bg: #fffefd;' ||
-                '--color-bg-accent: #f7f5f5;' ||
-                '--color-bg-code: #0f172a;' ||
-                '--color-text: #020617;' ||
-                '--color-text-accent: #334155;' ||
-                '--color-text-code: #f1f5f9;' ||
-                '--color-link: #2563eb;' ||
-                '--color-link-hover: #ec4899;' ||
-                '--color-theme: #ffedd5;' ||
-                '--color-theme-muted: #fff5e7;' ||
-                '--color-theme-accent: #fed7aa;' ||
-                '--color-theme-offset: #ef4444;' ||
-                '--focus-outline: 2px solid var(--color-link);';
-                
             FOR i IN 1..l_fluid_types.COUNT LOOP
-                l_root_css:=l_root_css || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
+                l_tokens:=l_tokens || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
             END LOOP;
-            
-            l_root_css:=l_root_css || 
-                '--font-family-ui: system-ui;';
-            
-            FOR C1 IN (
-                SELECT wf.context, f.family, f.variable
-                  FROM font f, website_font wf
-                 WHERE f.id=wf.font_id
-                   AND wf.website_id=pWebsiteId
-                 ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
-            ) LOOP
-                l_variable:=C1.variable;
-                l_root_css:=l_root_css || 
-                '--font-family-' || C1.context || ':"' || C1.family || '",system-ui;';
-            END LOOP;
-            
-            l_root_css:=l_root_css || 
-            '--max-width: ' || C.max_width || ';' || 
-            '--img-border-radius: ' || C.img_border_radius || ';' ||
-            '--logo-img-inline-size: ' || 'var(' || C.logo_img_inline_size || ');' ||
-            '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
-            '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
-            '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');' ||
-            '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
-
-            /*
-            ** CREATE CUSTOM VARIABLES FOR ALL FONT AXES
-            */
-            IF (pEnv='editor') THEN
-                FOR C1 IN (
-                    SELECT REPLACE(m.axis,'ital','style') axis, NVL(fa.value,m.default_value) value
-                      FROM font_metadata m, font_axes_value fa
-                     WHERE fa.website_id(+)=pWebsiteId
-                       AND fa.axis(+)=m.axis
-                       AND fa.context(+)='logo'
-                     ORDER BY axis
-                ) LOOP
-                    -- ital custom variable depends on whether font is variable
-                    l_root_css:=l_root_css || 
-                    '--logo-font-' || C1.axis || ': ';
-                    IF (C1.axis='style') THEN
-                        l_root_css:=l_root_css || 
-                        CASE C1.value WHEN 0 THEN 'normal' WHEN 1 THEN 'italic' END;
-                    ELSE
-                        l_root_css:=l_root_css || 
-                        C1.value;
-                    END IF;
-                    l_root_css:=l_root_css || ';';
-                    IF (C1.axis<>'style') THEN
-                        l_font_variation_settings:=l_font_variation_settings ||
-                        '"' || C1.axis || '" var(--logo-font-' || C1.axis || '),';
-                    END IF;
-                END LOOP;
-                l_root_css:=l_root_css ||
-                '--font-variation-settings: ' || RTRIM(l_font_variation_settings,',') || ';';
-            ELSE
-                FOR C1 IN (
-                    SELECT context, axis, value
-                      FROM font_axes_value
-                     WHERE website_id=pWebsiteId 
-                ) LOOP
-                    l_root_css:=l_root_css || 
-                    '--' || C1.context || '-font-' || C1.axis || ': ' || C1.value || ';';
-                END LOOP;
-            END IF;
-
-            l_root_css:=l_root_css || 
-            '}';
         END LOOP;
 
+        -- BUILD @FONT-FACE RULES AND font-family token FOR EACH CONTEXT/FONT
+        FOR C IN (
+            SELECT wf.context, wf.editor_fontfaces, f.family
+              FROM font f, website_font wf
+             WHERE f.id=wf.font_id
+               AND wf.website_id=pWebsiteId
+             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
+        ) LOOP
+            l_tokens:=l_tokens || 
+            '--font-family-' || C.context || ':"' || C.family || '",system-ui;';
+        END LOOP;
+
+        RETURN (l_tokens);
+    END;
+    
+    /*
+    **  BUILD COLOUR TOKENS
+    */
+    FUNCTION getColours RETURN VARCHAR2 IS
+    BEGIN
+        RETURN(
+            '--color-bg: #fffefd;' ||
+            '--color-bg-accent: #f7f5f5;' ||
+            '--color-bg-code: #0f172a;' ||
+            '--color-text: #020617;' ||
+            '--color-text-accent: #334155;' ||
+            '--color-text-code: #f1f5f9;' ||
+            '--color-link: #2563eb;' ||
+            '--color-link-hover: #ec4899;' ||
+            '--color-theme: #ffedd5;' ||
+            '--color-theme-muted: #fff5e7;' ||
+            '--color-theme-accent: #fed7aa;' ||
+            '--color-theme-offset: #ef4444;'
+        );
+    END;
+
+    FUNCTION getDarkTheme RETURN VARCHAR2 IS
+        l_css VARCHAR2(2000);
+    BEGIN
         FOR i IN 1..2 LOOP
             IF (i=1) THEN
-                l_root_css:=l_root_css || 
+                l_css:=l_css || 
                 '[data-appearance=dark] {';
             ELSE
-                l_root_css:=l_root_css || 
+                l_css:=l_css || 
                 '@media (prefers-color-scheme: dark) {' ||
                     ':root:not([data-appearance]) {';
             END IF;
-            l_root_css:=l_root_css || 
+            l_css:=l_css || 
                 '--color-bg:#020617;' ||
                 '--color-bg-accent: #0f172a;' ||
                 '--color-bg-code: #0f172a;' ||
@@ -257,20 +173,200 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             '}' || CASE WHEN i=2 THEN '}' END;
         END LOOP;
 
-        l_css:=l_fontfaces || l_root_css;
+        RETURN(l_css);
+    END;
+
+    /*
+    **  BUILD EDITOR SITE FONT-FACE RULES
+    */
+    FUNCTION getEditorFontfaces(pWebsiteid IN website.id%type) RETURN VARCHAR2 IS
+        l_fontfaces VARCHAR2(4000);
+    BEGIN
+        FOR C IN (
+            SELECT wf.editor_fontfaces
+              FROM font f, website_font wf
+             WHERE f.id=wf.font_id
+               AND wf.website_id=pWebsiteId
+             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
+        ) LOOP
+            l_fontfaces:=l_fontfaces || C.editor_fontfaces;
+        END LOOP;
+        RETURN (l_fontfaces);
+    END;
+
+    /*
+    **  BUILD LIVE SITE FONT-FACE RULES FROM TEMPORARY TABLE
+    */
+    FUNCTION getLiveFontfaces RETURN VARCHAR2 IS
+        l_fontfaces VARCHAR2(4000);
+    BEGIN
+        FOR C IN (
+            SELECT fontface
+              FROM website_fontfiles_temp
+        ) LOOP
+            l_fontfaces:=l_fontfaces || C.fontface;
+        END LOOP;
+        RETURN (l_fontfaces);
+    END;
+
+    /* 
+    ** BUILD FONT-FACE RULES AND DESIGN TOKENS FOR EDITOR SITE
+    */
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type) IS
+        l_font_variation_settings VARCHAR2(4000);
+        l_root_css CLOB;
+        l_css website.css%type;
+        l_sha1 website_cssfiles_temp.sha1%type;
+    BEGIN
+        l_root_css:=
+        ':root {' ||
+            getColours ||
+            getTypography(pWebsiteid) ||
+            '-webkit-text-size-adjust: none;' ||
+            'text-size-adjust: none;' ||
+            '--focus-outline: 2px solid var(--color-link);';
+
+        -- USERS CHOOSE FROM 3 DIFFERENT LOGO OPTIONS - IMAGE, SVG AND FONT
+        FOR C IN (
+            SELECT w.logo_type,
+                    w.logo_img_inline_size, w.logo_img_border_radius, w.logo_img_corner_shape,
+                    w.logo_svg_inline_size,
+                    w.logo_font_size
+              FROM website w
+             WHERE w.id=pWebsiteId
+            )
+        LOOP
+            l_root_css:=l_root_css || 
+            '--logo-img-inline-size: ' || 'var(' || C.logo_img_inline_size || ');' ||
+            '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
+            '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
+            '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');' ||
+            '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
+        END LOOP;
+
+        /*
+        ** CREATE CUSTOM VARIABLES FOR ALL AVAILABLE FONT AXES
+        */
+        FOR C IN (
+            SELECT wf.context, REPLACE(m.axis,'ital','style') axis, NVL(fa.value,m.default_value) value,
+                    ROW_NUMBER() OVER (PARTITION BY wf.context ORDER BY REPLACE(m.axis,'ital','style') ) rn,
+                    COUNT(*) OVER (PARTITION BY wf.context) nb
+              FROM website_font wf, font_metadata m, font_axes_value fa
+             WHERE wf.website_id=pWebsiteId
+               AND fa.website_id(+)=wf.website_id
+               AND fa.axis(+)=m.axis
+               AND fa.context(+)=wf.context
+             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), axis
+        ) LOOP
+            -- ital custom variable depends on whether font is variable
+            l_root_css:=l_root_css || 
+            '--' || C.context || '-font-' || C.axis || ': ';
+            IF (C.axis='style') THEN
+                l_root_css:=l_root_css || 
+                CASE C.value WHEN 0 THEN 'normal' WHEN 1 THEN 'italic' END;
+            ELSE
+                l_root_css:=l_root_css || 
+                C.value;
+            END IF;
+            l_root_css:=l_root_css || ';';
+            IF (C.axis<>'style') THEN
+                l_font_variation_settings:=l_font_variation_settings ||
+                '"' || C.axis || '" var(--' || C.context || '-font-' || C.axis || '),';
+            END IF;
+
+            IF (C.rn=C.nb) THEN
+                l_root_css:=l_root_css ||
+                '--' || C.context || '-font-variation-settings: ' || RTRIM(l_font_variation_settings,',') || ';';
+                l_font_variation_settings:=null;
+            END IF;
+        END LOOP;
+
+        l_root_css:=l_root_css ||
+        '}';
+        
+        /*
+        l_root_css:=l_root_css || 
+        '--img-border-radius: ' || C.img_border_radius || ';';
+        */
+
+        l_root_css:=l_root_css ||
+        getDarkTheme;
+
+        l_css:=getEditorFontfaces(pWebsiteid) || l_root_css;
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
 
-        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES ('css/website-styles.min.css', l_sha1, l_css);
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME, l_sha1, l_css);
+    END;
 
-/*
-        l_css:=l_fontfaces || l_root_css;
-        UPDATE website 
-           SET css=l_css, 
-               css_updated_date=current_timestamp
-         WHERE id=pWebsiteid
-           AND (dbms_lob.compare(css,l_css)<>0 OR css IS NULL);
-*/
+    /*
+    ** FONT-FACE RULES AND TOKENS FOR LIVE SITE
+    ** FONTS ARE DEFINED IN TEMPORARY TABLE
+    */
+    PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type) IS
+        l_root_css CLOB;
+        l_css CLOB;
+        l_sha1 website_cssfiles_temp.sha1%type;
+    BEGIN
+        l_root_css:=
+        ':root {' ||
+            getColours ||
+            getTypography(pWebsiteid) ||
+            '-webkit-text-size-adjust: none;' ||
+            'text-size-adjust: none;' ||
+            '--focus-outline: 2px solid var(--color-link);';
+        
+        -- CONFIGURE ANY SELECTED LOGO OPTION
+        FOR C IN (
+            SELECT w.logo_type,
+                    w.logo_img_inline_size, w.logo_img_border_radius, w.logo_img_corner_shape,
+                    w.logo_svg_inline_size,
+                    w.logo_font_size
+              FROM website w
+             WHERE w.id=pWebsiteId
+               AND w.logo_type IS NOT NULL
+            )
+        LOOP
+            CASE C.logo_type
+                WHEN 'img' THEN
+                    l_root_css:=l_root_css || 
+                    '--logo-img-inline-size: ' || 'var(' || C.logo_img_inline_size || ');' ||
+                    '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
+                    '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';';
+                WHEN 'svg' THEN
+                    l_root_css:=l_root_css || 
+                    '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');';
+                WHEN 'font' THEN
+                    l_root_css:=l_root_css || 
+                    '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
+            END CASE;
+        END LOOP;
+
+        FOR C IN (
+            SELECT wf.context, fav.axis, fav.value,
+                    ROW_NUMBER() OVER (PARTITION BY wf.context ORDER BY fav.axis ) rn,
+                    COUNT(*) OVER (PARTITION BY wf.context) nb
+              FROM website_font wf, font_axes_value fav
+             WHERE wf.website_id=pWebsiteid
+               AND fav.website_id=wf.website_id
+               AND fav.context=wf.context
+             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), axis
+        ) LOOP
+            l_root_css:=l_root_css || 
+            '--' || C.context || '-font-' || C.axis || ': ' || C.value || ';';
+        END LOOP;
+
+        l_root_css:=l_root_css ||
+        '}';
+
+        l_root_css:=l_root_css ||
+        getDarkTheme;
+
+        l_css:=getLiveFontfaces || l_root_css;
+
+        l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
+
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME, l_sha1, l_css);
     END;
 
 end;
