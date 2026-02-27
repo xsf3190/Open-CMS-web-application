@@ -272,6 +272,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_logo_font_size website.logo_font_size%type;
         l_logo_font_text website.logo_font_text%type;
         l_maxchars user_tab_columns.data_length%type;
+        l_family font.family%type;
     BEGIN
         pHeader:='<span>Create Website Logo using selected font</span>';
 
@@ -283,6 +284,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
            AND wf.context(+)='logo'
            AND c.table_name='WEBSITE'
            AND c.column_name='LOGO_FONT_TEXT';
+
+        FOR C IN (
+            SELECT family FROM font WHERE id=l_font_id
+        ) LOOP
+            l_family:=C.family;
+        END LOOP;
 
         pArticle:=
         '<fieldset class="flow">' ||
