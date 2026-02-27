@@ -58,6 +58,7 @@ export const init = async (element) => {
 			TableColumnResize,
 			TableProperties, 
 			TableToolbar,
+            TextPartLanguage,
             Underline, 
             WordCount
             } = await import(CK_JS)
@@ -202,33 +203,6 @@ export const init = async (element) => {
         }
     }
 
-    /* Add "List Images" button to toolbar */
-    class SelectFonts extends Plugin {
-        init() {
-            const editor = this.editor;
-            editor.ui.componentFactory.add( 'selectFonts', () => {
-                const button = new ButtonView();
-                button.set( {
-                    label: 'Google Fonts',
-                    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M11.03 3h6.149a.75.75 0 1 1 0 1.5h-5.514zm1.27 3h4.879a.75.75 0 1 1 0 1.5h-4.244zm1.27 3h3.609a.75.75 0 1 1 0 1.5h-2.973zm-2.754 2.5L8.038 4.785 5.261 11.5zm.62 1.5H4.641l-1.666 4.028H1.312l5.789-14h1.875l5.789 14h-1.663z"/></svg>',
-                    tooltip: 'Google Fonts',
-                    withText: false
-                } );
-                button.on('execute', (_) => {
-                    import("deploy_fonts")
-                    .then((module) => {
-                        module.init();
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        console.error("Failed to load module deploy_fonts");
-                    });
-                });
-                return button;
-            } );
-        }
-    }
-
     /*
     function CustomTitleExtension(editor) {
         editor.model.schema.addAttributeCheck((context, attributeName) => {
@@ -275,10 +249,11 @@ export const init = async (element) => {
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
                     Italic, Link, LinkImage, List, ListImages, Paragraph, 
-                    SelectAll, SelectFonts, ShowBlocks, 
+                    SelectAll, ShowBlocks, 
                     Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar,
+                    TextPartLanguage,
                     Underline, UploadImage, UploadImages, UploadPdf, UploadZip, WordCount ],
-        toolbar: [ 'heading', '|', 'undo', 'redo',  '|',  'selectFonts', 'bold', 'italic', 'fontSize', 'fontColor', 'fontBackgroundColor',
+        toolbar: [ 'heading', '|', 'undo', 'redo',  '|',  'bold', 'italic', 'textPartLanguage', 'fontSize', 'fontColor', 'fontBackgroundColor',
                     '|', 'link', 
                     '|', 'uploadImage', 
                     {
@@ -334,6 +309,16 @@ export const init = async (element) => {
                 'linkImage'
             ]
         },
+        language: {
+			textPartLanguage: [
+                { title: 'Dutch', languageCode: 'nl' },
+				{ title: 'French', languageCode: 'fr' },
+				{ title: 'German', languageCode: 'de' },
+                { title: 'Hungarian', languageCode: 'hu' },
+                { title: 'Russian', languageCode: 'ru' },
+				{ title: 'Spanish', languageCode: 'es' }
+			]
+		},
         link: {
             decorators: {
                 toggleDownloadable: {
