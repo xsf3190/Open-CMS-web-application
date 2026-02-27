@@ -22,8 +22,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
      --
     PROCEDURE deployLiveSite(pWebsiteid IN website.id%type);
     --
-    PROCEDURE logDeployment(pWebsiteId IN website.id%type, pSiteId IN website_deploy.site_id%type, pMessage IN VARCHAR2, pStatus IN VARCHAR2 DEFAULT 'OK', pLogTime IN TIMESTAMP DEFAULT current_timestamp);
-    --
     PROCEDURE runDelete(pUserId IN users.id%type, pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type);
     --
     PROCEDURE runDeployment(pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2);
@@ -145,13 +143,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type) IS
     BEGIN        
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId;
-
+        
         FOR C IN (
             SELECT netlify_site_id
               FROM website 
              WHERE id=pWebsiteid
         ) LOOP
-            DELETE website_deploy WHERE website_id=pWebsiteId AND site_id=C.netlify_site_id;
+            pck_css.buildEditorTokens(pWebsiteid);
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
         END LOOP;
@@ -171,7 +169,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ** All other files are "copied" from editor site
         */
         pck_fonts.getFontFiles(pWebsiteid);
-        pck_css.buildWebsiteCss(pWebsiteid, 'live');
+        pck_css.buildLiveTokens(pWebsiteid);
 
         -- Temporary table website_fontfiles populated by pck_fonts procedure
 
@@ -234,15 +232,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_sha256:=dbms_crypto.hash(src=>pContent, typ=>dbms_crypto.hash_sh256);
         RETURN ('sha256-' || utl_raw.cast_to_varchar2(utl_encode.base64_encode(l_sha256)));
     END;
-
-    /*
-    **  Insert row in website_deploy logging table
-    */      
-    PROCEDURE logDeployment(pWebsiteId IN website.id%type, pSiteId IN website_deploy.site_id%type, pMessage IN VARCHAR2, pStatus IN VARCHAR2 DEFAULT 'OK', pLogTime IN TIMESTAMP DEFAULT current_timestamp) IS 
-    BEGIN
-        INSERT INTO website_deploy(id, website_id, site_id, message, status, log_time) VALUES (seq_log.nextval, pWebsiteId, pSiteId, pMessage, pStatus, pLogTime);
-        COMMIT;
-    END; 
 
     /*
     **  Determine whether editor (TEST) website can be deployed based on different source data last update dates
@@ -895,7 +884,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
             /* NEED THIS FOR ASYNC DEPLOYMENT STATUS MONITORING */
             UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=pWebsiteId;
-            COMMIT;
 
             FOR C IN (
                 SELECT id, sha1 
@@ -903,7 +891,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                  WHERE sha1 IS NOT NULL
             ) LOOP
                 dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
-                logDeployment(pWebsiteId, pSiteId, 'Uploading ' || l_deploy_files(C.sha1).file_name);
                 IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
                     pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
                 ELSIF (l_deploy_files(C.sha1).file_content_b IS NOT NULL) THEN
@@ -982,7 +969,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /* ENSURE CORRECT INTEGRITY VALUE INCLUDED IN ALL HTML FILES */
             DELETE website_files WHERE website_id=pWebsiteid AND site_id=pSiteid AND mime_type='html';
 
-            logDeployment(pWebsiteId, pSiteId, 'Download JAVASCRIPT - '|| C.deploy_filename);
             addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
         END LOOP;
 
@@ -1010,7 +996,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
 
             IF (C.file_content IS NOT NULL) THEN
-                logDeployment(pWebsiteId, pSiteId, 'Download IMAGE - ' || C.deploy_filename);
                 addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
             END IF;
         END LOOP;
@@ -1045,7 +1030,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
 
             IF (C.file_content IS NOT NULL) THEN
-                logDeployment(pWebsiteId, pSiteId, 'Download IMAGE - ' || C.deploy_filename);
                 addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
             END IF;
         END LOOP;
@@ -1078,7 +1062,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
 
             IF (C.src_url IS NOT NULL) THEN
-                logDeployment(pWebsiteId, pSiteId, 'Download IMAGE - ' || C.deploy_filename);
                 l_blob_download:=apex_web_service.make_rest_request_b(p_url=>C.src_url, p_http_method=>'GET');
                 addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_blob_download);
             END IF;
@@ -1139,9 +1122,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         
         
         /*
-        **  5. Build CSS files - core, ckeditor and website-specific styles
+        **  5. Build CSS files
         */
-        pck_css.buildWebsiteCss(pWebsiteid,'editor'); -- sets website.css_updated_date
+        
 
         FOR C IN (
             WITH source AS
@@ -1156,9 +1139,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                  WHERE application_id=101
                    AND file_name='ckeditor.min.css'
                 UNION ALL
-                SELECT '/css/website-styles.min.css', css, css_updated_date
-                  FROM website
-                 WHERE id=pWebsiteid
+                SELECT path, content, current_timestamp
+                  FROM website_cssfiles_temp
             )
             SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
@@ -1172,8 +1154,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_files.put(C.deploy_filename, C.sha1);
                 CONTINUE;
             END IF;
-
-            logDeployment(pWebsiteId, pSiteId, 'Download CSS - '|| C.deploy_filename);
             addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
         END LOOP;
 
@@ -1204,7 +1184,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END IF;
             END IF;
 
-            logDeployment(pWebsiteId, pSiteId, 'Download CONTENT SECURITY HEADERS - '|| C.deploy_filename);
             addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
         END LOOP;
 
@@ -1255,7 +1234,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (C.build=0) THEN
                 l_files.put(C.deploy_filename, C.sha1);
             ELSE
-                logDeployment(pWebsiteId, pSiteId, 'Download SITEMAP.XML - '|| C.deploy_filename);
                 addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.sitemap);
             END IF;
         END LOOP;
@@ -1281,7 +1259,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (C.build=0) THEN
                 l_files.put(C.deploy_filename, C.sha1);
             ELSE
-                logDeployment(pWebsiteId, pSiteId, 'Download robots.txt');
                 addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
             END IF;
         END LOOP;
@@ -1309,11 +1286,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         UPDATE website
            SET netlify_last_published=current_timestamp
          WHERE id=pWebsiteId;
-
-        EXCEPTION
-            WHEN OTHERS THEN
-                logDeployment(pWebsiteId, pSiteId, SUBSTR(SQLERRM,1,100),'NOK');
-                pck_core.log_error;
     END;
 
     /*
