@@ -4,7 +4,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
     --
-    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER);
+    PROCEDURE getFonts(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER);
     --
     FUNCTION getLanguage(pLanguageCode IN VARCHAR2) RETURN CLOB;
     --
@@ -12,8 +12,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE loadGoogleFontMetadata;
     --
-    PROCEDURE updateFont(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    FUNCTION buildApiUrl(pWebsiteid IN website.id%type, pFontid IN font.id%type, pDefaultWght IN NUMBER)  RETURN JSON_ARRAY_T;
 end "PCK_FONTS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
@@ -404,7 +405,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  BUILD HTML FORM TO SELECT WEBSITE FONTS
     */
-    PROCEDURE getHTML(pWebsiteId IN website.id%type, pArticleId IN article.id%type) IS
+    PROCEDURE getHTML(pWebsiteId IN website.id%type) IS
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
@@ -598,14 +599,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  BUILD OPENING DIALOG CONTENT OR LIST OF FONT FAMILIES FOR A SELECTED CATEGORY
     */
-    PROCEDURE getFonts(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER) IS
+    PROCEDURE getFonts(pWebsiteId IN website.id%type, pContext IN website_font.context%type, pCategory IN font.category%type, pStatus IN OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_html CLOB;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         IF (pContext='HTML') THEN
-            getHTML(pWebsiteId, pArticleId);
+            getHTML(pWebsiteId);
         ELSE
             getFontsInCategory(pCategory);
         END IF;
@@ -617,18 +618,106 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /* 
-    **  USER SELECTS A NEW FONT
+    **  GET GOGGLE @font-face RULES FOR A FONT / CONTEXT
     */
-    PROCEDURE updateFont(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+    FUNCTION getFontfaces(pWebsiteid IN website.id%type, pFontid IN font.id%type, pApiurl IN VARCHAR2) RETURN JSON_ARRAY_T
+    IS 
+        l_fontfaces CLOB;
+        l_api_url VARCHAR2(500);
+        l_fontfaces_json JSON_ARRAY_T;
+        l_fontface JSON_OBJECT_T;
+        n PLS_INTEGER;
+    BEGIN
+        FOR C IN (
+            SELECT w.language_code, f.family 
+              FROM website w, font f 
+             WHERE w.id=pWebsiteid
+               AND f.id=pFontid
+        ) LOOP
+            l_api_url:='https://fonts.googleapis.com/css2?family=' || 
+                C.family || ':' || 
+                pApiurl || 
+                '&text=' || pck_fonts.getLanguage(C.language_code);
+        END LOOP;
+            
+        pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
+
+        UPDATE website_font SET editor_fontfaces=l_fontfaces WHERE website_id=pWebsiteid AND font_id=pFontid;
+
+        -- Fonts that include italics will be in a separate @font-face
+        --
+        l_fontfaces_json:= new JSON_ARRAY_T;
+        n:=REGEXP_COUNT(l_fontfaces,'@font-face');
+        FOR i IN 1..n LOOP
+            l_fontface:= new JSON_OBJECT_T;
+            l_fontface.put('style',REGEXP_SUBSTR(l_fontfaces,'font-style: (.+?);',1,i,null,1));
+            l_fontface.put('weight',REGEXP_SUBSTR(l_fontfaces,'font-weight: (.+?);',1,i,null,1));
+            l_fontface.put('stretch',REGEXP_SUBSTR(l_fontfaces,'font-stretch: (.+?);',1,i,null,1));
+            l_fontface.put('source',REPLACE(REPLACE(REGEXP_SUBSTR(l_fontfaces,'url(.+?)\)',1,i),'(','("'),')','")'));
+
+            l_fontfaces_json.append(l_fontface);
+        END LOOP;
+        RETURN(l_fontfaces_json);
+    END;
+
+    /*
+    ** Build Google Fonts API url for a given font
+    */
+    FUNCTION buildApiUrl(pWebsiteid IN website.id%type, pFontid IN font.id%type, pDefaultWght IN NUMBER)  RETURN JSON_ARRAY_T
+    IS
+        l_api_url VARCHAR2(500);
+    BEGIN
+        FOR C IN (
+            SELECT variable
+              FROM font
+             WHERE id=pFontid
+        ) LOOP
+            CASE C.variable
+                WHEN 1 THEN
+                    FOR C IN (
+                        SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) ||
+                               '@' AS axes,
+                               LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges
+                          FROM font_axes fa
+                         WHERE fa.font_id=pFontid
+                         GROUP BY fa.font_id
+                    ) LOOP
+                        l_api_url:=l_api_url || C.axes || C.ranges;
+                        IF (INSTR(C.axes,'ital')>0) THEN
+                            l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
+                        END IF;
+                    END LOOP;
+
+                WHEN 0 THEN
+                    FOR C IN (
+                        SELECT wght_normal, wght_italic
+                          FROM font_static_wght
+                         WHERE font_id=pFontid
+                         ORDER BY ABS(wght_normal - pDefaultWght)
+                         FETCH FIRST ROW ONLY
+                    ) LOOP
+                        IF (C.wght_italic IS NOT NULL) THEN
+                            l_api_url:=l_api_url || 'ital,wght@0,' || C.wght_normal || ';1,' || C.wght_normal;
+                        ELSE
+                            l_api_url:=l_api_url || 'wght@' || C.wght_normal;
+                        END IF;
+                    END LOOP;
+            END CASE;
+
+            RETURN (getFontfaces(pWebsiteid, pFontid, l_api_url));
+        END LOOP;
+    END;
+
+    /* 
+    **  USER SELECTS A NEW FONT FOR A CONTEXT
+    */
+    PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_context website_font.context%type;
         l_font_id website_font.font_id%type;
-
+        l_default_wght NUMBER;
         l_json JSON_OBJECT_T;
         l_urls JSON_ARRAY_T;
-        l_font JSON_OBJECT_T;
-        n PLS_INTEGER;
-        
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -641,25 +730,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
          WHERE website_id=pWebsiteId
            AND context=l_context;
 
-        -- getFontFiles(pWebsiteId, pContext=>l_context, pArticleId=>pArticleId);
+        CASE l_context
+            WHEN 'logo' THEN l_default_wght:=400;
+            WHEN 'headings' THEN l_default_wght:=700;
+            WHEN 'text' THEN l_default_wght:=400;
+        END CASE;
+
+        l_urls:=buildApiUrl(pWebsiteid, l_font_id, l_default_wght); 
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-
-        l_urls:= new JSON_ARRAY_T;
-        FOR C IN (
-            SELECT font_family, font_weight, font_stretch, font_style, 'url("' || src_url || '")' src_url
-              FROM website_fontface 
-             WHERE website_id=pWebsiteid 
-               AND context=l_context
-        ) LOOP
-            l_font:= new JSON_OBJECT_T;
-            l_font.put('font_style',C.font_style);
-            l_font.put('font_weight',C.font_weight);
-            l_font.put('font_stretch',C.font_stretch);
-            l_font.put('src_url',C.src_url);
-            l_urls.append(l_font);
-        END LOOP;
         l_json.put('urls',l_urls);
 
         apex_util.prn(l_json.to_clob,false);
