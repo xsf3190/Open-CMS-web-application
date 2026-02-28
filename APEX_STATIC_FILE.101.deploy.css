@@ -904,6 +904,7 @@ dialog > form > header, dialog > form > footer {
     padding-block: 1rem;
     padding-inline: 1.5rem;
     background-color: #e9ecef;
+    font-family: var(--font-family-headings);
 }
 
 dialog > form > article {
@@ -911,6 +912,7 @@ dialog > form > article {
     max-block-size: 100%; /* safari */
     overscroll-behavior-y: contain;
     padding: 2rem;
+    font-family: var(--font-family-text);
 }
 
 dialog hr {
