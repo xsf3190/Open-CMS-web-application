@@ -1,4 +1,6 @@
 /* COMMON ELEMENTS AND FUNCTIONS  USED IN APPLICATION */
+import { callAPI, handleError } from "deploy_callAPI";
+
 export const bodydata = document.body.dataset;
 
 export const dropdown = document.getElementById("menulist");
@@ -63,6 +65,58 @@ export const initDialog = (data) => {
     
     output_dialog.showModal();
 }
+
+/*
+** COMMON ARIA LIVE REGION UPDATE FOR DIALOG FOOTER ELEMENT
+*/
+export const liveRegion = (data) => {
+    const live=dialog_footer.querySelector("[aria-live]");
+    live.replaceChildren();
+    live.insertAdjacentHTML('beforeend',data.message);
+}
+
+/*
+** COMMON FOOTER HANDLING FOR DIALOG ELEMENT
+*/
+export let isSending = false;
+
+export const footerHandler = async (e) => {
+    if (e.target.classList.contains("reload")) {
+        window.location.reload();
+        return;
+    }
+    if (e.target.classList.contains("publish")) {
+        if (isSending) {
+            console.log("Prevent double sends");
+            return;
+        }
+        const live=dialog_footer.querySelector("[aria-live]");
+        const loader = dialog_footer.querySelector(".loader");
+
+        isSending = true;
+        live.textContent = e.target.dataset.processing;
+        loader.style.opacity=1;
+
+        callAPI("publish-website/:ID", "POST", {})
+            .then((data) => {
+                isSending = false;
+                loader.style.opacity=0;        
+                live.replaceChildren();
+                if (data.link) {
+                    live.insertAdjacentHTML('beforeend',data.link);
+                    live.style.color = "green";
+                }
+                if (data.message) {
+                    live.insertAdjacentHTML('beforeend',data.message);
+                    live.style.color = "red";
+                }
+            })
+            .catch((error) => {
+                loader.style.opacity=0;
+                handleError(error);
+            });
+        }
+};
 
 /*
  * DROPDOWN MENU ACTIONS
