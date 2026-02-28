@@ -1,56 +1,13 @@
 /*
 **  WEBSITE LOGO
 */
-import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
+import { dialog_article, dialog_footer, initDialog, footerHandler } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
 let logo_type;
 
 const logo = document.querySelector(".logo");
-
-/*
-**  CLICK PUBLISH BUTTON
-*/
-let isSending = false;
-
-const footerHandler = async (e) => {
-    if (e.target.classList.contains("reload")) {
-        window.location.reload();
-        return;
-    }
-    if (e.target.classList.contains("publish")) {
-        if (isSending) {
-            console.log("Prevent double sends");
-            return;
-        }
-        const live=dialog_footer.querySelector("[aria-live]");
-        const loader = dialog_footer.querySelector(".loader");
-
-        isSending = true;
-        live.textContent = e.target.dataset.processing;
-        loader.style.opacity=1;
-
-        callAPI("publish-website/:ID", "POST", {})
-            .then((data) => {
-                isSending = false;
-                loader.style.opacity=0;        
-                live.replaceChildren();
-                if (data.link) {
-                    live.insertAdjacentHTML('beforeend',data.link);
-                    live.style.color = "green";
-                }
-                if (data.message) {
-                    live.insertAdjacentHTML('beforeend',data.message);
-                    live.style.color = "red";
-                }
-            })
-            .catch((error) => {
-                loader.style.opacity=0;
-                handleError(error);
-            });
-        }
-};
 
 /*
 ** LOAD SELECTED IMAGE
