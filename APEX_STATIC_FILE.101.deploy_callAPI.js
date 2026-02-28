@@ -22,11 +22,11 @@ const handleError = (error) => {
         output_dialog.showModal();
     }
     dialog_article.replaceChildren();
-    let message = "<p>" + error.name + ": " + error.message + "</p>";
+    let message = "<h4>" + error.name + ": " + error.message + "</h4>";
     if (message.includes("Unauthorized")) {
         sessionStorage.clear();
         localStorage.clear();
-        message += "<p>You have to login in again because you have not previously authenticated from this location or device</p>";
+        message += "<p>You have been logged out because you have not previously authenticated from this location or device</p>";
         output_dialog.querySelector(".close").classList.add("reload");
     }
     dialog_article.insertAdjacentHTML('afterbegin',message);
@@ -40,6 +40,7 @@ const handleError = (error) => {
 */
 const expiredToken = (token) => {
     if (!token) {
+        console.log("token missing");
         return true;
     }
     const now = Math.floor(new Date().getTime() / 1000);
