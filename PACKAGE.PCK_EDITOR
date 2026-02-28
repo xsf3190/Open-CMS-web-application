@@ -208,7 +208,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         '<legend>Excerpt (maximum 160 characters)</legend>' ||
                         '<textarea name="excerpt" style="min-width:50%" maxlength="160">' || C.excerpt || '</textarea>' ||
                     '</fieldset>' ||
-                    '<fieldset>' ||
+                    '<fieldset style="--flex-direction:column">' ||
                         '<legend>Link to related '|| C.navigation_label || 's</legend>' ||
                         '<p><a href="#skip">Skip to next</a></p>' ||
                             getLinkOptions(C.parent_id, pArticleId) ||
