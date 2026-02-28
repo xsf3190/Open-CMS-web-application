@@ -50,7 +50,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
         l_chars:=UNISTR(l_text);
         l_urlencoded:=utl_url.escape(l_chars,TRUE,'UTF-8');
-        UPDATE language SET urlencoded=l_urlencoded, character_count=LENGTH(l_chars) WHERE code=pLanguageCode;
+        UPDATE language SET urlencoded=l_urlencoded, characters=l_chars WHERE code=pLanguageCode;
         RETURN (l_urlencoded);
     END;
 
@@ -416,118 +416,112 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_selected VARCHAR2(9);
         l_styles VARCHAR2(100);
         
-        TYPE tt_font_category IS RECORD(
-            value VARCHAR2(11),
-            label  VARCHAR2(30)
-        );
-        TYPE t_font_category IS TABLE OF tt_font_category INDEX BY PLS_INTEGER;
-        l_font_categories t_font_category:=
-            t_font_category(
-                1=>tt_font_category('display','display'), 
-                2=>tt_font_category('handwriting','handwriting'), 
-                3=>tt_font_category('monospace','monospace'), 
-                4=>tt_font_category('sans-serif','sans-serif'), 
-                5=>tt_font_category('serif','serif'), 
-                6=>tt_font_category('variable','variable fonts'), 
-                7=>tt_font_category('italic','fonts with italics')
-            );
+        TYPE t_context IS VARRAY(3) OF VARCHAR2(30);
+        l_contexts t_context:=t_context('logo','headings','text');
+
+        TYPE t_font_category IS VARRAY(5) OF VARCHAR2(30);
+        l_font_categories t_font_category:=t_font_category('display','monospace','handwriting','serif','sans-serif');
     BEGIN
-        l_header:='<small>Select complementary fonts for headings and text</small>';
-
-        l_article:=
-        '<div class="flex-items" style="--flex-gap:.5em;--flex-direction:column;--flex-vertical-alignment:flex-start">';        
-
         FOR C IN (
-            SELECT wf.font_id, wf.context, f.category, f.family, f.variable, f.italic
-              FROM website_font wf, font f
-             WHERE wf.website_id=pWebsiteId
-               AND wf.font_id=f.id 
-             ORDER BY context
+            SELECT COUNT(*) total, MAX(last_modified) last_modified
+            FROM font
         ) LOOP
-            l_article:=l_article ||
-            '<details open><summary>' || INITCAP(C.context) || '</summary>' ||
-            '<fieldset class="flex-items" style="--flex-gap:1em;--flex-direction:row;inline-size:100%;">' ||
-                --'<legend>' || INITCAP(C.context) || '</legend>' ||
-                
-                '<div>' ||
-                    '<label for="' || C.context || '-font-category">Category</label>' ||
-                    '<select id="' || C.context || '-font-category">' ||
-                        '<button>' ||
-                          '<selectedcontent></selectedcontent>' ||
-                          '<span class="arrow"></span>' ||
-                        '</button>';
-
-            FOR i IN l_font_categories.FIRST .. l_font_categories.LAST
-            LOOP
-                IF (l_font_categories(i).value=C.category)  THEN 
-                    l_selected:=' selected';
-                ELSE
-                    l_selected:=null;
-                END IF;
-                IF (l_font_categories(i).value='handwriting') THEN 
-                    l_styles:='font-family:cursive';
-                ELSIF (l_font_categories(i).value='display') THEN
-                    l_styles:='font-family:system-ui;font-weight:500;font-stretch:120%';
-                ELSE
-                    l_styles:='font-family:' || l_font_categories(i).value;
-                END IF;
-                l_article:=l_article || 
-                        '<option style="' || l_styles || '" value="' || l_font_categories(i).value || '"' || l_selected || '>' ||
-                            l_font_categories(i).label ||
-                        '</option>';
-            END LOOP;
-            
-            l_article:=l_article || 
-                    '</select>' ||
-                '</div>';
-
-            /* Fonts in category */
-            l_article:=l_article || 
-                '<div>' ||
-                    '<label for="' || C.context || '-font-family">Font Name</label>' ||
-                    '<select id="' || C.context || '-font-family">' ||
-                        '<button>' ||
-                          '<selectedcontent></selectedcontent>' ||
-                          '<span class="arrow"></span>' ||
-                        '</button>';
-            
-            FOR C1 IN (SELECT id, family FROM font WHERE category=C.category ORDER BY 2)
-            LOOP
-                l_article:=l_article || 
-                '<option value="' || TO_CHAR(C1.id) || '"'|| CASE WHEN C1.id=C.font_id THEN ' selected' END || '>' ||
-                    C1.family ||
-                '</option>';
-            END LOOP;
-            l_article:=l_article || 
-                    '</select>' ||
-                '</div>' ||
-                '<span class="loader icon"></span>'; 
-            /*
-            IF (C.variable=1) THEN
-                l_article:=l_article ||
-                '<button type="button" class="button" style="anchor-name:--' || C.context || '-axes" popovertarget="' || C.context || '-axes' || '">Font Settings</button>' ||
-                '<div popover id="' || C.context || '-axes" style="position-anchor:--' || C.context || '-axes">Hello Axes</div>';
-            END IF;
-            */
-            l_article:=l_article ||
-            '</fieldset>' ||
-            '</details>';
-        END LOOP;
-
-        FOR C IN (
-            SELECT MAX(DECODE(variable,1,nb)) nb_variable, SUM(nb) total, MAX(last_modified) last_modified
-            FROM
-                (
-                    SELECT variable,COUNT(*) nb, MAX(last_modified) last_modified FROM font GROUP BY  variable
-                )
-        ) LOOP
-            l_footer:=
+            l_header:=
             '<a class="icon-with-text" href="https://fonts.google.com" target="a_blank" aria-label="Search on Google Fonts">' ||
 				'<svg width="1em" height="1em" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376C296.3 401.1 253.9 416 208 416 93.1 416 0 322.9 0 208S93.1 0 208 0 416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>' ||
 				'<small>' || C.total || ' Google fonts as of '|| TO_CHAR(C.last_modified, 'dd Mon yyyy') || '</small>' ||
-			'</a>' ||
-            '<small>' || C.nb_variable || ' Variable ' || TO_CHAR(C.total-C.nb_variable) || ' Static</small>';
+			'</a>';
         END LOOP;
+
+        l_article:=
+        '<fieldset class="flex-items">' ||
+            '<legend>Change context</legend>';
+        FOR i IN 1..l_contexts.COUNT LOOP
+            l_article:=l_article || 
+            '<span>' ||
+		        '<input type="radio" name="context" id="' || l_contexts(i) || '"' || CASE WHEN l_contexts(i)='text' THEN ' checked' END || '>' ||
+		        '<label for="' || l_contexts(i) || '">' || INITCAP(l_contexts(i)) || '</label>' ||
+			'</span>';
+        END LOOP;
+        l_article:=l_article || 
+        '</fieldset>';
+
+        FOR C IN (
+            SELECT wf.font_id, wf.context, f.category, f.family, f.bold, f.italic, f.variable, f.color
+              FROM website_font wf, font f
+             WHERE wf.website_id=pWebsiteId
+               AND wf.font_id=f.id 
+               AND wf.context='text'
+        ) LOOP
+            l_article:=l_article || 
+            '<fieldset class="flex-items">' ||
+                '<legend>Select category</legend>';
+            FOR i IN 1..l_font_categories.COUNT LOOP
+                l_article:=l_article || 
+                '<span>' ||
+    		        '<input type="radio" name="category" id="' || l_font_categories(i) || '"' || CASE WHEN l_font_categories(i)=C.category THEN ' checked' END || '>' ||
+    		        '<label for="' || l_font_categories(i) || '">' || INITCAP(l_font_categories(i)) || '</label>' ||
+    			'</span>';
+            END LOOP;
+            l_article:=l_article || 
+            '</fieldset>';
+
+        
+            l_article:=l_article ||
+            '<fieldset class="flex-items">' ||
+                '<legend>Design features</legend>' ||
+                '<span>' ||
+    		        '<input type="checkbox" id="bold"' || CASE WHEN C.bold=1 THEN ' checked' END || '>' ||
+    		        '<label for="bold">Bold</label>' ||
+    			'</span>' ||
+                '<span>' ||
+    		        '<input type="checkbox" id="italic"' || CASE WHEN C.italic=1 THEN ' checked' END || '>' ||
+    		        '<label for="bold">Italic</label>' ||
+    			'</span>' ||
+                '<span>' ||
+    		        '<input type="checkbox" id="variable"' || CASE WHEN C.variable=1 THEN ' checked' END || '>' ||
+    		        '<label for="variable">Finesse</label>' ||
+    			'</span>' ||
+                '<span>' ||
+    		        '<input type="checkbox" id="color"' || CASE WHEN C.color=1 THEN ' checked' END || '>' ||
+    		        '<label for="color">Color</label>' ||
+    			'</span>' ||
+            '</fieldset>';
+
+            /* Fonts in category */
+            l_article:=l_article || 
+            '<div>' ||
+                '<label for="family">Select font</label>' ||
+                '<select id="family">' ||
+                    '<button>' ||
+                        '<selectedcontent></selectedcontent>' ||
+                        '<span class="arrow"></span>' ||
+                    '</button>';
+            
+            FOR C1 IN (
+                SELECT id, family 
+                  FROM font 
+                 WHERE category=C.category
+                   AND bold=C.bold
+                   AND italic=C.italic
+                   AND variable=C.variable
+                   AND color=C.color
+                 ORDER BY 2
+            ) LOOP
+                l_article:=l_article || 
+                    '<option value="' || TO_CHAR(C1.id) || '"'|| CASE WHEN C1.id=C.font_id THEN ' selected' END || '>' || C1.family || '</option>';
+            END LOOP;
+            l_article:=l_article || 
+                '</select>' ||
+            '</div>';
+        END LOOP;
+
+        l_footer:=
+        '<div class="flex-items">' ||
+            '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' || 'PUBLISH' || '</button>' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>' ||
+        '</div>';
 
         /*
         ** RETURN DIALOG CONTENTS TO CLIENT 
@@ -751,7 +745,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    **  Load Google font metadata into FONT table. WOFF2 only. STATIC and VARIABLE. 
+    **  Load Google font details into FONT table. WOFF2 only. STATIC and VARIABLE. 
     */
     PROCEDURE loadGoogleFonts IS 
         l_clob CLOB;
@@ -818,18 +812,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             colorCapabilities
         FROM data2;
 
+        /* Delete any previously uploaded fonts no longer on Google */
+        FOR C IN (
+            SELECT COUNT(google),family
+            FROM
+            (
+            SELECT 1 google, TO_NUMBER(null) dogface, family FROM google_font
+            UNION ALL
+            SELECT TO_NUMBER(null),1, family FROM font
+            )
+           GROUP BY family
+            HAVING COUNT(google)=0
+        ) LOOP
+            pck_core.log('Deleting font no longer supported by Google: ' || C.family);
+            DELETE font WHERE family=C.family;
+        END LOOP;
+
         /* Update font table from staging table */
         MERGE INTO font t
         USING
         (
-            SELECT family, category, lastmodified, menu, colorcapabilities, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes
+            SELECT family, category, lastmodified, menu, INSTR(colorcapabilities,'COLRv1') color, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes
             FROM google_font
         ) s
         ON (t.family=s.family)
         WHEN MATCHED THEN UPDATE SET
             t.category=s.category,
             t.menu=s.menu,
-            t.colorcapabilities=s.colorcapabilities,
+            t.color=s.color,
             t.last_modified=s.lastmodified,
             t.ital_start=s.ital_start, t.ital_end=s.ital_end,
             t.wdth_start=s.wdth_start, t.wdth_end=s.wdth_end, 
@@ -841,8 +851,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             t.axes=s.axes,
             t.updated_date=current_timestamp
         WHEN NOT MATCHED THEN 
-            INSERT (id, family, category, menu, colorcapabilities, last_modified, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes, created_date) 
-            VALUES (seq_font.nextval, s.family, s.category, s.menu, s.colorcapabilities, s.lastmodified, s.ital_start, s.ital_end, s.wdth_start, s.wdth_end, s.wght_start, s.wght_end, s.opsz_start, s.opsz_end, s.slnt_start, s.slnt_end, s.italic, s.variable, s.axes, current_timestamp);
+            INSERT (id, family, category, menu, color, last_modified, ital_start, ital_end, wdth_start, wdth_end, wght_start, wght_end, opsz_start, opsz_end, slnt_start, slnt_end, italic, variable, axes, created_date) 
+            VALUES (seq_font.nextval, s.family, s.category, s.menu, s.color, s.lastmodified, s.ital_start, s.ital_end, s.wdth_start, s.wdth_end, s.wght_start, s.wght_end, s.opsz_start, s.opsz_end, s.slnt_start, s.slnt_end, s.italic, s.variable, s.axes, current_timestamp);
         
         l_nb_fonts:=sql%rowcount;
         pck_core.log('Uploaded ' ||l_nb_fonts || ' Google Fonts');
@@ -909,6 +919,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         FROM data
         WHERE tag IS NOT NULL
         ORDER BY id, tag;
+
+        /*
+        ** SET "bold" in "font" table
+        */
+        UPDATE font 
+           SET bold=1 
+        WHERE id IN
+            (
+                 SELECT font_id
+                 FROM font_axes
+                 WHERE axis='wght'
+                UNION ALL
+                SELECT font_id
+                FROM
+                (
+                    SELECT font_id, COUNT(*)
+                     FROM  font_static_wght
+                    GROUP BY font_id
+                    HAVING COUNT(*)>1
+                )
+            );
         
     END;
 
