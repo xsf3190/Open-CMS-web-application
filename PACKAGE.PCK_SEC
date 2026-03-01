@@ -143,6 +143,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         pck_core.log_error(pStatus);
     END;
 
+    FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN (
+            '<button type="button" role="menuitem" tabindex="-1" ' || 
+                'data-endpoint="' || pEndpoint || '"' ||
+                CASE WHEN pData IS NOT NULL THEN ' ' || pData END ||
+                '>' ||
+                '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
+            '</button>'
+        );
+    END;
+
     PROCEDURE logout(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
@@ -152,14 +164,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         
         DELETE refresh_token WHERE website_id=pWebsiteId AND user_id=l_session_data.user_id;
         
-        FOR C IN (
-            SELECT o.label, o.uri_template, o.method
-              FROM ords_endpoints o
-             WHERE INSTR(o.uri_template,'authenticate')>0
-        ) LOOP
-            l_dropdown:=l_dropdown ||
-            pck_sec.addMenuButton(C.uri_template, C.method, C.label);
-        END LOOP;
+        l_dropdown:=addMenuitem('authenticate/:ID', 'blue', '👤', 'Log In');
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
@@ -428,24 +433,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
     FUNCTION buildMenulist(pWebsiteid IN NUMBER, pScope IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_html CLOB;
-        FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
-        BEGIN
-            RETURN (
-                '<button type="button" role="menuitem" tabindex="-1" ' || 
-                    'data-endpoint="' || pEndpoint || '"' ||
-                    CASE WHEN pData IS NOT NULL THEN ' ' || pData END ||
-                    '>' ||
-                    '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
-                '</button>'
-            );
-        END;
+        
     BEGIN
         l_html:=l_html || addMenuitem('userinfo/:ID', 'blue', '👤', pEmail);
+        l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
+        IF (pScope='visitor') THEN
+            RETURN(l_html);
+        END IF;
+
         l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'blue', '✎', 'Edit Content');
         l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'pink', '✎', 'Upload Media');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
         l_html:=l_html || addMenuitem('fonts/:ID', 'green', '🌐', 'Fonts');
-        l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
         l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo from Image', 'data-logo="image"');
         l_html:=l_html || addMenuitem('logo/:ID', '', '0️⃣', 'Logo from Text', 'data-logo="font"');
         l_html:=l_html || addMenuitem('logo/:ID', '', '😣', 'Logo from SVG', 'data-logo="svg"');
@@ -507,7 +506,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             pck_core.log(owa.cgi_var_name(i) || ': ' || owa.cgi_var_val(i));
         end if;
     end loop;
-    -- pck_core.log('issueJWTTokens:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
         l_fingerprint:=getFingerprint(l_remote_addr, l_user_agent, l_timezone);
 
         UPDATE fingerprint 
