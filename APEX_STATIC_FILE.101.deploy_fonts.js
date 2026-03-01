@@ -79,6 +79,7 @@ const changeHandler = (e) => {
 
     callAPI(endpoint,"PUT",obj)
         .then((data) => {
+            /* Set "context" variable only when committed to database */
             if (obj.id==="context") {
                 context=obj.value
             }
