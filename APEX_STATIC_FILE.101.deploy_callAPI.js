@@ -8,6 +8,7 @@ let refresh_token = localStorage.getItem("refresh");
 */
 const forceLogout = () => {
     console.log("force Logout");
+    return;
     sessionStorage.clear();
     localStorage.clear();
     window.location.reload();
