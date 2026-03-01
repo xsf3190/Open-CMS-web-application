@@ -179,9 +179,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     /*
     **  BUILD EDITOR SITE FONT-FACE RULES
     */
-    FUNCTION getEditorFontfaces(pWebsiteid IN website.id%type) RETURN VARCHAR2 IS
-        l_fontfaces VARCHAR2(4000);
+    FUNCTION getEditorFontfaces(pWebsiteid IN website.id%type) RETURN CLOB IS
+        l_fontfaces CLOB;
     BEGIN
+        -- Font faces for current font contexts
         FOR C IN (
             SELECT wf.editor_fontfaces
               FROM font f, website_font wf
@@ -191,6 +192,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ) LOOP
             l_fontfaces:=l_fontfaces || C.editor_fontfaces;
         END LOOP;
+
+        -- Font faces for Google fonts
+        FOR C IN (
+            SELECT id, family, menu
+              FROM font
+             ORDER BY id
+        ) LOOP
+            l_fontfaces:=l_fontfaces ||
+            'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}';
+        END LOOP;
+
         RETURN (l_fontfaces);
     END;
 
@@ -214,11 +226,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     */
     PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type) IS
         l_font_variation_settings VARCHAR2(4000);
-        l_root_css CLOB;
-        l_css website.css%type;
+        l_css CLOB;
         l_sha1 website_cssfiles_temp.sha1%type;
     BEGIN
-        l_root_css:=
+        dbms_lob.createtemporary(l_css, TRUE);
+
+        l_css:=
         ':root {' ||
             getColours ||
             getTypography(pWebsiteid) ||
@@ -236,7 +249,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
              WHERE w.id=pWebsiteId
             )
         LOOP
-            l_root_css:=l_root_css || 
+            l_css:=l_css || 
             '--logo-img-inline-size: ' || 'var(' || C.logo_img_inline_size || ');' ||
             '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
             '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
@@ -259,29 +272,29 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
              ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), axis
         ) LOOP
             -- ital custom variable depends on whether font is variable
-            l_root_css:=l_root_css || 
+            l_css:=l_css || 
             '--' || C.context || '-font-' || C.axis || ': ';
             IF (C.axis='style') THEN
-                l_root_css:=l_root_css || 
+                l_css:=l_css || 
                 CASE C.value WHEN 0 THEN 'normal' WHEN 1 THEN 'italic' END;
             ELSE
-                l_root_css:=l_root_css || 
+                l_css:=l_css || 
                 C.value;
             END IF;
-            l_root_css:=l_root_css || ';';
+            l_css:=l_css || ';';
             IF (C.axis<>'style') THEN
                 l_font_variation_settings:=l_font_variation_settings ||
                 '"' || C.axis || '" var(--' || C.context || '-font-' || C.axis || '),';
             END IF;
 
             IF (C.rn=C.nb) THEN
-                l_root_css:=l_root_css ||
+                l_css:=l_css ||
                 '--' || C.context || '-font-variation-settings: ' || RTRIM(l_font_variation_settings,',') || ';';
                 l_font_variation_settings:=null;
             END IF;
         END LOOP;
 
-        l_root_css:=l_root_css ||
+        l_css:=l_css ||
         '}';
         
         /*
@@ -289,10 +302,29 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         '--img-border-radius: ' || C.img_border_radius || ';';
         */
 
-        l_root_css:=l_root_css ||
+        l_css:=l_css ||
         getDarkTheme;
 
-        l_css:=getEditorFontfaces(pWebsiteid) || l_root_css;
+        -- Font faces for current font contexts
+        FOR C IN (
+            SELECT wf.editor_fontfaces
+              FROM font f, website_font wf
+             WHERE f.id=wf.font_id
+               AND wf.website_id=pWebsiteId
+             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
+        ) LOOP
+            l_css:=l_css || C.editor_fontfaces;
+        END LOOP;
+
+        -- Font faces for Google fonts
+        FOR C IN (
+            SELECT id, family, menu
+              FROM font
+             ORDER BY id
+        ) LOOP
+            dbms_lob.append(l_css, '@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
+        END LOOP;
+
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
 
