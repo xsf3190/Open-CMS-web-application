@@ -83,6 +83,22 @@ const changeHandler = (e) => {
             if (obj.id==="context") {
                 context=obj.value
             }
+            if (data.settings) {
+                for (const [key, value] of Object.entries(data.settings)) {
+					console.log(`${key}: ${value}`);
+                    document.getElementById(key).checked=value;
+                }
+            }
+            if (data.family) {
+                const family = document.getElementById("family");
+                family.replaceChildren();
+                family.insertAdjacentHTML("afterbegin",data.family);
+            }
+            if (data.variations) {
+                const variations = document.querySelector(".font-variations");
+                variations.replaceChildren();
+                variations.insertAdjacentHTML("afterbegin",data.variations);
+            }
             if (data.urls) {
                 loadFont(data);
             }
