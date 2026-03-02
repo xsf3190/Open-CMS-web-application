@@ -463,6 +463,10 @@ small {
     text-box: cap alphabetic;
 }
 
+:where(legend,label,input) {
+    font-family: system-ui;
+}
+
 /* CARD STYLES */
 .card {
   container-type: inline-size;
@@ -589,7 +593,6 @@ small {
 
 form {
   --border: solid 1px var(--color-primary);
-  font-family: var(--font-family-ui);
   display: flex;
   flex-direction: column;
   border: var(--border);
@@ -914,7 +917,6 @@ dialog > form > header, dialog > form > footer {
     padding-block: 1rem;
     padding-inline: 1.5rem;
     background-color: #e9ecef;
-    font-family: system-ui;
 }
 
 dialog > form > article {
@@ -922,7 +924,6 @@ dialog > form > article {
     max-block-size: 100%; /* safari */
     overscroll-behavior-y: contain;
     padding: 2rem;
-    font-family: var(--font-family-text);
 }
 
 dialog hr {
