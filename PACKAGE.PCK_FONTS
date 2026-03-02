@@ -551,26 +551,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 			'</a>';
         END LOOP;
 
-        l_article:=
-        '<fieldset class="flex-items">' ||
-            '<legend>Change context</legend>';
-        FOR i IN 1..l_contexts.COUNT LOOP
-            l_article:=l_article || 
-            '<span>' ||
-		        '<input type="radio" name="context" id="' || l_contexts(i) || '"' || CASE WHEN l_contexts(i)='text' THEN ' checked' END || '>' ||
-		        '<label for="' || l_contexts(i) || '">' || INITCAP(l_contexts(i)) || '</label>' ||
-			'</span>';
-        END LOOP;
-        l_article:=l_article || 
-        '</fieldset>';
-
         FOR C IN (
-            SELECT wf.font_id, wf.context, f.category, f.family, f.bold, f.italic, f.variable, f.color
-              FROM website_font wf, font f
-             WHERE wf.website_id=pWebsiteId
-               AND wf.font_id=f.id 
-               AND wf.context='text'
+            SELECT font_id, context, category, family, bold, italic, variable, color FROM
+            (
+                SELECT wf.font_id, wf.context, wf.updated_date, MAX(wf.updated_date) OVER () max_updated_date, f.category, f.family, f.bold, f.italic, f.variable, f.color
+                  FROM website_font wf, font f
+                 WHERE wf.website_id=pWebsiteId
+                   AND wf.font_id=f.id
+            )
+            WHERE updated_date=max_updated_date
         ) LOOP
+            /* Contexts */
+            l_article:=
+            '<fieldset class="flex-items">' ||
+                '<legend>Change context</legend>';
+            FOR i IN 1..l_contexts.COUNT LOOP
+                l_article:=l_article || 
+                '<span>' ||
+    		        '<input type="radio" name="context" id="' || l_contexts(i) || '"' || CASE WHEN l_contexts(i)=C.context THEN ' checked' END || '>' ||
+    		        '<label for="' || l_contexts(i) || '">' || INITCAP(l_contexts(i)) || '</label>' ||
+    			'</span>';
+            END LOOP;
+            l_article:=l_article || 
+            '</fieldset>';
+
+            /* Font categories */
             l_article:=l_article || 
             '<fieldset class="flex-items">' ||
                 '<legend>Select category</legend>';
@@ -584,7 +589,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_article:=l_article || 
             '</fieldset>';
 
-        
+            /* Basic font design capabilities */
             l_article:=l_article ||
             '<fieldset class="flex-items">' ||
                 '<legend>Design features</legend>' ||
@@ -606,7 +611,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     			'</span>' ||
             '</fieldset>';
 
-            /* Fonts in category */
+            /* Select element of Fonts in category */
             l_article:=l_article || 
             '<div>' ||
                 '<label for="family">Select font</label>' ||
@@ -755,21 +760,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     */
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_context website_font.context%type;
-        l_element_id VARCHAR2(50);
-        l_element_value VARCHAR2(50);
+        l_message VARCHAR2(100);
         l_json JSON_OBJECT_T;
         l_urls JSON_ARRAY_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT context, id,  value
-          INTO l_context, l_element_id, l_element_value
-          FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, id, value));
+        FOR C IN (
+            SELECT context, id,  value
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, id, value))
+        ) LOOP
+            CASE C.id
+                WHEN 'context' THEN
+                    l_message:='Change context - return details of context ' || C.value;
+                WHEN 'category' THEN
+                    l_message:='Change category - return details of category ' || C.value;
+                WHEN 'family' THEN
+                    l_message:='Change family - return details of family ' || C.value;
+                ELSE
+                    l_message:='Change ' || C.id || ' - new value ' || C.value;
+            END CASE;
+        END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('message',l_context  || ':' || l_element_id || ':' || l_element_value);
+        l_json.put('message',l_message);
 
         apex_util.prn(l_json.to_clob,false);
         pStatus:=200;
