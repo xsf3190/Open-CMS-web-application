@@ -63,15 +63,9 @@ const loadFont = (data) => {
 const changeHandler = (e) => {
     const obj={context:context};
     
-    if (e.target.tagName==="SELECT") {
-        obj.id=e.target.id;
-        obj.value=e.target.querySelector("selectedContent").textContent;
-    } else if (e.target.getAttribute("type")==="radio") {
+    if (e.target.getAttribute("type")==="radio") {
         obj.id=e.target.getAttribute("name");
         obj.value=e.target.id;
-    } else if (e.target.getAttribute("type")==="checkbox") {
-        obj.id=e.target.id;
-        obj.value=e.target.checked ? 1 : 0;
     } else {
         obj.id=e.target.id;
         obj.value=e.target.value;
@@ -83,11 +77,9 @@ const changeHandler = (e) => {
             if (obj.id==="context") {
                 context=obj.value
             }
-            if (data.settings) {
-                for (const [key, value] of Object.entries(data.settings)) {
-					console.log(`${key}: ${value}`);
-                    document.getElementById(key).checked=value;
-                }
+            if (data.capabilities) {
+                const category = document.getElementById("capabilities");
+                category.querySelector(`option[value="${data.capabilities}"]`).selected=true
             }
             if (data.family) {
                 const family = document.getElementById("family");
