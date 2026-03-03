@@ -403,14 +403,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
     ** CREATE HTML ELEMENTS FOR AVAILABLE FONT FEATURES
     */
-    FUNCTION buildFontVariations(pWebsiteid IN website.id%type, pFontid IN font.id%type, pContext IN website_font.context%type) RETURN VARCHAR2 IS
+    FUNCTION getFontVariations(pWebsiteid IN website.id%type, pFontid IN font.id%type, pContext IN website_font.context%type) RETURN VARCHAR2 IS
         l_variations LONG;
         l_italic BOOLEAN;
         l_current_wght font_axes_value.value%type;
         n PLS_INTEGER:=0;
     BEGIN
-        l_variations:=
-        '<div class="font-variations flow">';
         FOR C IN (
             SELECT fa.axis, fa.axis_start, fa.axis_end, fm.display_name, fv.value
               FROM font_axes fa, font_metadata fm, font_axes_value fv
@@ -421,9 +419,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                AND fv.context(+)=pContext
              ORDER BY fa.axis
         ) LOOP
-            IF (pContext<>'logo' AND C.axis='ital') THEN
-                CONTINUE;
-            END IF;
             n:=n+1;
             l_variations:=l_variations || 
             '<div>';
@@ -441,7 +436,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
 
         IF (n>0) THEN
-            l_variations:=l_variations || '</div>';
             RETURN (l_variations);
         END IF;
 
@@ -511,9 +505,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             '</div>';
         END IF;
 
-        l_variations:=l_variations || 
-        '</div>';
-
         RETURN (l_variations);
     END;
 
@@ -547,7 +538,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_header:=
             '<a class="icon-with-text" href="https://fonts.google.com" target="a_blank" aria-label="Search on Google Fonts">' ||
 				'<svg width="1em" height="1em" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376C296.3 401.1 253.9 416 208 416 93.1 416 0 322.9 0 208S93.1 0 208 0 416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>' ||
-				'<small>View all ' || C.total || ' Google fonts as of '|| TO_CHAR(C.last_modified, 'dd Mon yyyy') || '</small>' ||
+				'<small>View all ' || C.total || ' Google fonts. Updated: '|| TO_CHAR(C.last_modified, 'dd Mon yyyy') || '</small>' ||
 			'</a>';
         END LOOP;
 
@@ -603,7 +594,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     			'</span>' ||
                 '<span>' ||
     		        '<input type="checkbox" id="variable"' || CASE WHEN C.variable=1 THEN ' checked' END || '>' ||
-    		        '<label for="variable">Finesse</label>' ||
+    		        '<label for="variable">Variable</label>' ||
     			'</span>' ||
                 '<span>' ||
     		        '<input type="checkbox" id="color"' || CASE WHEN C.color=1 THEN ' checked' END || '>' ||
@@ -637,7 +628,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_article:=l_article || 
                 '</select>' ||
             '</div>' ||
-            buildFontVariations(pWebsiteid, C.font_id, C.context);
+            '<div class="grid">' ||
+                '<div class="font-variations flow">' ||
+                    getFontVariations(pWebsiteid, C.font_id, C.context) ||
+                '</div>' ||
+                '<div class="font-sample flow">' ||
+                    '<h2>Sample heading 1</h2><p>Sample text with <i>Wonky</i> Fonts</p><h3>Sample heading 2</h3><p>Sample text</p>' ||
+                '</div>' ||
+            '</div>';
         END LOOP;
 
         l_footer:=
@@ -755,6 +753,113 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
     END;
 
+    FUNCTION getFontSelect(pSelectedid IN NUMBER, pSelectedFamily IN VARCHAR2, pCategory IN VARCHAR2, pBold IN NUMBER, pItalic IN NUMBER, pVariable IN NUMBER, pColor IN NUMBER) RETURN CLOB IS
+        l_html CLOB;
+    BEGIN
+        l_html:=
+            '<button>' ||
+                '<selectedcontent>' || pSelectedFamily || '</selectedcontent>' ||
+                '<span class="arrow"></span>' ||
+            '</button>';
+            
+        FOR C IN (
+            SELECT id, family 
+              FROM font 
+             WHERE category=pCategory
+               AND bold=pBold
+               AND italic=pItalic
+               AND variable=pVariable
+               AND color=pColor
+             ORDER BY 2
+        ) LOOP
+            l_html:=l_html || 
+            '<option style="font-family:f' || C.id || '"'|| CASE WHEN C.id=pSelectedid THEN ' selected' END || '>' || C.family || '</option>';
+        END LOOP;
+
+        RETURN(l_html);
+    END;
+
+    PROCEDURE updateFamily(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pFamily IN VARCHAR2) IS
+        l_font_id font.id%type;
+        l_variable font.variable%type;
+        l_variations LONG;
+        l_api_url VARCHAR2(500);
+        n PLS_INTEGER;
+    BEGIN
+        SELECT id, variable INTO l_font_id, l_variable FROM font WHERE family=pFamily;
+
+        UPDATE website_font 
+           SET font_id=l_font_id, updated_date=current_timestamp
+         WHERE website_id=pWebsiteid
+           AND context=pContext;
+        n:=sql%rowcount;
+        IF (n=0) THEN
+            INSERT INTO website_font(website_id, font_id, context)
+            VALUES (pWebsiteid, l_font_id, pContext);
+        END IF;
+
+        DELETE font_axes_value WHERE website_id=pWebsiteid AND context=pContext;
+
+        pJson.put('variations', getFontVariations(pWebsiteid, l_font_id, pContext));
+
+        IF (l_variable=1) THEN
+            FOR C IN (
+                SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) ||
+                       '@' AS axes,
+                       LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges
+                  FROM font_axes fa
+                 WHERE fa.font_id=l_font_id
+                 GROUP BY fa.font_id
+            ) LOOP
+                l_api_url:=l_api_url || C.axes || C.ranges;
+                IF (INSTR(C.axes,'ital')>0) THEN
+                    l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
+                END IF;
+            END LOOP;
+        ELSE
+            FOR C IN (
+                SELECT wght_normal, wght_italic
+                  FROM font_static_wght
+                 WHERE font_id=l_font_id
+                 ORDER BY ABS(wght_normal - 400)
+                 FETCH FIRST ROW ONLY
+            ) LOOP
+                IF (C.wght_italic IS NOT NULL) THEN
+                    l_api_url:=l_api_url || 'ital,wght@0,' || C.wght_normal || ';1,' || C.wght_normal;
+                ELSE
+                    l_api_url:=l_api_url || 'wght@' || C.wght_normal;
+                END IF;
+            END LOOP;
+        END IF;
+
+        pJson.put('urls',getFontfaces(pWebsiteid, l_font_id, l_api_url));
+    END;
+
+    /* 
+    **  USER CHANGES CONTEXT -> UPDATE ALL UI
+    */
+    PROCEDURE updateContext(pWebsiteId IN website.id%type, pJson IN OUT JSON_OBJECT_T, pContext IN website_font.context%type) IS
+        l_obj JSON_OBJECT_T;
+    BEGIN
+        l_obj:= new JSON_OBJECT_T;
+        FOR C IN (
+            SELECT wf.font_id, f.family, f.category, f.bold, f.italic, f.variable, f.color
+              FROM font f, website_font wf
+             WHERE wf.website_id=pWebsiteid
+               AND wf.font_id=f.id
+               AND wf.context=pContext
+        ) LOOP
+            l_obj.put(C.category,true);
+            l_obj.put('bold',CASE C.bold WHEN 0 THEN false WHEN 1 THEN true END);
+            l_obj.put('italic',CASE C.italic WHEN 0 THEN false WHEN 1 THEN true END);
+            l_obj.put('variable',CASE C.variable WHEN 0 THEN false WHEN 1 THEN true END);
+            l_obj.put('color',CASE C.color WHEN 0 THEN false WHEN 1 THEN true END);
+            pJson.put('settings',l_obj);
+            pJson.put('family',getFontSelect(C.font_id, C.family, C.category, C.bold, C.italic, C.variable, C.color));
+            pJson.put('variations',getFontVariations(pWebsiteid, C.font_id, pContext));
+        END LOOP;
+    END;
+
     /* 
     **  USER MAKES ANY CHANGE IN THE UI
     */
@@ -766,6 +871,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        l_json:= new JSON_OBJECT_T;
+
         FOR C IN (
             SELECT context, id,  value
               FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, id, value))
@@ -773,16 +880,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             CASE C.id
                 WHEN 'context' THEN
                     l_message:='Change context - return details of context ' || C.value;
+                    updateContext(pWebsiteId, l_json, C.value);
                 WHEN 'category' THEN
                     l_message:='Change category - return details of category ' || C.value;
                 WHEN 'family' THEN
                     l_message:='Change family - return details of family ' || C.value;
+                    updateFamily(pWebsiteid, l_json, C.context, C.value);
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
             END CASE;
         END LOOP;
 
-        l_json:= new JSON_OBJECT_T;
+        
         l_json.put('success',true);
         l_json.put('message',l_message);
 
