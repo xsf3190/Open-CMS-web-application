@@ -77,9 +77,14 @@ const changeHandler = (e) => {
             if (obj.id==="context") {
                 context=obj.value
             }
+            if (data.category) {
+                const category = document.getElementById("category");
+                category.querySelector(`option[value="${data.category}"]`).selected=true;
+            }
             if (data.capabilities) {
-                const category = document.getElementById("capabilities");
-                category.querySelector(`option[value="${data.capabilities}"]`).selected=true
+                for (const capability of data.capabilities) {
+                    document.getElementById(capability.id).setAttribute("aria-pressed",capability.value);
+                }
             }
             if (data.family) {
                 const family = document.getElementById("family");
@@ -87,9 +92,14 @@ const changeHandler = (e) => {
                 family.insertAdjacentHTML("afterbegin",data.family);
             }
             if (data.variations) {
-                const variations = document.querySelector(".font-variations");
+                const variations = document.getElementById("variations");
                 variations.replaceChildren();
                 variations.insertAdjacentHTML("afterbegin",data.variations);
+            }
+            if (data.sample) {
+                const sample = document.getElementById("sample");
+                sample.replaceChildren();
+                sample.insertAdjacentHTML("afterbegin",data.sample);
             }
             if (data.urls) {
                 loadFont(data);
