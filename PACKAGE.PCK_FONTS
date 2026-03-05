@@ -1,5 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
+    FUNCTION combineLanguages(pLanguages IN VARCHAR2) RETURN VARCHAR2;
+    --
     PROCEDURE getCharsUsed(pArticleId IN article.id%type, pContent IN OUT NOCOPY CLOB);
     --
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
@@ -58,13 +60,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     ** Return distict characters sorted 
     */
     FUNCTION distinct_chars(pCharacters IN VARCHAR2) RETURN VARCHAR2 IS
-        l_chars article_chars.chars_normal%type;
+        l_chars LONG;
     BEGIN
         SELECT LISTAGG(DISTINCT SUBSTR(pCharacters, LEVEL, 1), NULL) WITHIN GROUP (ORDER BY SUBSTR(pCharacters, LEVEL, 1))
         INTO l_chars
         FROM dual
         CONNECT BY LEVEL <= LENGTH(pCharacters);
         RETURN(l_chars);
+    END;
+
+    FUNCTION combineLanguages(pLanguages IN VARCHAR2) RETURN VARCHAR2 IS
+        l_chars LONG;
+    BEGIN
+        FOR C IN (
+            WITH codes AS
+            (
+                SELECT TRIM(column_value) language_code FROM TABLE(apex_string.split(pLanguages,',')) 
+            )
+            SELECT characters FROM language, codes WHERE codes.language_code=language.code
+        ) LOOP
+            l_chars:=distinct_chars(l_chars || C.characters);
+        END LOOP;
+        RETURN (l_chars);
     END;
 
     /*
