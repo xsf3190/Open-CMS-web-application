@@ -24,7 +24,6 @@ body {
     font-size: var(--step-0);
     font-weight: var(--text-font-wght);
     font-stretch: var(--text-font-wdth);
-    font-style: var(--text-font-style);
     font-variation-settings: var(--text-font-variation-settings);
     text-box: cap alphabetic;
     line-height: 1.5;
@@ -458,13 +457,9 @@ small {
     text-wrap: pretty;
     font-family: var(--font-family-headings);
     font-weight: var(--headings-font-wght);
-    font-style: var(--headings-font-style);
+    font-stretch: var(--headings-font-wdth);
     font-variation-settings: var(--headings-font-variation-settings);
     text-box: cap alphabetic;
-}
-
-:where(legend,label,input) {
-    font-family: system-ui;
 }
 
 /* CARD STYLES */
@@ -883,6 +878,9 @@ html:has(dialog[open]) {
 }
 
 dialog[class] {
+  font-family: system-ui;
+  font-weight: 450;
+  font-stretch: 110%;
   inline-size: min(95vw, var(--max-width));
   border-radius: 0.5em;
   padding: 0;
@@ -936,6 +934,19 @@ dialog hr+span {
   font-weight:800;
 }
 
+/* STYLES FOR FONTS .sample CLASS */
+#sample {
+    font-family: var(--font-family-text);
+    font-weight: var(--text-font-wght);
+    font-stretch: var(--text-font-wdth);
+    font-variation-settings: var(--text-font-variation-settings);
+    h2 {
+        font-family: var(--font-family-headings);
+        font-weight: var(--headings-font-wght);
+        font-stretch: var(--headings-font-wdth);
+        font-variation-settings: var(--headings-font-variation-settings);
+    }
+}
 
 /* STYLES FOR OVERLAY COMPONENT */
 
