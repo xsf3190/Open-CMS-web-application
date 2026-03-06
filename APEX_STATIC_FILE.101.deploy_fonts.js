@@ -2,7 +2,6 @@ import { dialog_article, dialog_footer, initDialog, footerHandler, liveRegion } 
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
-let context="text";
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
@@ -19,12 +18,37 @@ export const init = (element) => {
         });
 }
 
+const getContext = () => {
+    const context = document.querySelector("[name='context']:checked").getAttribute("id");
+    return context;
+}
+
+const getCategory = () => {
+    const index = document.getElementById("category").selectedIndex;
+    const category = document.getElementById("category").options[index].getAttribute("value");
+    return category;
+}
+
+const getCapabilities = () => {
+    const capabilities = document.querySelectorAll(".capability");
+    const arr = [...capabilities];
+    const len = arr.length;
+    let value=0;
+    for (let i = 0; i < len; i++) {
+        if (arr[i].getAttribute("aria-pressed")==="true") {
+            value+=(2 ** (len-1-i));
+        }
+    }
+    return value;
+}
+
 /*
 ** LOAD SELECTED FONT AND CONTROLS
 */
 const loadFont = (data) => {
     let family = document.querySelector("#family selectedContent").textContent;
     const wght = document.querySelector("#wght selectedContent");
+    const context = getContext();
     if (wght) {
         family+=" "+wght.textContent;
     }
@@ -42,26 +66,13 @@ const loadFont = (data) => {
         document.documentElement.style.setProperty(`--font-family-${context}`, family);
         console.log(`Loaded ${family} for ${context}`);
     });
-    if (data.variations) {
-        const font_variations = dialog_article.querySelector(".font-variations");
-        font_variations.replaceChildren();
-        font_variations.insertAdjacentHTML('afterbegin',data.variations);
-
-        /* Reset font custom variables if new font loaded */
-        if (context==="logo") {
-            document.documentElement.style.setProperty("--logo-font-style", "normal");
-        }
-        
-        document.documentElement.style.setProperty(`--${context}-font-wght`, 400);
-        document.documentElement.style.setProperty(`--${context}-font-wdth`, 100);
-    }
 }
 
 /*
 ** COMMIT ALL CHANGES TO DATABASE AND REFLECT IN UI
 */
 const changeHandler = (e) => {
-    const obj={context:context};
+    const obj={context:getContext(), capabilities: getCapabilities()};
     
     if (e.target.getAttribute("type")==="radio") {
         obj.id=e.target.getAttribute("name");
@@ -73,10 +84,6 @@ const changeHandler = (e) => {
 
     callAPI(endpoint,"PUT",obj)
         .then((data) => {
-            /* Set "context" variable only when committed to database */
-            if (obj.id==="context") {
-                context=obj.value
-            }
             if (data.category) {
                 const category = document.getElementById("category");
                 category.querySelector(`option[value="${data.category}"]`).selected=true;
@@ -109,6 +116,7 @@ const changeHandler = (e) => {
                 document.documentElement.style.setProperty(`--${id}`, `var(${sizeValue})`); 
             }
             else if (obj.id==="wght" && !e.target.classList.contains("slider")) {
+                const context = getContext();
                 document.documentElement.style.setProperty(`--${context}-font-wght`, value);
             }
 
@@ -125,11 +133,11 @@ const changeHandler = (e) => {
 const clickHandler = (e) => {
     if (!e.target.classList.contains("toggle")) return;
 
-    const id = e.target.getAttribute("id");
+    const context = getContext();
 
-    // if (!getComputedStyle(document.documentElement).getPropertyValue('--logo-font-' + id)) return;
-
+    let id = e.target.getAttribute("id");
     let value;
+    
     const toggle = e.target;
     if (toggle.getAttribute("aria-pressed") == "false") {
         toggle.setAttribute("aria-pressed", "true");
@@ -138,8 +146,30 @@ const clickHandler = (e) => {
         toggle.setAttribute("aria-pressed", "false");
         value = "0";
     }
-    callAPI(endpoint,"PUT",{context:context, id:id, value:value})
+
+    /* compute total "capabilites" when any capability button clicked */
+    if (e.target.classList.contains("capability")) {
+        id="capabilities";
+	    value=getCapabilities();
+    }
+
+    callAPI(endpoint,"PUT",{context:context, category:getCategory(), id:id, value:value})
         .then((data) => {
+            if (data.family) {
+                const family = document.getElementById("family");
+                family.replaceChildren();
+                family.insertAdjacentHTML("afterbegin",data.family);
+            }
+            if (data.variations) {
+                const variations = document.getElementById("variations");
+                variations.replaceChildren();
+                variations.insertAdjacentHTML("afterbegin",data.variations);
+            }
+            if (data.sample) {
+                const sample = document.getElementById("sample");
+                sample.replaceChildren();
+                sample.insertAdjacentHTML("afterbegin",data.sample);
+            }
             if (id==="ital") {
                 const varStyle = (value==="0") ? "normal" : "italic";
                 document.documentElement.style.setProperty(`--${context}-font-style`, varStyle);
@@ -159,11 +189,16 @@ const clickHandler = (e) => {
 */
 const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
+    const context = getContext();
     
     if (e.target.classList.contains("slider")) {
-        document.documentElement.style.setProperty(`--${context}-font-${id}`, e.target.value); 
+        let value = e.target.value
+        if (id==="wdth") {
+            value+="%";
+        }
+        document.documentElement.style.setProperty(`--${context}-font-${id}`, value);   
     }
-    else if (id === "logo-font-text") {
+    if (id === "logo-font-text") {
         logo.textContent = e.target.value;
     }
 }
