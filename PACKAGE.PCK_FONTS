@@ -20,6 +20,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
 end "PCK_FONTS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
+    
+    TYPE t_capabilities IS VARRAY(6) OF VARCHAR2(30);
+    G_CAPABILITIES CONSTANT t_capabilities:=t_capabilities('bold','italic','width','optical','color','custom');
 
     /*
     **  LANGUAGE SUPPORT
@@ -525,8 +528,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN (l_variations);
     END;
 
+    /*
+    **  RETURN SAMPLE HTML, INCLUDING <strong> AND <i> ELEMENTS DEPENDING ON THE FONT'S CONTEXT AND CAPABILIITES 
+    */
+    FUNCTION getFontSample(pContext IN VARCHAR2, pFamily IN VARCHAR2, pCategory IN VARCHAR2, pCapabilities IN NUMBER) RETURN VARCHAR2 IS
+        l_html LONG;
+    BEGIN
+        l_html:=
+        '<h2>About ' || pFamily || '</h2>';
+
+        IF (pCapabilities=0) THEN
+            l_html:=l_html ||
+            '<p>This is a ' || pCategory || ' font which has only one style.</p>' ||
+            '<p>You probably only want to use it for your headings or logo although it could still work ' ||
+            '<p>for text as long as you don''t want either bold or italics.</p>';
+        ELSE
+            l_html:=l_html ||
+            '<p>This is a ' || pCategory || ' font which has the following design features:</p>' ||
+            '<ul>';
+            FOR i IN 1..G_CAPABILITIES.COUNT LOOP
+                IF (BITAND(pCapabilities,POWER(2,G_CAPABILITIES.COUNT-i))=1) THEN
+                    l_html:=l_html || '<li>' || G_CAPABILITIES(i) || '</li>';
+                END IF;
+            END LOOP;
+            l_html:=l_html || 
+            '</ul>';
+        END IF;
+        RETURN (l_html);
+    END;
+
     /* 
-    **  BUILD OPENING DIALOG CONTENT
+    **  BUILD INITIAL DIALOG CONTENT
+    **   Select Context
+    **   Choose languages
+    **   Font capabilities
+    **   Font Selection (select and direct input)
+    **   Variations control panel
+    **   Sample text
     */
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pStatus IN OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -541,7 +579,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_styles VARCHAR2(100);
         
         TYPE t_context IS VARRAY(3) OF VARCHAR2(30);
-        l_contexts t_context:=t_context('logo','headings','text');
+        l_contexts t_context:=t_context('headings','text','logo');
+
+        TYPE t_categories IS VARRAY(5) OF VARCHAR2(11);
+        l_categories t_categories:=t_categories('serif','sans-serif','display','handwriting','monospace');
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -556,84 +597,97 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 			'</a>';
         END LOOP;
 
-        /* Get last updated context */
+        /* Get the font which was last updated */
         FOR C IN (
             SELECT font_id, context, category, family, capabilities
             FROM
             (
-                SELECT wf.font_id, wf.context, wf.updated_date, MAX(wf.updated_date) OVER () max_updated_date, f.category, f.family, BIN_TO_NUM(f.bold, f.italic, f.wdth, f.opsz, f.custom, f.color) capabilities
+                SELECT wf.font_id, wf.context, wf.updated_date, MAX(wf.updated_date) OVER () max_updated_date, 
+                        f.category, f.family, f.capabilities
                   FROM website_font wf, font f
                  WHERE wf.website_id=pWebsiteId
                    AND wf.font_id=f.id
             )
             WHERE updated_date=max_updated_date
         ) LOOP
-            /* Available contexts */
             l_article:=
-            '<fieldset class="flex-items">' ||
-                '<legend>Context</legend>';
-            FOR i IN 1..l_contexts.COUNT LOOP
-                l_article:=l_article || 
-                '<span>' ||
-    		        '<input type="radio" name="context" id="' || l_contexts(i) || '"' || CASE WHEN l_contexts(i)=C.context THEN ' checked' END || '>' ||
-    		        '<label for="' || l_contexts(i) || '">' || INITCAP(l_contexts(i)) || '</label>' ||
-    			'</span>';
-            END LOOP;
-            l_article:=l_article || 
-            '</fieldset>';
-
-            l_article:=l_article || 
-            '<div class="grid">';
-
-            /* Available Font categories */
-            l_article:=l_article || 
-            '<div>' ||
-                '<label for="capabilities">Design capabilities</label>' ||
-                '<select id="capabilities">' ||
-                    '<button>' ||
-                        '<selectedcontent></selectedcontent>' ||
-                        '<span class="arrow"></span>' ||
-                    '</button>';
-            FOR C1 IN (
-                SELECT category, bold, italic, wdth, opsz, custom, color, BIN_TO_NUM(bold,italic,wdth,opsz,custom,color) capabilities,
-                        ROW_NUMBER() OVER (PARTITION BY category ORDER BY null) rn,
-                        COUNT(*) OVER (PARTITION BY category) nb
-                  FROM font
-                 GROUP BY category, bold, italic, wdth, opsz, custom, color
-                 ORDER BY category, capabilities DESC
-            ) LOOP
-                IF (C1.rn=1) THEN
+            '<div class="flex-items">' ||
+                -- Contexts
+                '<fieldset class="flex-items">' ||
+                    '<legend>Context</legend>';
+                FOR i IN 1..l_contexts.COUNT LOOP
                     l_article:=l_article || 
-                    '<optgroup label="' || INITCAP(C1.category) || '" style="font-size:var(--step-1);text-align:center;' || 
-                        'color:' || 
-                        CASE C1.category WHEN 'display' THEN 'red' WHEN 'handwriting' THEN 'yellow' WHEN 'monospace' THEN 'pink' WHEN 'serif' THEN 'pink' WHEN 'sans-serif' THEN 'orange' END || ';' || 
-                        'font-family:' || 
-                        CASE C1.category WHEN 'handwriting' THEN 'cursive' WHEN 'display' THEN 'system-ui' ELSE C1.category END || ';' ||
-                        CASE WHEN C1.category='display' THEN 'font-variation-settings:''GRAD'' 750,''wdth'' 110' END ||
-                    ';">';
-                END IF;
+                    '<span>' ||
+        		        '<input type="radio" name="context" id="' || l_contexts(i) || '"' || CASE WHEN l_contexts(i)=C.context THEN ' checked' END || '>' ||
+        		        '<label for="' || l_contexts(i) || '">' || INITCAP(l_contexts(i)) || '</label>' ||
+        			'</span>';
+                END LOOP;
                 l_article:=l_article || 
-                    '<option value="' || C1.capabilities || '"' || CASE WHEN C1.capabilities=C.capabilities THEN ' selected' END || '>' ||
-                        '<div>' ||
-                        CASE WHEN C1.bold=1 THEN '<span class="chip">bold</span>' END ||
-                        CASE WHEN C1.italic=1 THEN '<span class="chip">italic</span>' END ||
-                        CASE WHEN C1.wdth=1 THEN '<span class="chip">wdth</span>' END ||
-                        CASE WHEN C1.opsz=1 THEN '<span class="chip">opsz</span>' END ||
-                        CASE WHEN C1.custom=1 THEN '<span class="chip">CUSTOM</span>' END ||
-                        CASE WHEN C1.color=1 THEN '<span class="chip">color</span>' END ||
-                        CASE WHEN C1.capabilities=0 THEN '<span class="chip">No variants</span>' END ||
-                        '</div>' ||
-                    '</option>';
-                IF (C1.rn=C1.nb) THEN
+                '</fieldset>' ||
+                -- Languages
+                '<fieldset class="flex-items">' ||
+                    '<legend>Languages: ';
+                    FOR C1 IN (
+                        SELECT language_code FROM website_language WHERE website_id=pWebsiteid ORDER BY created_date 
+                    ) LOOP
+                        l_article:=l_article || 
+                        '<span>' || C1.language_code || '</span>';
+                    END LOOP;
                     l_article:=l_article || 
-                    '<hr></optgroup>';
-                END IF;
-            END LOOP;
-            l_article:=l_article || 
-            '</select>' ||
+                    '</legend>' || 
+                    '<select id="language">' ||
+                        '<button>' ||
+                            '<selectedcontent></selectedcontent>' ||
+                            '<span class="arrow"></span>' ||
+                        '</button>' ||
+                        '<option value="">--More languages--</option>';
+                    FOR C1 IN (
+                        SELECT code, name FROM language WHERE name IS NOT NULL ORDER BY name
+                    ) LOOP
+                        l_article:=l_article || 
+                        '<option value="' || C1.code || '">' || C1.name || ' (' || C1.code || ')</option>';
+                    END LOOP;
+                    l_article:=l_article || 
+                    '</select>' ||
+                '</fieldset>' ||
             '</div>';
 
-            /* Build <select> element of all Fonts in same category */
+            -- Font categories and capabilities
+            l_article:=l_article || 
+            '<fieldset class="flex-items">' ||
+                '<legend>Design capabilities</legend>' ||
+                -- Categories
+                '<div>' ||
+                    '<label for="category">Font category</label>' ||
+                    '<select id="category">' ||
+                        '<button>' ||
+                            '<selectedcontent></selectedcontent>' ||
+                            '<span class="arrow"></span>' ||
+                        '</button>';
+                    FOR i IN 1..l_categories.COUNT LOOP
+                        l_article:=l_article || 
+                        '<option value="' || l_categories(i) || '" ' || 
+                            'style="font-family:' || 
+                                CASE l_categories(i) WHEN 'handwriting' THEN 'cursive' WHEN 'display' THEN 'system-ui' ELSE l_categories(i) END || ';' ||
+                                CASE WHEN l_categories(i)='display' THEN 'font-variation-settings:''GRAD'' 750,''wdth'' 110;' END || '"' ||
+                            CASE WHEN l_categories(i)=C.category THEN ' selected' END || '>' || INITCAP(l_categories(i)) || 
+                        '</option>';
+                    END LOOP;
+                    l_article:=l_article || 
+                    '</select>' ||
+                '</div>';
+
+                -- Capabilities
+                FOR i IN 1..G_CAPABILITIES.COUNT LOOP
+                    l_article:=l_article || 
+                    '<button type="button" class="toggle" id="' || G_CAPABILITIES(i) || '-btn" aria-pressed="' || 
+                        CASE WHEN BITAND(C.capabilities,POWER(2,G_CAPABILITIES.COUNT-i))=1 THEN 'true' ELSE 'false' END || '">' || INITCAP(G_CAPABILITIES(i)) || 
+                    '</button>';
+                END LOOP;
+            l_article:=l_article ||
+            '</fieldset>';
+
+            /* Build <select> element of all Fonts in same category and with same capabilities as current context font */
             l_article:=l_article || 
             '<div>' ||
                 '<label for="family">Select font</label>' ||
@@ -647,7 +701,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 SELECT id, family 
                   FROM font 
                  WHERE category=C.category
-                   AND BIN_TO_NUM(bold,italic,wdth,opsz,custom,color)=C.capabilities
+                   AND capabilities=C.capabilities
                  ORDER BY 2
             ) LOOP
                 l_article:=l_article || 
@@ -657,11 +711,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '</select>' ||
             '</div>' ||
             '<div class="grid">' ||
-                '<div class="font-variations flow">' ||
-                    getFontVariations(pWebsiteid, C.font_id, C.context) ||
+                '<div id="variations" class="flow">' ||
+                    NVL(getFontVariations(pWebsiteid, C.font_id, C.context),
+                    '<p>The ' || C.family || ' static font has no Bold or Italic variants</p>') ||
                 '</div>' ||
-                '<div class="font-sample flow">' ||
-                    '<h2>Sample heading 1</h2><p>Sample text with <i>Wonky</i> Fonts</p><h3>Sample heading 2</h3><p>Sample text</p>' ||
+                '<div id="sample" class="flow">' ||
+                    getFontSample(C.context, C.family, C.category, C.capabilities) ||
                 '</div>' ||
             '</div>' ||
             '</div>';
@@ -782,6 +837,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
     END;
 
+    /*
+    ** BUILD <select> ELEMENT OPTIONS TO BE REPLACED IN UI
+    */
     FUNCTION getFontSelect(pSelectedid IN NUMBER, pSelectedFamily IN VARCHAR2, pCategory IN VARCHAR2, pCapabilities IN NUMBER) RETURN CLOB IS
         l_html CLOB;
     BEGIN
@@ -795,26 +853,84 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             SELECT id, family 
               FROM font 
              WHERE category=pCategory
-               AND bold=DECODE(pCapabilities,16,1,0)
-               AND italic=DECODE(pCapabilities,8,1,0)
-               AND wdth=DECODE(pCapabilities,4,1,0)
-               AND opsz=DECODE(pCapabilities,2,1,0)
-               AND custom=DECODE(pCapabilities,1,1,0)
+               AND capabilities=pCapabilities
              ORDER BY 2
         ) LOOP
             l_html:=l_html || 
-            '<option style="font-family:f' || C.id || '"'|| CASE WHEN C.id=pSelectedid THEN ' selected' END || '>' || C.family || '</option>';
+            '<option value="' || C.id || '" style="font-family:f' || C.id || '"'|| CASE WHEN C.id=pSelectedid THEN ' selected' END || '>' || C.family || '</option>';
         END LOOP;
 
         RETURN(l_html);
     END;
 
-    PROCEDURE changeCapabilities(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pCapabilities IN NUMBER) IS
+    /*
+    **  USER CHANGES CATEGORY - RETURN NEW FONT LIST FOR EXISTING CAPABILITIES
+    */
+    PROCEDURE changeCategory(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pCategory IN VARCHAR2) IS
+        l_html CLOB;
+        n PLS_INTEGER:=0;
+    BEGIN
+        FOR C IN (
+            SELECT wf.font_id, f.family, f.category, f.capabilities
+              FROM website_font wf, font f
+             WHERE wf.website_id=pWebsiteid
+               AND wf.context=pContext
+               AND wf.font_id=f.id
+        ) LOOP
+            FOR C1 IN (
+                SELECT id, family, COUNT(*) OVER () nb 
+                  FROM font 
+                 WHERE category=pCategory
+                   AND capabilities=C.capabilities
+                 ORDER BY 2
+            ) LOOP
+                n:=n+1;
+                IF (n=1) THEN
+                    l_html:=
+                    '<button>' ||
+                        '<selectedcontent>--Choose from ' || C1.nb ||' fonts--</selectedcontent>' ||
+                        '<span class="arrow"></span>' ||
+                    '</button>';
+                END IF;
+                l_html:=l_html || 
+                '<option value="' || C1.id || '" style="font-family:f' || C1.id || '">' || C1.family || '</option>';
+            END LOOP;
+        END LOOP;
+        IF (n=0) THEN
+            l_html:=l_html || 
+            '<button>' ||
+                '<selectedcontent>--No ' || pCategory || ' fonts--</selectedcontent>' ||
+                '<span class="arrow"></span>' ||
+            '</button>';
+        END IF;
+        pJson.put('family',l_html);
+        pJson.put('variations','<p></p>');
+        pJson.put('sample','<p></p>');
+    END;
+
+    PROCEDURE changeCapabilities(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pId IN VARCHAR2, pValue IN VARCHAR2) IS
     BEGIN
         -- pJson.put('family',getFontSelect(C.font_id, C.family, C.category, pCapabilities));
     null;
     END;
-    
+
+    /*
+    **  RETURN CAPABILITIES AS JSON ARRAY OF <button> ELEMENT SETTINGS
+    */
+    FUNCTION getCapabilities(pCapabilities IN NUMBER) RETURN JSON_ARRAY_T IS
+        l_capabilities JSON_ARRAY_T;
+        l_capability JSON_OBJECT_T;
+    BEGIN
+        l_capabilities:= new JSON_ARRAY_T;
+        FOR i IN 1..G_CAPABILITIES.COUNT LOOP
+            l_capability:= new JSON_OBJECT_T;
+            l_capability.put('id',G_CAPABILITIES(i) || '-btn');
+            l_capability.put('value', CASE BITAND(pCapabilities,POWER(2,G_CAPABILITIES.COUNT-i)) WHEN 1 THEN 'true' ELSE 'false' END);
+            l_capabilities.append(l_capability);
+        END LOOP;
+        RETURN (l_capabilities);
+    END;
+
     /*
     ** NEW FONT SELECTED FOR A CONTEXT
     */
@@ -879,20 +995,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     PROCEDURE changeContext(pWebsiteId IN website.id%type, pJson IN OUT JSON_OBJECT_T, pContext IN website_font.context%type) IS
     BEGIN
         FOR C IN (
-            SELECT wf.font_id, f.family, f.category, BIN_TO_NUM(f.bold,f.italic,f.wdth,f.opsz,f.custom,f.color) capabilities
+            SELECT wf.font_id, f.family, f.category, f.capabilities
               FROM website_font wf, font f
              WHERE wf.website_id=pWebsiteid
                AND wf.context=pContext
                AND wf.font_id=f.id
         ) LOOP
-            pJson.put('capabilities',C.capabilities);
+            pJson.put('category',C.category);
+            pJson.put('capabilities',getCapabilities(C.capabilities));
             pJson.put('family',getFontSelect(C.font_id, C.family, C.category, C.capabilities));
             pJson.put('variations',getFontVariations(pWebsiteid, C.font_id, pContext));
+            pJson.put('sample',getFontSample(pContext, C.family, C.category, C.capabilities));
         END LOOP;
     END;
 
     /* 
-    **  USER MAKES ANY CHANGE IN THE UI
+    **  USER MAKES CHANGE IN THE UI
     */
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -912,9 +1030,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 WHEN 'context' THEN
                     l_message:='Change context - return details of context ' || C.value;
                     changeContext(pWebsiteId, l_json, C.value);
+                WHEN 'category' THEN
+                    l_message:='Change category - ' || C.value;
+                    changeCategory(pWebsiteid, l_json, C.context, C.value);
                 WHEN 'capabilities' THEN
                     l_message:='Change capabilities - ' || C.value;
-                    changeCapabilities(pWebsiteid, l_json, C.context, C.value);
+                    changeCapabilities(pWebsiteid, l_json, C.context, C.id, C.value);
                 WHEN 'family' THEN
                     l_message:='Change family - return details of family ' || C.value;
                     updateFamily(pWebsiteid, l_json, C.context, C.value);
@@ -1133,6 +1254,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     HAVING COUNT(*)>1
                 )
             );
+
+        UPDATE font 
+           SET capabilities=BIN_TO_NUM(bold, italic, wdth, opsz, custom, color);
         
     END;
 
