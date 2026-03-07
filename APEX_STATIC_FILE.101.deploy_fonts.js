@@ -12,6 +12,7 @@ export const init = (element) => {
             dialog_article.addEventListener("click", clickHandler);
             dialog_article.addEventListener("input", inputHandler);
             dialog_footer.addEventListener("click", footerHandler);
+            replaceOptions(data.options);
         })
         .catch((error) => {
             handleError(error);
@@ -40,6 +41,32 @@ const getCapabilities = () => {
         }
     }
     return value;
+}
+
+const getSelectedFont = () => {
+    const family = document.getElementById("family");
+    return family.options[family.selectedIndex]?.getAttribute("value");
+}
+
+/*
+** REPLACE FONT FAMILY options
+*/
+const replaceOptions = (options) => {
+    const family = document.getElementById("family");
+    // remove existing options
+    let index = family.options.length;
+	while (index--) {
+        if (family[index]) {
+            family.remove(index);
+        }
+    }
+    // load new options
+    for (let i=0; i<options.length; i++) {
+        family[i] = new Option(options[i].text,options[i].value,options[i].defaultSelected,options[i].selected);
+        if (options[i].value>0) {
+            family[i].style.fontFamily = `f${options[i].value}`;
+        }
+    }
 }
 
 /*
@@ -72,7 +99,9 @@ const loadFont = (data) => {
 ** COMMIT ALL CHANGES TO DATABASE AND REFLECT IN UI
 */
 const changeHandler = (e) => {
-    const obj={context:getContext(), capabilities: getCapabilities()};
+    if (e.target.value===0) return;
+    
+    const obj={context:getContext(), capabilities:getCapabilities(), font:getSelectedFont()};
     
     if (e.target.getAttribute("type")==="radio") {
         obj.id=e.target.getAttribute("name");
@@ -93,10 +122,8 @@ const changeHandler = (e) => {
                     document.getElementById(capability.id).setAttribute("aria-pressed",capability.value);
                 }
             }
-            if (data.family) {
-                const family = document.getElementById("family");
-                family.replaceChildren();
-                family.insertAdjacentHTML("afterbegin",data.family);
+            if (data.options) {
+                replaceOptions(data.options);
             }
             if (data.variations) {
                 const variations = document.getElementById("variations");
@@ -153,12 +180,10 @@ const clickHandler = (e) => {
 	    value=getCapabilities();
     }
 
-    callAPI(endpoint,"PUT",{context:context, category:getCategory(), id:id, value:value})
+    callAPI(endpoint,"PUT",{context:context, category:getCategory(), font:getSelectedFont(), id:id, value:value})
         .then((data) => {
-            if (data.family) {
-                const family = document.getElementById("family");
-                family.replaceChildren();
-                family.insertAdjacentHTML("afterbegin",data.family);
+            if (data.options) {
+                replaceOptions(data.options);
             }
             if (data.variations) {
                 const variations = document.getElementById("variations");
