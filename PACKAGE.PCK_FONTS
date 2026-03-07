@@ -22,7 +22,7 @@ end "PCK_FONTS";
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     
     TYPE t_capabilities IS VARRAY(6) OF VARCHAR2(30);
-    G_CAPABILITIES CONSTANT t_capabilities:=t_capabilities('bold','italic','width','optical','color','custom');
+    G_CAPABILITIES CONSTANT t_capabilities:=t_capabilities('bold','italic','wdth','color');
 
     /*
     **  LANGUAGE SUPPORT
@@ -439,6 +439,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                AND fv.context(+)=pContext
              ORDER BY fa.axis
         ) LOOP
+            IF (C.axis='ital' AND pContext<>'logo') THEN
+                CONTINUE;
+            END IF;
             n:=n+1;
             l_variations:=l_variations || 
             '<div>';
@@ -518,7 +521,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END IF;
         END LOOP;
             
-        IF (l_italic) THEN
+        IF (l_italic AND pContext='logo') THEN
             l_variations:=l_variations || 
             '<div>' ||
                 '<button type="button" class="toggle" id="ital" aria-pressed="false" data-variable="0">Italic</button>' ||
@@ -529,10 +532,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
+    **  RETURN "true" OR "false" FOR A GIVEN CAPABILITY
+    */
+    FUNCTION isCapability(pBitPosition IN NUMBER, pCapabilities IN NUMBER) RETURN VARCHAR2 IS
+        l_bit NUMBER;
+        l_bitand NUMBER;
+    BEGIN
+        l_bit:=POWER(2,pBitPosition);
+        l_bitand:=BITAND(pCapabilities,l_bit);
+        RETURN(CASE WHEN l_bit=l_bitand THEN 'true' ELSE 'false' END);
+    END;
+
+    /*
     **  RETURN SAMPLE HTML, INCLUDING <strong> AND <i> ELEMENTS DEPENDING ON THE FONT'S CONTEXT AND CAPABILIITES 
     */
     FUNCTION getFontSample(pContext IN VARCHAR2, pFamily IN VARCHAR2, pCategory IN VARCHAR2, pCapabilities IN NUMBER) RETURN VARCHAR2 IS
         l_html LONG;
+        l_bold_html VARCHAR2(100);
+        l_italic_html VARCHAR2(100);
     BEGIN
         l_html:=
         '<h2>About ' || pFamily || '</h2>';
@@ -544,15 +561,36 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             '<p>for text as long as you don''t want either bold or italics.</p>';
         ELSE
             l_html:=l_html ||
+            
             '<p>This is a ' || pCategory || ' font which has the following design features:</p>' ||
             '<ul>';
             FOR i IN 1..G_CAPABILITIES.COUNT LOOP
-                IF (BITAND(pCapabilities,POWER(2,G_CAPABILITIES.COUNT-i))=1) THEN
+                IF (isCapability(G_CAPABILITIES.COUNT-i,pCapabilities)='true') THEN
                     l_html:=l_html || '<li>' || G_CAPABILITIES(i) || '</li>';
+                    IF (G_CAPABILITIES(i)='bold') THEN
+                        l_bold_html:='<p>This is what <strong>bold</strong> looks like</p>';
+                    ELSIF (G_CAPABILITIES(i)='italic') THEN
+                        l_italic_html:='<p>This is what <i>italic</i> looks like</p>';
+                    END IF;
                 END IF;
             END LOOP;
             l_html:=l_html || 
             '</ul>';
+            IF (pContext='text') THEN
+                l_html:=l_html || 
+                '<style>strong {font-weight:700} i{font-style:italic}</style>' ||
+                l_bold_html || l_italic_html;
+                IF (l_bold_html IS NOT NULL AND l_italic_html IS NOT NULL) THEN
+                    l_html:=l_html || 
+                    '<p>This is what <strong><i>bold italic</i></strong> looks like</p>';
+                END IF;
+            END IF;
+
+            IF (pContext='headings' AND l_italic_html IS NOT NULL) THEN
+                l_html:=l_html || 
+                '<style>i{font-style:italic}</style>' ||
+                '<h3><i>This sub heading is in italics<i></h3>';
+            END IF;
         END IF;
         RETURN (l_html);
     END;
@@ -628,7 +666,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '<fieldset class="flex-items">' ||
                     '<legend>Languages: ';
                     FOR C1 IN (
-                        SELECT language_code FROM website_language WHERE website_id=pWebsiteid ORDER BY created_date 
+                        SELECT language_code 
+                          FROM website_language 
+                         WHERE website_id=pWebsiteid 
+                         ORDER BY created_date 
                     ) LOOP
                         l_article:=l_article || 
                         '<span>' || C1.language_code || '</span>';
@@ -640,9 +681,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                             '<selectedcontent></selectedcontent>' ||
                             '<span class="arrow"></span>' ||
                         '</button>' ||
-                        '<option value="">--More languages--</option>';
+                        '<option value="">--Add language--</option>';
                     FOR C1 IN (
-                        SELECT code, name FROM language WHERE name IS NOT NULL ORDER BY name
+                        SELECT code, name 
+                          FROM language 
+                         WHERE name IS NOT NULL 
+                         ORDER BY name
                     ) LOOP
                         l_article:=l_article || 
                         '<option value="' || C1.code || '">' || C1.name || ' (' || C1.code || ')</option>';
@@ -680,8 +724,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 -- Capabilities
                 FOR i IN 1..G_CAPABILITIES.COUNT LOOP
                     l_article:=l_article || 
-                    '<button type="button" class="toggle" id="' || G_CAPABILITIES(i) || '-btn" aria-pressed="' || 
-                        CASE WHEN BITAND(C.capabilities,POWER(2,G_CAPABILITIES.COUNT-i))=1 THEN 'true' ELSE 'false' END || '">' || INITCAP(G_CAPABILITIES(i)) || 
+                    '<button type="button" class="toggle capability" id="' || G_CAPABILITIES(i) || '-btn" aria-pressed="' || 
+                        isCapability(G_CAPABILITIES.COUNT-i,C.capabilities) || '">' || INITCAP(G_CAPABILITIES(i)) || 
                     '</button>';
                 END LOOP;
             l_article:=l_article ||
@@ -866,12 +910,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
     **  USER CHANGES CATEGORY - RETURN NEW FONT LIST FOR EXISTING CAPABILITIES
     */
-    PROCEDURE changeCategory(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pCategory IN VARCHAR2) IS
+    PROCEDURE changeCategory(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pCapabilities IN NUMBER, pCategory IN VARCHAR2) IS
         l_html CLOB;
         n PLS_INTEGER:=0;
     BEGIN
         FOR C IN (
-            SELECT wf.font_id, f.family, f.category, f.capabilities
+            SELECT wf.font_id, f.family, f.category
               FROM website_font wf, font f
              WHERE wf.website_id=pWebsiteid
                AND wf.context=pContext
@@ -881,7 +925,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 SELECT id, family, COUNT(*) OVER () nb 
                   FROM font 
                  WHERE category=pCategory
-                   AND capabilities=C.capabilities
+                   AND capabilities=pCapabilities
                  ORDER BY 2
             ) LOOP
                 n:=n+1;
@@ -908,10 +952,49 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         pJson.put('sample','<p></p>');
     END;
 
-    PROCEDURE changeCapabilities(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pId IN VARCHAR2, pValue IN VARCHAR2) IS
+    /*
+    ** USER CLICKS A CAPABILITY BUTTON
+    */
+    PROCEDURE changeCapabilities(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pCategory IN VARCHAR2, pCapabilities IN NUMBER) IS
+        l_html CLOB;
+        n PLS_INTEGER:=0;
     BEGIN
-        -- pJson.put('family',getFontSelect(C.font_id, C.family, C.category, pCapabilities));
-    null;
+        FOR C IN (
+            SELECT wf.font_id, f.family
+              FROM website_font wf, font f
+             WHERE wf.website_id=pWebsiteid
+               AND wf.context=pContext
+               AND wf.font_id=f.id
+        ) LOOP
+            FOR C1 IN (
+                SELECT id, family, COUNT(*) OVER () nb 
+                  FROM font 
+                 WHERE category=pCategory
+                   AND capabilities=pCapabilities
+                 ORDER BY 2
+            ) LOOP
+                n:=n+1;
+                IF (n=1) THEN
+                    l_html:=
+                    '<button>' ||
+                        '<selectedcontent>--Choose from ' || C1.nb ||' fonts--</selectedcontent>' ||
+                        '<span class="arrow"></span>' ||
+                    '</button>';
+                END IF;
+                l_html:=l_html || 
+                '<option value="' || C1.id || '" style="font-family:f' || C1.id || '">' || C1.family || '</option>';
+            END LOOP;
+        END LOOP;
+        IF (n=0) THEN
+            l_html:=l_html || 
+            '<button>' ||
+                '<selectedcontent>--No ' || pCategory || ' fonts with those capabilities--</selectedcontent>' ||
+                '<span class="arrow"></span>' ||
+            '</button>';
+        END IF;
+        pJson.put('family',l_html);
+        pJson.put('variations','<p></p>');
+        pJson.put('sample','<p></p>');
     END;
 
     /*
@@ -925,10 +1008,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         FOR i IN 1..G_CAPABILITIES.COUNT LOOP
             l_capability:= new JSON_OBJECT_T;
             l_capability.put('id',G_CAPABILITIES(i) || '-btn');
-            l_capability.put('value', CASE BITAND(pCapabilities,POWER(2,G_CAPABILITIES.COUNT-i)) WHEN 1 THEN 'true' ELSE 'false' END);
+            l_capability.put('value', isCapability(G_CAPABILITIES.COUNT-i,pCapabilities));
             l_capabilities.append(l_capability);
         END LOOP;
         RETURN (l_capabilities);
+    END;
+
+     /*
+    ** NEW FONT SELECTED FOR A CONTEXT
+    */
+    PROCEDURE updateFontAxisValue(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pAxisName IN VARCHAR2, pAxisValue IN NUMBER) IS
+        n PLS_INTEGER;
+    BEGIN
+        null;
     END;
 
     /*
@@ -987,6 +1079,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END IF;
 
         pJson.put('urls',getFontfaces(pWebsiteid, pFontid, l_api_url));
+        
+        FOR C IN (
+            SELECT family, category, capabilities FROM font WHERE id=pFontid
+        ) LOOP
+            pJson.put('sample',getFontSample(pContext, C.family, C.category, C.capabilities));
+        END LOOP;
     END;
 
     /* 
@@ -1009,6 +1107,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
     END;
 
+    PROCEDURE addLanguage(pWebsiteId IN NUMBER, pLanguageCode IN language.code%type) IS
+    BEGIN
+        INSERT INTO website_language(website_id, language_code)
+        VALUES (pWebsiteId,pLanguageCode);
+        EXCEPTION
+            WHEN DUP_VAL_ON_INDEX THEN null;
+    END;
+
     /* 
     **  USER MAKES CHANGE IN THE UI
     */
@@ -1023,8 +1129,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_json:= new JSON_OBJECT_T;
 
         FOR C IN (
-            SELECT context, id,  value
-              FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, id, value))
+            SELECT context, category, capabilities, id, value
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, category, capabilities, id, value))
         ) LOOP
             CASE C.id
                 WHEN 'context' THEN
@@ -1032,15 +1138,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     changeContext(pWebsiteId, l_json, C.value);
                 WHEN 'category' THEN
                     l_message:='Change category - ' || C.value;
-                    changeCategory(pWebsiteid, l_json, C.context, C.value);
+                    changeCategory(pWebsiteid, l_json, C.context, C.capabilities, C.value);
                 WHEN 'capabilities' THEN
                     l_message:='Change capabilities - ' || C.value;
-                    changeCapabilities(pWebsiteid, l_json, C.context, C.id, C.value);
+                    changeCapabilities(pWebsiteid, l_json, C.context, C.category, C.value);
                 WHEN 'family' THEN
                     l_message:='Change family - return details of family ' || C.value;
                     updateFamily(pWebsiteid, l_json, C.context, C.value);
+                WHEN 'language' THEN
+                    l_message:='Selected language ' || C.value || ' - will add to Google API &text parameter, later';
+                    addLanguage(pWebsiteid,C.value);
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
+                    updateFontAxisValue(pWebsiteid, l_json, C.context, C.id, C.value);
             END CASE;
         END LOOP;
 
@@ -1063,6 +1173,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_clob CLOB;
         l_nb_fonts PLS_INTEGER;
         l_lastModified google_font.lastModified%type;
+        l_capabilities VARCHAR2(200);
     BEGIN
         pck_api.callGoogleAPI('https://www.googleapis.com/webfonts/v1/webfonts?capability=WOFF2&capability=VF',pData=>l_clob);
 
@@ -1255,8 +1366,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 )
             );
 
-        UPDATE font 
-           SET capabilities=BIN_TO_NUM(bold, italic, wdth, opsz, custom, color);
+        FOR i IN 1..G_CAPABILITIES.COUNT LOOP
+            l_capabilities:=l_capabilities || G_CAPABILITIES(i) || ',';
+        END LOOP;
+        l_capabilities:=RTRIM(l_capabilities,',');
+        pck_core.log('l_capabilities:'||l_capabilities);
+
+        EXECUTE IMMEDIATE 'UPDATE font SET capabilities=BIN_TO_NUM(' || l_capabilities || ')';
         
     END;
 
