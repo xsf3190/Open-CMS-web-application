@@ -261,28 +261,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ** CREATE CUSTOM VARIABLES FOR ALL AVAILABLE FONT AXES
         */
         FOR C IN (
-            SELECT wf.context, REPLACE(m.axis,'ital','style') axis, NVL(fa.value,m.default_value) value,
-                    ROW_NUMBER() OVER (PARTITION BY wf.context ORDER BY REPLACE(m.axis,'ital','style') ) rn,
+            SELECT wf.context, m.axis, NVL(fa.value,m.default_value) value,
+                    ROW_NUMBER() OVER (PARTITION BY wf.context ORDER BY ASCII(m.axis) DESC) rn,
                     COUNT(*) OVER (PARTITION BY wf.context) nb
               FROM website_font wf, font_metadata m, font_axes_value fa
              WHERE wf.website_id=pWebsiteId
                AND fa.website_id(+)=wf.website_id
                AND fa.axis(+)=m.axis
+               AND m.axis<>'ital'
                AND fa.context(+)=wf.context
-             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), axis
+             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), rn
         ) LOOP
             -- ital custom variable depends on whether font is variable
             l_css:=l_css || 
-            '--' || C.context || '-font-' || C.axis || ': ';
-            IF (C.axis='style') THEN
-                l_css:=l_css || 
-                CASE C.value WHEN 0 THEN 'normal' WHEN 1 THEN 'italic' END;
-            ELSE
-                l_css:=l_css || 
-                C.value;
-            END IF;
-            l_css:=l_css || ';';
-            IF (C.axis<>'style') THEN
+            '--' || C.context || '-font-' || C.axis || ': ' ||
+            C.value || CASE WHEN C.axis='wdth' THEN '%' END || ';';
+            IF (C.axis NOT IN ('wdth','wght')) THEN
                 l_font_variation_settings:=l_font_variation_settings ||
                 '"' || C.axis || '" var(--' || C.context || '-font-' || C.axis || '),';
             END IF;
