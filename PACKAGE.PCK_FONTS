@@ -595,6 +595,53 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN (l_html);
     END;
 
+    /*
+    **  USER CHANGES CATEGORY - RETURN NEW FONT LIST FOR EXISTING CAPABILITIES
+    */
+    FUNCTION getFontOptions(pWebsiteid IN NUMBER, pCategory IN VARCHAR2, pCapabilities IN NUMBER, pFontid IN NUMBER DEFAULT NULL) RETURN JSON_ARRAY_T IS
+        l_arr JSON_ARRAY_T;
+        l_obj JSON_OBJECT_T;
+        n PLS_INTEGER:=0;
+    BEGIN
+        l_arr:=new JSON_ARRAY_T;
+
+        FOR C IN (
+            SELECT id, family, COUNT(*) OVER () nb 
+              FROM font 
+             WHERE category=pCategory
+               AND capabilities=pCapabilities
+             ORDER BY 2
+        ) LOOP
+            n:=n+1;
+            IF (n=1 AND pFontid IS NULL) THEN
+                l_obj:=new JSON_OBJECT_T;
+                l_obj.put('text','--Choose from ' || C.nb || ' fonts');
+                l_obj.put('value',0);
+                l_arr.append(l_obj);
+            END IF;
+            l_obj:=new JSON_OBJECT_T;
+            l_obj.put('text',C.family);
+            l_obj.put('value',C.id);
+            IF (C.id=pFontid) THEN
+                l_obj.put('defaultSelected',TRUE);
+                l_obj.put('selected',TRUE);
+            ELSE
+                l_obj.put('defaultSelected',FALSE);
+                l_obj.put('selected',FALSE);
+            END IF;
+            l_arr.append(l_obj);
+        END LOOP;
+            
+        IF (n=0) THEN
+            l_obj:=new JSON_OBJECT_T;
+            l_obj.put('text','--No fonts for that selection--');
+            l_obj.put('value',0);
+            l_arr.append(l_obj);
+        END IF;
+
+        RETURN (l_arr);
+    END;
+
     /* 
     **  BUILD INITIAL DIALOG CONTENT
     **   Select Context
@@ -648,6 +695,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             )
             WHERE updated_date=max_updated_date
         ) LOOP
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('options',getFontOptions(pWebsiteid,C.category,C.capabilities,C.font_id));
+
             l_article:=
             '<div class="flex-items">' ||
                 -- Contexts
@@ -739,19 +789,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     '<button>' ||
                         '<selectedcontent></selectedcontent>' ||
                         '<span class="arrow"></span>' ||
-                    '</button>';
-            
-            FOR C1 IN (
-                SELECT id, family 
-                  FROM font 
-                 WHERE category=C.category
-                   AND capabilities=C.capabilities
-                 ORDER BY 2
-            ) LOOP
-                l_article:=l_article || 
-                    '<option value="' || C1.id || '" style="font-family:f' || C1.id || '"'|| CASE WHEN C1.id=C.font_id THEN ' selected' END || '>' || C1.family || '</option>';
-            END LOOP;
-            l_article:=l_article || 
+                    '</button>' || 
                 '</select>' ||
             '</div>' ||
             '<div class="grid">' ||
@@ -764,6 +802,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '</div>' ||
             '</div>' ||
             '</div>';
+            
         END LOOP;
 
         l_footer:=
@@ -776,7 +815,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         /*
         ** RETURN DIALOG CONTENTS TO CLIENT 
         */
-        l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('header',l_header);
         l_json.put('article',l_article);
@@ -882,122 +920,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    ** BUILD <select> ELEMENT OPTIONS TO BE REPLACED IN UI
-    */
-    FUNCTION getFontSelect(pSelectedid IN NUMBER, pSelectedFamily IN VARCHAR2, pCategory IN VARCHAR2, pCapabilities IN NUMBER) RETURN CLOB IS
-        l_html CLOB;
-    BEGIN
-        l_html:=
-            '<button>' ||
-                '<selectedcontent>' || pSelectedFamily || '</selectedcontent>' ||
-                '<span class="arrow"></span>' ||
-            '</button>';
-            
-        FOR C IN (
-            SELECT id, family 
-              FROM font 
-             WHERE category=pCategory
-               AND capabilities=pCapabilities
-             ORDER BY 2
-        ) LOOP
-            l_html:=l_html || 
-            '<option value="' || C.id || '" style="font-family:f' || C.id || '"'|| CASE WHEN C.id=pSelectedid THEN ' selected' END || '>' || C.family || '</option>';
-        END LOOP;
-
-        RETURN(l_html);
-    END;
-
-    /*
-    **  USER CHANGES CATEGORY - RETURN NEW FONT LIST FOR EXISTING CAPABILITIES
-    */
-    PROCEDURE changeCategory(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pCapabilities IN NUMBER, pCategory IN VARCHAR2) IS
-        l_html CLOB;
-        n PLS_INTEGER:=0;
-    BEGIN
-        FOR C IN (
-            SELECT wf.font_id, f.family, f.category
-              FROM website_font wf, font f
-             WHERE wf.website_id=pWebsiteid
-               AND wf.context=pContext
-               AND wf.font_id=f.id
-        ) LOOP
-            FOR C1 IN (
-                SELECT id, family, COUNT(*) OVER () nb 
-                  FROM font 
-                 WHERE category=pCategory
-                   AND capabilities=pCapabilities
-                 ORDER BY 2
-            ) LOOP
-                n:=n+1;
-                IF (n=1) THEN
-                    l_html:=
-                    '<button>' ||
-                        '<selectedcontent>--Choose from ' || C1.nb ||' fonts--</selectedcontent>' ||
-                        '<span class="arrow"></span>' ||
-                    '</button>';
-                END IF;
-                l_html:=l_html || 
-                '<option value="' || C1.id || '" style="font-family:f' || C1.id || '">' || C1.family || '</option>';
-            END LOOP;
-        END LOOP;
-        IF (n=0) THEN
-            l_html:=l_html || 
-            '<button>' ||
-                '<selectedcontent>--No ' || pCategory || ' fonts--</selectedcontent>' ||
-                '<span class="arrow"></span>' ||
-            '</button>';
-        END IF;
-        pJson.put('family',l_html);
-        pJson.put('variations','<p></p>');
-        pJson.put('sample','<p></p>');
-    END;
-
-    /*
-    ** USER CLICKS A CAPABILITY BUTTON
-    */
-    PROCEDURE changeCapabilities(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pCategory IN VARCHAR2, pCapabilities IN NUMBER) IS
-        l_html CLOB;
-        n PLS_INTEGER:=0;
-    BEGIN
-        FOR C IN (
-            SELECT wf.font_id, f.family
-              FROM website_font wf, font f
-             WHERE wf.website_id=pWebsiteid
-               AND wf.context=pContext
-               AND wf.font_id=f.id
-        ) LOOP
-            FOR C1 IN (
-                SELECT id, family, COUNT(*) OVER () nb 
-                  FROM font 
-                 WHERE category=pCategory
-                   AND capabilities=pCapabilities
-                 ORDER BY 2
-            ) LOOP
-                n:=n+1;
-                IF (n=1) THEN
-                    l_html:=
-                    '<button>' ||
-                        '<selectedcontent>--Choose from ' || C1.nb ||' fonts--</selectedcontent>' ||
-                        '<span class="arrow"></span>' ||
-                    '</button>';
-                END IF;
-                l_html:=l_html || 
-                '<option value="' || C1.id || '" style="font-family:f' || C1.id || '">' || C1.family || '</option>';
-            END LOOP;
-        END LOOP;
-        IF (n=0) THEN
-            l_html:=l_html || 
-            '<button>' ||
-                '<selectedcontent>--No ' || pCategory || ' fonts with those capabilities--</selectedcontent>' ||
-                '<span class="arrow"></span>' ||
-            '</button>';
-        END IF;
-        pJson.put('family',l_html);
-        pJson.put('variations','<p></p>');
-        pJson.put('sample','<p></p>');
-    END;
-
-    /*
     **  RETURN CAPABILITIES AS JSON ARRAY OF <button> ELEMENT SETTINGS
     */
     FUNCTION getCapabilities(pCapabilities IN NUMBER) RETURN JSON_ARRAY_T IS
@@ -1014,13 +936,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN (l_capabilities);
     END;
 
-     /*
-    ** NEW FONT SELECTED FOR A CONTEXT
+    /*
+    ** USER CHANGED FONT SETTING
     */
     PROCEDURE updateFontAxisValue(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pAxisName IN VARCHAR2, pAxisValue IN NUMBER) IS
         n PLS_INTEGER;
     BEGIN
-        null;
+        UPDATE font_axes_value 
+           SET updated_date=current_timestamp, 
+               value=pAxisValue
+         WHERE website_id=pWebsiteid
+           AND context=pContext
+           AND axis=pAxisName;
+        n:=sql%rowcount;
+        IF (n=0) THEN
+            INSERT INTO font_axes_value(website_id, context, axis, value)
+            VALUES (pWebsiteid, pContext, pAxisName, pAxisValue);
+        END IF;
     END;
 
     /*
@@ -1084,6 +1016,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             SELECT family, category, capabilities FROM font WHERE id=pFontid
         ) LOOP
             pJson.put('sample',getFontSample(pContext, C.family, C.category, C.capabilities));
+            pJson.put('message','Updated font to ' || C.family || ' for ' || pContext);
         END LOOP;
     END;
 
@@ -1101,7 +1034,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         ) LOOP
             pJson.put('category',C.category);
             pJson.put('capabilities',getCapabilities(C.capabilities));
-            pJson.put('family',getFontSelect(C.font_id, C.family, C.category, C.capabilities));
+            pJson.put('options',getFontOptions(pWebsiteid, C.category, C.capabilities, C.font_id));
             pJson.put('variations',getFontVariations(pWebsiteid, C.font_id, pContext));
             pJson.put('sample',getFontSample(pContext, C.family, C.category, C.capabilities));
         END LOOP;
@@ -1129,21 +1062,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_json:= new JSON_OBJECT_T;
 
         FOR C IN (
-            SELECT context, category, capabilities, id, value
-              FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, category, capabilities, id, value))
+            SELECT context, category, capabilities, font, id, value
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, category, capabilities, font, id, value))
         ) LOOP
             CASE C.id
                 WHEN 'context' THEN
-                    l_message:='Change context - return details of context ' || C.value;
                     changeContext(pWebsiteId, l_json, C.value);
+                    l_message:='Font details now showing for context ' || C.value;
                 WHEN 'category' THEN
-                    l_message:='Change category - ' || C.value;
-                    changeCategory(pWebsiteid, l_json, C.context, C.capabilities, C.value);
+                    l_json.put('options',getFontOptions(pWebsiteid,C.value,C.capabilities));
+                    l_message:='Changed category to ' || C.value || ' and updated font select list';
                 WHEN 'capabilities' THEN
-                    l_message:='Change capabilities - ' || C.value;
-                    changeCapabilities(pWebsiteid, l_json, C.context, C.category, C.value);
+                    l_json.put('options',getFontOptions(pWebsiteid,C.category,C.value));
+                    l_message:='Updated font select list to reflect new capability setting';
                 WHEN 'family' THEN
-                    l_message:='Change family - return details of family ' || C.value;
                     updateFamily(pWebsiteid, l_json, C.context, C.value);
                 WHEN 'language' THEN
                     l_message:='Selected language ' || C.value || ' - will add to Google API &text parameter, later';
@@ -1154,9 +1086,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END CASE;
         END LOOP;
 
-        
         l_json.put('success',true);
-        l_json.put('message',l_message);
+        IF (l_message IS NOT NULL) THEN
+            l_json.put('message',l_message);
+        END IF;
 
         apex_util.prn(l_json.to_clob,false);
         pStatus:=200;
