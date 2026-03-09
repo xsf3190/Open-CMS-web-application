@@ -16,7 +16,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    FUNCTION buildApiUrl(pWebsiteid IN website.id%type, pFontid IN font.id%type, pDefaultWght IN NUMBER)  RETURN JSON_ARRAY_T;
 end "PCK_FONTS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
@@ -501,7 +500,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END IF;
 
             l_variations:=l_variations || 
-            '<option value="' || TO_CHAR(C.wght_normal) || '"' || CASE WHEN C.wght_normal=l_current_wght THEN ' selected' END || '>' || 
+            '<option value="' || TO_CHAR(C.wght_normal) || '"' || 
+                CASE WHEN C.wght_normal=l_current_wght THEN ' selected' END || 
+                ' style="font-weight:' || C.wght_normal || '" >' || 
                 CASE C.wght_normal
                     WHEN 100 THEN 'Thin'
                     WHEN 200 THEN 'Extra Light'
@@ -872,54 +873,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    ** Build Google Fonts API url for a given font
-    */
-    FUNCTION buildApiUrl(pWebsiteid IN website.id%type, pFontid IN font.id%type, pDefaultWght IN NUMBER)  RETURN JSON_ARRAY_T
-    IS
-        l_api_url VARCHAR2(500);
-    BEGIN
-        FOR C IN (
-            SELECT variable
-              FROM font
-             WHERE id=pFontid
-        ) LOOP
-            CASE C.variable
-                WHEN 1 THEN
-                    FOR C IN (
-                        SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) ||
-                               '@' AS axes,
-                               LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges
-                          FROM font_axes fa
-                         WHERE fa.font_id=pFontid
-                         GROUP BY fa.font_id
-                    ) LOOP
-                        l_api_url:=l_api_url || C.axes || C.ranges;
-                        IF (INSTR(C.axes,'ital')>0) THEN
-                            l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
-                        END IF;
-                    END LOOP;
-
-                WHEN 0 THEN
-                    FOR C IN (
-                        SELECT wght_normal, wght_italic
-                          FROM font_static_wght
-                         WHERE font_id=pFontid
-                         ORDER BY ABS(wght_normal - pDefaultWght)
-                         FETCH FIRST ROW ONLY
-                    ) LOOP
-                        IF (C.wght_italic IS NOT NULL) THEN
-                            l_api_url:=l_api_url || 'ital,wght@0,' || C.wght_normal || ';1,' || C.wght_normal;
-                        ELSE
-                            l_api_url:=l_api_url || 'wght@' || C.wght_normal;
-                        END IF;
-                    END LOOP;
-            END CASE;
-
-            RETURN (getFontfaces(pWebsiteid, pFontid, l_api_url));
-        END LOOP;
-    END;
-
-    /*
     **  RETURN CAPABILITIES AS JSON ARRAY OF <button> ELEMENT SETTINGS
     */
     FUNCTION getCapabilities(pCapabilities IN NUMBER) RETURN JSON_ARRAY_T IS
@@ -999,7 +952,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 SELECT wght_normal, wght_italic
                   FROM font_static_wght
                  WHERE font_id=pFontid
-                 ORDER BY ABS(wght_normal - 400)
+                 ORDER BY ABS(wght_normal - DECODE(pContext,'headings',700,400))
                  FETCH FIRST ROW ONLY
             ) LOOP
                 IF (C.wght_italic IS NOT NULL) THEN
@@ -1040,6 +993,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
     END;
 
+    /* 
+    **  USER REQUESTS NEW LANGUAGE
+    */
     PROCEDURE addLanguage(pWebsiteId IN NUMBER, pLanguageCode IN language.code%type) IS
     BEGIN
         INSERT INTO website_language(website_id, language_code)
@@ -1223,31 +1179,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         (
             font_id, wght_normal, wght_italic
         )
-        WITH 
-        data AS
+        SELECT id, CASE WHEN normal=1 THEN wght END normal,  CASE WHEN italic=1 THEN wght END italic
+        FROM
         (
-            SELECT family, DECODE(variant,'regular','400',variant) wght
-            FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, axes VARCHAR2(5) EXISTS PATH '$.axes', NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$')))
-            WHERE axes='false'
-        ),
-        data2 AS
-        (
-        SELECT family, 
-            CASE WHEN INSTR(wght,'italic')=0 THEN wght END wght_normal,
-            CASE WHEN INSTR(wght,'italic')>0 THEN NVL(SUBSTR(wght,1,INSTR(wght,'italic')-1),400) END wght_italic
-        FROM data
-        ),
-        data3 AS
-        (
-        SELECT family, 
-            wght_normal,
-            LEAD(wght_italic) OVER (PARTITION BY family ORDER BY null) wght_italic
-        FROM data2
+        SELECT COUNT(normal) normal, COUNT(italic) italic, id, wght
+        FROM
+        (    
+            SELECT 1 normal, TO_NUMBER(null) italic, font.id, wght
+            FROM 
+            (
+                SELECT family, DECODE(variant,'regular','400',variant) wght
+                FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, axes VARCHAR2(5) EXISTS PATH '$.axes', NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$')))
+                WHERE axes='false'
+            ) data, font
+            WHERE INSTR(data.wght,'italic')=0
+            AND font.family=data.family
+            UNION ALL
+            SELECT TO_NuMBER(null) normal, 1 italic, font.id, SUBSTR(data.wght,1,INSTR(wght,'italic')-1)
+            FROM
+            (
+                SELECT family, DECODE(variant,'italic','400italic',variant) wght
+                FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, axes VARCHAR2(5) EXISTS PATH '$.axes', NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$')))
+                WHERE axes='false'
+            ) data,font
+            WHERE INSTR(data.wght,'italic')>0
+            AND font.family=data.family
         )
-        SELECT f.id, g.wght_normal, g.wght_italic 
-        FROM data3 g, font f
-        WHERE COALESCE(g.wght_normal, g.wght_italic) IS NOT NULL
-        AND f.family=g.family;
+        GROUP BY id, wght
+        )
+        ORDER BY 1;
 
         /*
         ** LOAD VARIABLE FONT AXES. 
