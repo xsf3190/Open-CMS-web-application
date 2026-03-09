@@ -32,6 +32,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE logout(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    FUNCTION parseUAData(pIncludePlatform IN BOOLEAN DEFAULT FALSE) RETURN VARCHAR2;
+    --
     PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN website_cpu.cpu_used%type);
@@ -462,14 +464,37 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     END;
 
     /*
+    ** RETURN BROWSER AND VERSION FROM Client Hint navigator.userAgentData
+    */
+    FUNCTION parseUAData(pIncludePlatform IN BOOLEAN DEFAULT FALSE) RETURN VARCHAR2 IS
+        -- l_useragent VARCHAR2(100):=;
+    BEGIN 
+        FOR C IN (
+            SELECT TRIM(column_value) as value 
+              FROM TABLE(apex_string.split(OWA_UTIL.get_cgi_env ('sec-ch-ua'),',')) 
+             WHERE INSTR(column_value,'Brand')=0 
+               AND INSTR(column_value,'Chromium')=0
+        ) LOOP
+            RETURN ( 
+                REGEXP_SUBSTR(C.value,'"(.+?)"',1,1,null,1) || ' ' || REGEXP_SUBSTR(C.value,'v="(.+?)"',1,1,null,1) || 
+                CASE WHEN pIncludePlatform THEN ' on ' || LTRIM(RTRIM(OWA_UTIL.get_cgi_env ('sec-ch-ua-platform'),'"'),'"') END
+            );
+        END LOOP;
+        RETURN (null); -- means userAgentData not supported
+    END;
+
+    /*
     ** BUILD FINGERPRINT FOR CLIENT DEVICE AND LOCATION
+    ** TO ALLOW DEVELOPER TOOLS TO BE OPEN WHEN IN EDITOR MODE WE ONLY INCLUDE USER AGENT PART OF navigator.useAgentData 
+    ** DEVELOPER TOOLS SETS PLATFORM TO "android" CAUSING REPEATED UNAUTHENTICATIONS WHEN REFRESHING TOKENS
     */
     FUNCTION getFingerprint(pRemoteAddr IN OUT VARCHAR2, pUserAgent IN OUT VARCHAR2, pTimezone IN OUT VARCHAR2) RETURN RAW IS
         l_fingerprint fingerprint.fingerprint%type;
         l_remote_addr security_log.remote_addr%type:=OWA_UTIL.get_cgi_env ('REMOTE_ADDR');
-        l_user_agent  security_log.user_agent%type:=OWA_UTIL.get_cgi_env ('sec-ch-ua') || OWA_UTIL.get_cgi_env ('sec-ch-ua-platform');
+        l_user_agent  security_log.user_agent%type;
         l_timezone security_log.timezone%type:=OWA_UTIL.get_cgi_env ('timezone');
     BEGIN
+        l_user_agent:=parseUAData(pIncludePlatform=>FALSE);
         l_fingerprint:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_remote_addr || l_user_agent || l_timezone,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
         pRemoteAddr:=l_remote_addr;
         pUserAgent:=l_user_agent;
