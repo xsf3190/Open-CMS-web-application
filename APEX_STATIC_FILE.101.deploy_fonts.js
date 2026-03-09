@@ -70,12 +70,13 @@ const replaceOptions = (options) => {
 }
 
 /*
-** LOAD SELECTED FONT AND CONTROLS
+** LOAD @FONT-FACE RULES FOR SELECTED FONT
 */
 const loadFont = (data) => {
     let family = document.querySelector("#family selectedContent").textContent;
     const wght = document.querySelector("#wght selectedContent");
     const context = getContext();
+    // user selected new static font weight
     if (wght) {
         family+=" "+wght.textContent;
     }
@@ -101,7 +102,9 @@ const loadFont = (data) => {
 const changeHandler = (e) => {
     if (e.target.value===0) return;
     
-    const obj={context:getContext(), capabilities:getCapabilities(), font:getSelectedFont()};
+    const context = getContext();
+
+    const obj={context:context, capabilities:getCapabilities(), font:getSelectedFont()};
     
     if (e.target.getAttribute("type")==="radio") {
         obj.id=e.target.getAttribute("name");
@@ -143,8 +146,7 @@ const changeHandler = (e) => {
                 document.documentElement.style.setProperty(`--${id}`, `var(${sizeValue})`); 
             }
             else if (obj.id==="wght" && !e.target.classList.contains("slider")) {
-                const context = getContext();
-                document.documentElement.style.setProperty(`--${context}-font-wght`, value);
+                document.documentElement.style.setProperty(`--${context}-font-wght`, obj.value);
             }
 
             liveRegion(data);
