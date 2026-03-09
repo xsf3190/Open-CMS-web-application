@@ -176,7 +176,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     END;
 
     /*
-    **  GET BROWSER FROM VISITOR'S USER AGENT
+    **  GET BROWSER FROM VISITOR'S USER AGENT DATA FIRST (CHROMIUM ONLY IN Q1-2026)
+    **  OTHERWISE ASK WHATSMYBROWSER.COM
     */
     FUNCTION getBrowser RETURN VARCHAR2 IS
         l_user_agent_hash browser_lookup.user_agent_hash%type;
@@ -186,14 +187,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_array JSON_ARRAY_T;    
         l_browser browser_lookup.browser%type;
     BEGIN
-        l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
-        FOR C1 IN (
-            SELECT browser
-              FROM browser_lookup
-             WHERE user_agent_hash=l_user_agent_hash
-         ) LOOP
-            l_browser:=C1.browser;
-        END LOOP;
+        l_browser:=pck_sec.parseUAData(pIncludePlatform=>TRUE);
+        IF (l_browser IS NULL) THEN
+            l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+            FOR C1 IN (
+                SELECT browser
+                  FROM browser_lookup
+                 WHERE user_agent_hash=l_user_agent_hash
+             ) LOOP
+                l_browser:=C1.browser;
+            END LOOP;
+        END IF;
 
         IF (l_browser IS NULL) THEN
             l_array:= new JSON_ARRAY_T;
