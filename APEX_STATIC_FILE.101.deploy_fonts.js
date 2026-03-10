@@ -73,26 +73,23 @@ const replaceOptions = (options) => {
 ** LOAD @FONT-FACE RULES FOR SELECTED FONT
 */
 const loadFont = (data) => {
-    let family = document.querySelector("#family selectedContent").textContent;
-    const wght = document.querySelector("#wght selectedContent");
     const context = getContext();
-    // user selected new static font weight
-    if (wght) {
-        family+=" "+wght.textContent;
-    }
     for (const fontface of data.urls) {
-        const fontFile = new FontFace(family,fontface.source);
+        const fontFile = new FontFace(fontface.family,fontface.source);
         fontFile.style = fontface.style;
         fontFile.weight = fontface.weight;
         if (fontface.stretch) {
             fontFile.stretch = fontface.stretch;
         }
         document.fonts.add(fontFile);
+        console.log(`Loading ${fontface.family} for ${context}`);
         fontFile.load();
     };
     document.fonts.ready.then(()=>{
-        document.documentElement.style.setProperty(`--font-family-${context}`, family);
-        console.log(`Loaded ${family} for ${context}`);
+        for (const property of data.properties) {
+            console.log(`Setting property ${property.name} to ${property.value}`);
+            document.documentElement.style.setProperty(property.name,property.value);
+        }
     });
 }
 
@@ -144,9 +141,6 @@ const changeHandler = (e) => {
             if (obj.id.endsWith("size")) {
                 const sizeValue = (obj.id.includes("font")) ? `--step-${value}` : value;
                 document.documentElement.style.setProperty(`--${id}`, `var(${sizeValue})`); 
-            }
-            else if (obj.id==="wght" && !e.target.classList.contains("slider")) {
-                document.documentElement.style.setProperty(`--${context}-font-wght`, obj.value);
             }
 
             liveRegion(data);
