@@ -482,12 +482,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
              WHERE fsw.font_id=pFontid 
              ORDER BY fsw.wght_normal
         ) LOOP
-            IF (C.rn=1 AND C.wght_italic IS NOT NULL) THEN
-                l_italic:=TRUE;
-            END IF;
+            l_italic:=(C.wght_italic IS NOT NULL);
+
             IF (C.nb=1) THEN
                 EXIT;
             END IF;
+
             IF (C.rn=1) THEN
                 l_variations:=l_variations || 
                 '<div>' ||
@@ -832,25 +832,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /* 
     **  GET GOOGLE @font-face RULES FOR A FONT / CONTEXT
     */
-    FUNCTION getFontfaces(pWebsiteid IN website.id%type, pFontid IN font.id%type, pApiurl IN VARCHAR2) RETURN JSON_ARRAY_T
+    FUNCTION getFontfaces(pWebsiteid IN website.id%type, pFontid IN font.id%type, pFamily IN font.family%type, pApiurl IN VARCHAR2) RETURN JSON_ARRAY_T
     IS 
         l_fontfaces CLOB;
-        l_api_url VARCHAR2(500);
+        l_api_url VARCHAR2(1000);
+        l_characters language.characters%type;
         l_fontfaces_json JSON_ARRAY_T;
         l_fontface JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
+        /*
+        ** Build characters from union of all website language characters 
+        */
         FOR C IN (
-            SELECT w.language_code, f.family 
-              FROM website w, font f 
-             WHERE w.id=pWebsiteid
-               AND f.id=pFontid
+            SELECT wl.language_code, l.characters
+              FROM website_language wl, language l
+             WHERE wl.website_id=pWebsiteid
+               AND wl.language_code=l.code
         ) LOOP
-            l_api_url:='https://fonts.googleapis.com/css2?family=' || 
-                C.family || ':' || 
-                pApiurl || 
-                '&text=' || pck_fonts.getLanguage(C.language_code);
+            IF (C.characters IS NULL) THEN
+                l_characters:=l_characters || distinct_chars(getLanguage(C.language_code));
+            ELSE
+                l_characters:=l_characters || distinct_chars(C.characters);
+            END IF;
         END LOOP;
+
+        l_api_url:='https://fonts.googleapis.com/css2?family=' || 
+                pFamily || ':' || 
+                pApiurl || 
+                '&text=' || l_characters;
             
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
 
@@ -869,6 +879,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
             l_fontfaces_json.append(l_fontface);
         END LOOP;
+
         RETURN(l_fontfaces_json);
     END;
 
@@ -892,7 +903,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
     ** USER CHANGED FONT SETTING
     */
-    PROCEDURE updateFontAxisValue(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pAxisName IN VARCHAR2, pAxisValue IN NUMBER) IS
+    PROCEDURE updateFontAxisValue(pWebsiteid IN NUMBER, pContext IN VARCHAR2, pAxisName IN VARCHAR2, pAxisValue IN NUMBER) IS
         n PLS_INTEGER;
     BEGIN
         UPDATE font_axes_value 
@@ -906,6 +917,80 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             INSERT INTO font_axes_value(website_id, context, axis, value)
             VALUES (pWebsiteid, pContext, pAxisName, pAxisValue);
         END IF;
+    END;
+
+    /*
+    ** RETURN CLOSEST TUPLE FOR GIVEN STYLE AND WEIGHT
+    */
+    FUNCTION closestWght(pFontid IN NUMBER, pStyle IN VARCHAR2, pWght IN NUMBER) RETURN VARCHAR2 IS
+        l_tuple VARCHAR2(7);
+    BEGIN
+        CASE pStyle
+            WHEN 'normal' THEN
+                FOR C IN (
+                    SELECT wght_normal
+                      FROM font_static_wght
+                     WHERE font_id=pFontid
+                       AND wght_normal IS NOT NULL
+                     ORDER BY ABS(wght_normal - pWght)
+                     FETCH FIRST ROW ONLY
+                ) LOOP
+                    l_tuple:='0,' ||C.wght_normal || ';';
+                END LOOP;
+
+            WHEN 'italic' THEN
+                FOR C IN (
+                    SELECT wght_italic
+                      FROM font_static_wght
+                     WHERE font_id=pFontid
+                       AND wght_italic IS NOT NULL
+                     ORDER BY ABS(wght_italic - pWght)
+                     FETCH FIRST ROW ONLY
+                ) LOOP
+                    l_tuple:='1,' || C.wght_italic || ';';
+                END LOOP;
+        END CASE;
+        RETURN (l_tuple);
+    END;
+
+    /*
+    ** BUILD GOOGLE FONTS API QUERY PARAMETERS FOR STATIC FONT
+    */
+    FUNCTION getStaticFontApiUrl(pContext IN VARCHAR2, pFontid IN NUMBER) RETURN VARCHAR2 IS 
+        l_api_url VARCHAR2(500);
+        l_tuple_400 VARCHAR2(7);
+        l_tuple_700 VARCHAR2(7);
+
+        FUNCTION distinct_tuples RETURN VARCHAR2 IS
+        BEGIN
+            IF (l_tuple_400<>l_tuple_700) THEN
+                l_api_url:=l_api_url || l_tuple_400 || l_tuple_700;
+            ELSE
+                l_api_url:=l_api_url || l_tuple_400;
+            END IF;
+            RETURN (l_api_url);
+        END;
+
+    BEGIN
+        l_api_url:='ital,wght@';
+    
+        CASE pContext
+            WHEN 'headings' THEN
+                l_api_url:=l_api_url || closestWght(pFontid,'normal',700) || closestWght(pFontid,'italic',700);
+
+            WHEN 'text' THEN
+                l_tuple_400:=closestWght(pFontid,'normal',400);
+                l_tuple_700:=closestWght(pFontid,'normal',700);
+                l_api_url:=l_api_url || distinct_tuples;
+
+                l_tuple_400:=closestWght(pFontid,'italic',400);
+                l_tuple_700:=closestWght(pFontid,'italic',700);
+                l_api_url:=l_api_url || distinct_tuples;
+
+            WHEN 'logo' THEN
+                l_api_url:=l_api_url || closestWght(pFontid,'normal',400) || closestWght(pFontid,'italic',400);
+        END CASE;
+        RETURN(RTRIM(l_api_url,';'));
     END;
 
     /*
@@ -948,26 +1033,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 END IF;
             END LOOP;
         ELSE
-            FOR C IN (
-                SELECT wght_normal, wght_italic
-                  FROM font_static_wght
-                 WHERE font_id=pFontid
-                 ORDER BY ABS(wght_normal - DECODE(pContext,'headings',700,400))
-                 FETCH FIRST ROW ONLY
-            ) LOOP
-                IF (C.wght_italic IS NOT NULL) THEN
-                    l_api_url:=l_api_url || 'ital,wght@0,' || C.wght_normal || ';1,' || C.wght_normal;
-                ELSE
-                    l_api_url:=l_api_url || 'wght@' || C.wght_normal;
-                END IF;
-            END LOOP;
+            /* For STATIC fonts API parameters are tuples based on "font_static_wght" */
+            l_api_url:=getStaticFontApiUrl(pContext, pFontid);
         END IF;
-
-        pJson.put('urls',getFontfaces(pWebsiteid, pFontid, l_api_url));
         
         FOR C IN (
             SELECT family, category, capabilities FROM font WHERE id=pFontid
         ) LOOP
+            pJson.put('urls',getFontfaces(pWebsiteid, pFontid, C.family, l_api_url));
             pJson.put('sample',getFontSample(pContext, C.family, C.category, C.capabilities));
             pJson.put('message','Updated font to ' || C.family || ' for ' || pContext);
         END LOOP;
@@ -1010,6 +1083,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_message VARCHAR2(100);
+        l_api_url VARCHAR2(500);
         l_json JSON_OBJECT_T;
         l_urls JSON_ARRAY_T;
     BEGIN
@@ -1038,8 +1112,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     addLanguage(pWebsiteid,C.value);
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
-                    updateFontAxisValue(pWebsiteid, l_json, C.context, C.id, C.value);
+                    updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
             END CASE;
+
+            /* Need to download new font if user selects new static font weight */
+            IF (C.id='wght') THEN
+                FOR C1 IN (
+                    SELECT family FROM font WHERE id=C.font AND variable=0
+                ) LOOP
+                    l_api_url:=getStaticFontApiUrl(C.context, C.font);
+                    l_json.put('urls',getFontfaces(pWebsiteid, C.font, C1.family, l_api_url));
+                END LOOP;
+            END IF;
+
         END LOOP;
 
         l_json.put('success',true);
@@ -1263,7 +1348,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_capabilities:=l_capabilities || G_CAPABILITIES(i) || ',';
         END LOOP;
         l_capabilities:=RTRIM(l_capabilities,',');
-        pck_core.log('l_capabilities:'||l_capabilities);
 
         EXECUTE IMMEDIATE 'UPDATE font SET capabilities=BIN_TO_NUM(' || l_capabilities || ')';
         
