@@ -20,11 +20,11 @@
 }
 
 body {
-    font-family: var(--font-family-text);
-    font-size: var(--step-0);
+    font-family: var(--text-font-family);
     font-weight: var(--text-font-wght);
     font-stretch: var(--text-font-wdth);
     font-variation-settings: var(--text-font-variation-settings);
+    font-size: var(--step-0);
     text-box: cap alphabetic;
     line-height: 1.5;
     background-color: var(--color-bg);
@@ -455,7 +455,7 @@ small {
 
 :where(h1,h2,h3,h4) {
     text-wrap: pretty;
-    font-family: var(--font-family-headings);
+    font-family: var(--headings-font-family);
     font-weight: var(--headings-font-wght);
     font-stretch: var(--headings-font-wdth);
     font-variation-settings: var(--headings-font-variation-settings);
@@ -936,15 +936,18 @@ dialog hr+span {
 
 /* STYLES FOR FONTS .sample CLASS */
 #sample {
-    font-family: var(--font-family-text);
+    font-family: var(--text-font-family);
     font-weight: var(--text-font-wght);
     font-stretch: var(--text-font-wdth);
     font-variation-settings: var(--text-font-variation-settings);
     h2 {
-        font-family: var(--font-family-headings);
+        font-family: var(--headings-font-family);
         font-weight: var(--headings-font-wght);
         font-stretch: var(--headings-font-wdth);
         font-variation-settings: var(--headings-font-variation-settings);
+    }
+    strong {
+        font-weight: var(--text-font-wght-bold);
     }
 }
 
