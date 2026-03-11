@@ -33,6 +33,10 @@ body {
     animation: 3s infinite flip-synthesis;   
 }
 
+strong {
+    font-weight: var(--text-font-wght-bold, 700);
+}
+
 /* LINK STYLES */
 a {
   color: var(--color-link);
@@ -256,7 +260,7 @@ body>footer>a {
 
 /* logo without img element is text */
 .logo:not(:has(img)) {
-  font-family: var(--font-family-logo);
+  font-family: var(--logo-font-family);
   font-size: var(--logo-font-size);
   font-weight: var(--logo-font-wght);
   font-style: var(--logo-font-style);
@@ -949,6 +953,29 @@ dialog hr+span {
     strong {
         font-weight: var(--text-font-wght-bold);
     }
+}
+
+
+/* STYLES FOR SEPARATOR COMPONENT */
+.separator {
+  display: flex;
+  align-items: center;
+  text-align: center;
+}
+
+.separator::before,
+.separator::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--color-text);
+}
+
+.separator:not(:empty)::before {
+  margin-right: .25em;
+}
+
+.separator:not(:empty)::after {
+  margin-left: .25em;
 }
 
 /* STYLES FOR OVERLAY COMPONENT */
