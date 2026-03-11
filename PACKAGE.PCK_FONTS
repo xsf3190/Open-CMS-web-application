@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
-    FUNCTION combineLanguages(pLanguages IN VARCHAR2) RETURN VARCHAR2;
+    FUNCTION distinct_chars(pCharacters IN VARCHAR2) RETURN VARCHAR2;
     --
     PROCEDURE getCharsUsed(pArticleId IN article.id%type, pContent IN OUT NOCOPY CLOB);
     --
@@ -71,15 +71,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN(l_chars);
     END;
 
-    FUNCTION combineLanguages(pLanguages IN VARCHAR2) RETURN VARCHAR2 IS
+    FUNCTION combineLanguages(pWebsiteid IN website.id%type) RETURN VARCHAR2 IS
         l_chars LONG;
     BEGIN
         FOR C IN (
-            WITH codes AS
-            (
-                SELECT TRIM(column_value) language_code FROM TABLE(apex_string.split(pLanguages,',')) 
-            )
-            SELECT characters FROM language, codes WHERE codes.language_code=language.code
+            SELECT wl.language_code, l.characters
+              FROM website_language wl, language l
+             WHERE wl.website_id=pWebsiteid
+               AND wl.language_code=l.code
         ) LOOP
             l_chars:=distinct_chars(l_chars || C.characters);
         END LOOP;
@@ -295,7 +294,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END CASE;
 
             l_api_url:=l_api_url || '&display=swap';
-            l_api_url:=l_api_url || '&text=' || pText;
+            l_api_url:=l_api_url || '&text=' || utl_url.escape(pText,TRUE,'UTF-8');
 
             pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
 
@@ -420,7 +419,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    ** CREATE HTML ELEMENTS FOR AVAILABLE FONT FEATURES
+    ** CREATE HTML FORM ELEMENTS FOR uSER TO CONFIGURE AVAILABLE FONT FEATURES
     */
     FUNCTION getFontVariations(pWebsiteid IN website.id%type, pFontid IN font.id%type, pContext IN website_font.context%type) RETURN VARCHAR2 IS
         l_variations LONG;
@@ -527,6 +526,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             '<div>' ||
                 '<button type="button" class="toggle" id="ital" aria-pressed="false" data-variable="0">Italic</button>' ||
             '</div>';
+        END IF;
+
+        IF (l_variations IS NULL) THEN
+            l_variations:='<p></p>';
         END IF;
 
         RETURN (l_variations);
@@ -714,6 +717,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 l_article:=l_article || 
                 '</fieldset>' ||
                 -- Languages
+                /*
                 '<fieldset class="flex-items">' ||
                     '<legend>Languages: ';
                     FOR C1 IN (
@@ -745,6 +749,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     l_article:=l_article || 
                     '</select>' ||
                 '</fieldset>' ||
+                */
             '</div>';
 
             -- Font categories and capabilities
@@ -830,9 +835,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
 
     /* 
-    **  GET GOOGLE @font-face RULES FOR A FONT / CONTEXT
+    **  CALL GOOGLE FONTS CSS API TO GET @font-face RULES FOR A FONT / CONTEXT
     */
-    FUNCTION getFontfaces(pWebsiteid IN website.id%type, pFontid IN font.id%type, pFamily IN font.family%type, pApiurl IN VARCHAR2) RETURN JSON_ARRAY_T
+    FUNCTION getFontfaces(pWebsiteid IN website.id%type, pFontid IN font.id%type, pFamily IN font.family%type, pApiurl IN VARCHAR2, pFontFamily IN VARCHAR2) RETURN JSON_ARRAY_T
     IS 
         l_fontfaces CLOB;
         l_api_url VARCHAR2(1000);
@@ -844,19 +849,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         /*
         ** Build characters from union of all website language characters 
         */
-        FOR C IN (
-            SELECT wl.language_code, l.characters
-              FROM website_language wl, language l
-             WHERE wl.website_id=pWebsiteid
-               AND wl.language_code=l.code
-        ) LOOP
-            IF (C.characters IS NULL) THEN
-                l_characters:=l_characters || distinct_chars(getLanguage(C.language_code));
-            ELSE
-                l_characters:=l_characters || distinct_chars(C.characters);
-            END IF;
-        END LOOP;
-
+        l_characters:=utl_url.escape(combineLanguages(pWebsiteid),TRUE,'UTF-8');
+       
         l_api_url:='https://fonts.googleapis.com/css2?family=' || 
                 pFamily || ':' || 
                 pApiurl || 
@@ -864,7 +858,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
 
-        UPDATE website_font SET editor_fontfaces=l_fontfaces WHERE website_id=pWebsiteid AND font_id=pFontid;
+        UPDATE website_font 
+           SET editor_fontfaces=l_fontfaces 
+         WHERE website_id=pWebsiteid 
+           AND font_id=pFontid;
 
         -- Fonts that include italics will be in a separate @font-face
         --
@@ -872,6 +869,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         n:=REGEXP_COUNT(l_fontfaces,'@font-face');
         FOR i IN 1..n LOOP
             l_fontface:= new JSON_OBJECT_T;
+            l_fontface.put('family',pFontFamily);
             l_fontface.put('style',REGEXP_SUBSTR(l_fontfaces,'font-style: (.+?);',1,i,null,1));
             l_fontface.put('weight',REGEXP_SUBSTR(l_fontfaces,'font-weight: (.+?);',1,i,null,1));
             l_fontface.put('stretch',REGEXP_SUBSTR(l_fontfaces,'font-stretch: (.+?);',1,i,null,1));
@@ -920,10 +918,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    ** RETURN CLOSEST TUPLE FOR GIVEN STYLE AND WEIGHT
+    ** RETURN CLOSEST STATIC FONT TUPLE FOR GIVEN STYLE AND WEIGHT
     */
-    FUNCTION closestWght(pFontid IN NUMBER, pStyle IN VARCHAR2, pWght IN NUMBER) RETURN VARCHAR2 IS
-        l_tuple VARCHAR2(7);
+    FUNCTION closestWght(pFontid IN NUMBER, pStyle IN VARCHAR2, pWght IN NUMBER) RETURN NUMBER IS
     BEGIN
         CASE pStyle
             WHEN 'normal' THEN
@@ -935,7 +932,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                      ORDER BY ABS(wght_normal - pWght)
                      FETCH FIRST ROW ONLY
                 ) LOOP
-                    l_tuple:='0,' ||C.wght_normal || ';';
+                    -- l_tuple:='0,' ||C.wght_normal || ';';
+                    RETURN (C.wght_normal);
                 END LOOP;
 
             WHEN 'italic' THEN
@@ -947,60 +945,105 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                      ORDER BY ABS(wght_italic - pWght)
                      FETCH FIRST ROW ONLY
                 ) LOOP
-                    l_tuple:='1,' || C.wght_italic || ';';
+                    -- l_tuple:='1,' || C.wght_italic || ';';
+                     RETURN (C.wght_italic);
                 END LOOP;
         END CASE;
-        RETURN (l_tuple);
+        RETURN(null);
     END;
 
     /*
     ** BUILD GOOGLE FONTS API QUERY PARAMETERS FOR STATIC FONT
     */
-    FUNCTION getStaticFontApiUrl(pContext IN VARCHAR2, pFontid IN NUMBER) RETURN VARCHAR2 IS 
+    FUNCTION getStaticFontApiUrl(pContext IN VARCHAR2, pFontid IN NUMBER, pClosest400 IN OUT NuMBER, pClosest700 IN OUT NuMBER) RETURN VARCHAR2 IS 
         l_api_url VARCHAR2(500);
-        l_tuple_400 VARCHAR2(7);
-        l_tuple_700 VARCHAR2(7);
-
-        FUNCTION distinct_tuples RETURN VARCHAR2 IS
-        BEGIN
-            IF (l_tuple_400<>l_tuple_700) THEN
-                l_api_url:=l_api_url || l_tuple_400 || l_tuple_700;
-            ELSE
-                l_api_url:=l_api_url || l_tuple_400;
-            END IF;
-            RETURN (l_api_url);
-        END;
-
+        l_closest_400 NUMBER;
+        l_closest_700 NUMBER;
+        l_closest_400_i NUMBER;
+        l_closest_700_i NUMBER;
     BEGIN
-        l_api_url:='ital,wght@';
-    
         CASE pContext
             WHEN 'headings' THEN
-                l_api_url:=l_api_url || closestWght(pFontid,'normal',700) || closestWght(pFontid,'italic',700);
+                l_closest_700:=closestWght(pFontid,'normal',700);
+                l_closest_700_i:=closestWght(pFontid,'italic',700);
+                IF (l_closest_700 IS NOT NULL) THEN
+                    l_api_url:='0,'|| l_closest_700 || CASE WHEN l_closest_700_i IS NOT NULL THEN ';1,' || l_closest_700_i END;
+                ELSE
+                    l_api_url:='1,' || l_closest_700_i;
+                END IF;
+                pClosest700:=NVL(l_closest_700,l_closest_700_i);
 
             WHEN 'text' THEN
-                l_tuple_400:=closestWght(pFontid,'normal',400);
-                l_tuple_700:=closestWght(pFontid,'normal',700);
-                l_api_url:=l_api_url || distinct_tuples;
+                l_closest_400:=closestWght(pFontid,'normal',400);
+                l_closest_400_i:=closestWght(pFontid,'italic',400);
+                l_closest_700:=closestWght(pFontid,'normal',700);
+                l_closest_700_i:=closestWght(pFontid,'italic',700);
 
-                l_tuple_400:=closestWght(pFontid,'italic',400);
-                l_tuple_700:=closestWght(pFontid,'italic',700);
-                l_api_url:=l_api_url || distinct_tuples;
+                IF (l_closest_400=l_closest_700) THEN
+                    l_closest_700:=null;
+                END IF;
+                IF (l_closest_400_i=l_closest_700_i) THEN
+                    l_closest_700_i:=null;
+                END IF;
+
+                IF (l_closest_400 IS NOT NULL) THEN
+                    l_api_url:='0,'|| l_closest_400 || CASE WHEN l_closest_400_i IS NOT NULL THEN ';1,' || l_closest_400_i END;
+                ELSE
+                    l_api_url:='1,' || l_closest_400_i;
+                END IF;
+                pClosest400:=NVL(l_closest_400,l_closest_400_i);
+
+                
+                IF (l_closest_700 IS NOT NULL) THEN
+                    l_api_url:=l_api_url || ';0,'|| l_closest_700 || CASE WHEN l_closest_700_i IS NOT NULL THEN ';1,' || l_closest_700_i END;
+                ELSIF (l_closest_700_i IS NOT NULL) THEN
+                    l_api_url:=l_api_url || ';1,' || l_closest_700_i;
+                END IF;
+                pClosest700:=NVL(l_closest_700,l_closest_700_i);
+                
 
             WHEN 'logo' THEN
-                l_api_url:=l_api_url || closestWght(pFontid,'normal',400) || closestWght(pFontid,'italic',400);
+                l_api_url:=closestWght(pFontid,'normal',400) || closestWght(pFontid,'italic',400);
         END CASE;
-        RETURN(RTRIM(l_api_url,';'));
+
+        l_api_url:='ital,wght@' || l_api_url;
+
+        RETURN(l_api_url);
     END;
 
     /*
-    ** NEW FONT SELECTED FOR A CONTEXT
+    ** USER SELECTS NEW FONT FOR A CONTEXT
     */
     PROCEDURE updateFamily(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pFontid IN NUMBER) IS
         l_variable font.variable%type;
         l_variations LONG;
         l_api_url VARCHAR2(500);
+        l_closest_700 NUMBER;
+        l_closest_400 NUMBER;
+        l_arr JSON_ARRAY_T;
+        
         n PLS_INTEGER;
+
+        FUNCTION getClosest(pWght IN NUMBER, pStart IN NUMBER, pEnd IN NUMBER) RETURN NUMBER IS
+        BEGIN
+            IF (pWght < pStart) THEN
+                RETURN pStart;
+            ELSIF (pWght >pEnd) THEN
+                RETURN pEnd;
+            ELSE
+                RETURN pWght;
+            END IF;
+        END;
+
+        PROCEDURE appendObj(pName IN VARCHAR2, pValue IN VARCHAR2) IS
+            l_obj JSON_OBJECT_T;
+        BEGIN
+            l_obj:=new JSON_OBJECT_T;
+            l_obj.put('name',pName);
+            l_obj.put('value',pValue);
+            l_arr.append(l_obj);
+        END;
+
     BEGIN
         SELECT variable INTO l_variable FROM font WHERE id=pFontid;
 
@@ -1016,31 +1059,66 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         DELETE font_axes_value WHERE website_id=pWebsiteid AND context=pContext;
 
-        pJson.put('variations', getFontVariations(pWebsiteid, pFontid, pContext));
+        l_arr:=new JSON_ARRAY_T;
 
         IF (l_variable=1) THEN
             FOR C IN (
                 SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) ||
                        '@' AS axes,
-                       LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges
+                       LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges,
+                       MIN(DECODE(fa.axis,'wght',fa.axis_start)) min_wght,
+                       MAX(DECODE(fa.axis,'wght',fa.axis_end)) max_wght
                   FROM font_axes fa
                  WHERE fa.font_id=pFontid
                  GROUP BY fa.font_id
             ) LOOP
+                
                 l_api_url:=l_api_url || C.axes || C.ranges;
                 IF (INSTR(C.axes,'ital')>0) THEN
                     l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
                 END IF;
+                /* Default context wght css custom variable settings */
+                
+                
+                CASE pContext
+                    WHEN 'headings' THEN 
+                        l_closest_700:=getClosest(700,C.min_wght,C.max_wght);
+                        appendObj('--' || pContext || '-font-wght',l_closest_700);
+                    WHEN 'text' THEN 
+                        l_closest_400:=getClosest(400,C.min_wght,C.max_wght);
+                        l_closest_700:=getClosest(700,C.min_wght,C.max_wght);
+                        appendObj('--' || pContext || '-font-wght',l_closest_400);
+                        appendObj('--' || pContext || '-font-wght-bold',l_closest_700);
+                    WHEN 'logo' THEN 
+                        l_closest_400:=getClosest(400,C.min_wght,C.max_wght);
+                        appendObj('--' || pContext || '-font-wght',l_closest_400);
+                END CASE;
             END LOOP;
         ELSE
             /* For STATIC fonts API parameters are tuples based on "font_static_wght" */
-            l_api_url:=getStaticFontApiUrl(pContext, pFontid);
+            l_api_url:=getStaticFontApiUrl(pContext, pFontid, l_closest_400, l_closest_700);
+            CASE pContext
+                WHEN 'headings' THEN
+                    appendObj('--' || pContext || '-font-wght',l_closest_700);
+                WHEN 'text' THEN
+                    appendObj('--' || pContext || '-font-wght',l_closest_400);
+                    appendObj('--' || pContext || '-font-wght-bold',l_closest_700);
+                WHEN 'logo' THEN 
+                    appendObj('--' || pContext || '-font-wght',l_closest_400);
+            END CASE;
         END IF;
         
+
+        /* Create JSON array of CSS property name/value pairs */
+                
         FOR C IN (
             SELECT family, category, capabilities FROM font WHERE id=pFontid
         ) LOOP
-            pJson.put('urls',getFontfaces(pWebsiteid, pFontid, C.family, l_api_url));
+            appendObj('--' || pContext || '-font-family',C.family);
+            pJson.put('properties',l_arr);
+
+            pJson.put('urls',getFontfaces(pWebsiteid, pFontid, C.family, l_api_url, C.family));
+            pJson.put('variations',getFontVariations(pWebsiteid, pFontid, pContext));
             pJson.put('sample',getFontSample(pContext, C.family, C.category, C.capabilities));
             pJson.put('message','Updated font to ' || C.family || ' for ' || pContext);
         END LOOP;
@@ -1084,6 +1162,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_session_data pck_sec.t_session_data;
         l_message VARCHAR2(100);
         l_api_url VARCHAR2(500);
+        l_closest_400 NUMBER;
+        l_closest_700 NUMBER;
         l_json JSON_OBJECT_T;
         l_urls JSON_ARRAY_T;
     BEGIN
@@ -1115,13 +1195,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
             END CASE;
 
-            /* Need to download new font if user selects new static font weight */
+            /* Download font file(s) if user selected a new static font weight */
             IF (C.id='wght') THEN
                 FOR C1 IN (
                     SELECT family FROM font WHERE id=C.font AND variable=0
                 ) LOOP
-                    l_api_url:=getStaticFontApiUrl(C.context, C.font);
-                    l_json.put('urls',getFontfaces(pWebsiteid, C.font, C1.family, l_api_url));
+                    l_api_url:=getStaticFontApiUrl(C.context, C.font,l_closest_400,l_closest_700);
+                    l_json.put('urls',getFontfaces(pWebsiteid, C.font, C1.family, l_api_url, C1.family || ' ' || C.value));
                 END LOOP;
             END IF;
 
