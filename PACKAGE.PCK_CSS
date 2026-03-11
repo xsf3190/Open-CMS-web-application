@@ -101,8 +101,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             )
         LOOP
             l_tokens:=
-            '--max-width: ' || C.max_width || ';' ||
-            '--font-family-ui: system-ui;';
+            '--max-width: ' || C.max_width || ';';
 
             l_fluid_types:=getFluidTypes(C.min_font_size, C.min_width_px, C.min_scale, C.max_font_size, C.max_width_px, C.max_scale);
             FOR i IN 1..l_fluid_types.COUNT LOOP
@@ -119,7 +118,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
              ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
         ) LOOP
             l_tokens:=l_tokens || 
-            '--font-family-' || C.context || ':"' || C.family || '",system-ui;';
+            '--' || C.context || '-font-family:"' || C.family || '",system-ui;';
         END LOOP;
 
         RETURN (l_tokens);
