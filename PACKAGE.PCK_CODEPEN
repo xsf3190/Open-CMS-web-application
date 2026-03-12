@@ -43,7 +43,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 WHEN 'img' THEN
                     l_logo:='<span class="logo"><img src="https://' || l_session_data.url || '/images/logo.avif" alt="Image of website logo"></span>';
                 WHEN 'font' THEN
-                    l_logo:='<span class="logo">FRED</span>';
+                    l_logo:='<span class="logo">Logo</span>';
                 ELSE
                     l_logo:='<span class="logo"></span>';
             END CASE;
