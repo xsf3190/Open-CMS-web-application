@@ -72,9 +72,8 @@ const replaceOptions = (options) => {
 /*
 ** LOAD @FONT-FACE RULES FOR SELECTED FONT
 */
-const loadFont = (data) => {
-    const context = getContext();
-    for (const fontface of data.urls) {
+export const loadFont = (urls,context) => {
+    for (const fontface of urls) {
         const fontFile = new FontFace(fontface.family,fontface.source);
         fontFile.style = fontface.style;
         fontFile.weight = fontface.weight;
@@ -86,11 +85,19 @@ const loadFont = (data) => {
         fontFile.load();
     };
     document.fonts.ready.then(()=>{
-        for (const property of data.properties) {
-            console.log(`Setting property ${property.name} to ${property.value}`);
-            document.documentElement.style.setProperty(property.name,property.value);
-        }
+        localStorage.setItem(`${context}-font-urls`,JSON.stringify(urls));
     });
+}
+
+/*
+** LOAD @FONT-FACE RULES FOR SELECTED FONT
+*/
+export const setProperties = (properties,context) => {
+    for (const property of properties) {
+        console.log(`Setting property ${property.name} to ${property.value}`);
+        document.documentElement.style.setProperty(property.name,property.value);
+    }
+    localStorage.setItem(`${context}-font-properties`,JSON.stringify(properties));
 }
 
 /*
@@ -109,6 +116,10 @@ const changeHandler = (e) => {
     } else {
         obj.id=e.target.id;
         obj.value=e.target.value;
+    }
+
+    if (e.target.getAttribute("name")==="context") {
+        dialog_article.querySelector(".separator").textContent = `Finesse ${context}`;
     }
 
     callAPI(endpoint,"PUT",obj)
@@ -136,7 +147,10 @@ const changeHandler = (e) => {
                 sample.insertAdjacentHTML("afterbegin",data.sample);
             }
             if (data.urls) {
-                loadFont(data);
+                loadFont(data.urls,context);
+            }
+            if (data.properties) {
+                setProperties(data.properties,context);
             }
             if (obj.id.endsWith("size")) {
                 const sizeValue = (obj.id.includes("font")) ? `--step-${value}` : value;
@@ -191,12 +205,16 @@ const clickHandler = (e) => {
                 sample.replaceChildren();
                 sample.insertAdjacentHTML("afterbegin",data.sample);
             }
+            if (data.properties) {
+                setProperties(data.properties,context);
+            }
             if (id==="ital") {
                 const varStyle = (value==="0") ? "normal" : "italic";
                 document.documentElement.style.setProperty(`--${context}-font-style`, varStyle);
             } else {
                 document.documentElement.style.setProperty(`--${context}-font-${id}`, value); 
             }
+            
             liveRegion(data);
         })
         .catch((error) => {
