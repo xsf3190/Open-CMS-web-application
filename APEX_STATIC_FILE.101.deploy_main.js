@@ -54,8 +54,28 @@ async function load_modules() {
                 return;
             });
             module.init();
+
+            module_name = "deploy_fonts";
+            const fonts = await import(module_name)
+            .catch((error) => {
+                console.error(error);
+                console.error("Failed to load " + module_name);
+                return;
+            });
+            const contexts = ["headings","text","logo"];
+            contexts.forEach((context) => {
+                if (localStorage.getItem(`${context}-font-urls`)) {
+                    fonts.loadFont(JSON.parse(localStorage.getItem(`${context}-font-urls`)),context);
+                }
+                if (localStorage.getItem(`${context}-font-properties`)) {
+                    fonts.setProperties(JSON.parse(localStorage.getItem(`${context}-font-properties`)),context);
+                }
+            })
+
         }
     }
+
+    
 
     module_name = "deploy_web_vitals5";
     const cwv = await import("deploy_web_vitals5")
