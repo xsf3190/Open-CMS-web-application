@@ -1,0 +1,248 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_GOOGLE" as
+--
+    PROCEDURE loadGoogleFonts;
+    --
+    PROCEDURE loadGoogleFontMetadata;
+    --
+end pck_google;
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
+
+    /*
+    **  Load Google font details into FONT, FONT_AXES AND FONT_STATIC_WGHT tables. 
+    **  WOFF2 only. 
+    **  STATIC and VARIABLE. 
+    */
+    PROCEDURE loadGoogleFonts IS 
+        l_clob CLOB;
+        l_nb_fonts PLS_INTEGER;
+        l_lastModified google_font.lastModified%type;
+        l_capabilities VARCHAR2(200);
+    BEGIN
+        pck_api.callGoogleAPI('https://www.googleapis.com/webfonts/v1/webfonts?capability=WOFF2&capability=VF',pData=>l_clob);
+
+        -- Replace contents of GOOGLE_FONT from which aplication tables are built
+        EXECUTE IMMEDIATE('truncate table google_font');
+
+        INSERT INTO google_font(
+            family, category,
+            ital_start,ital_end,
+            wdth_start,wdth_end,
+            wght_start,wght_end,
+            opsz_start,opsz_end,
+            slnt_start,slnt_end,
+            italic,
+            subset, 
+            variable, 
+            axes,
+            lastModified,
+            menu,
+            colorCapabilities
+        )
+        WITH 
+        data AS
+        (
+            SELECT family, category, lastModified, menu, colorCapabilities,
+                CASE WHEN variant='italic' THEN variant END italic,
+                tag,"start" as tag_start, "end" as tag_end, subset
+            FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, category, lastModified, menu, NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$'),  
+                NESTED '$.axes[*]' COLUMNS(tag varchar2(4) PATH '$.tag', "start" number PATH '$.start', "end" number PATH '$.end'),
+                NESTED PATH '$.subsets[*]' COLUMNS (subset VARCHAR2(50) PATH '$'),
+                NESTED PATH '$.colorCapabilities[*]' COLUMNS (colorCapabilities VARCHAR2(50) PATH '$' )))
+        ), 
+        data2 as
+        (
+            SELECT family, category, TO_DATE(lastModified,'YYYY-MM-DD') lastModified, menu, 
+                MAX(DECODE(italic,'italic',0))  as ital_start, MAX(DECODE(italic,'italic',1)) as ital_end,
+                MAX(DECODE(tag,'wdth',tag_start)) as wdth_start, MAX(DECODE(tag,'wdth',tag_end)) as wdth_end, 
+                MAX(DECODE(tag,'wght',tag_start)) as wght_start, MAX(DECODE(tag,'wght',tag_end)) as wght_end, 
+                MAX(DECODE(tag,'opsz',tag_start)) as opsz_start, MAX(DECODE(tag,'opsz',tag_end)) as opsz_end, 
+                MAX(DECODE(tag,'slnt',tag_start)) as slnt_start, MAX(DECODE(tag,'slnt',tag_end)) as slnt_end,
+                LISTAGG(tag,',') WITHIN GROUP (ORDER BY tag) axes,
+                LISTAGG(subset,'|') WITHIN GROUP (ORDER BY subset) subset,
+                LISTAGG(colorCapabilities,'|') WITHIN GROUP (ORDER BY colorCapabilities) colorCapabilities
+            FROM data
+            GROUP BY family, category, lastModified, menu
+        )
+        SELECT family, category, 
+            CASE WHEN axes IS NOT NULL THEN ital_start END ital_start, 
+            CASE WHEN axes IS NOT NULL THEN ital_end END ital_end,
+            wdth_start, wdth_end,
+            wght_start, wght_end,
+            opsz_start, opsz_end,
+            slnt_start, slnt_end,
+            CASE WHEN INSTR(axes,'slnt')>0 THEN 1 ELSE NVL(ital_end,0) END,
+            subset,
+            CASE WHEN axes IS NULL THEN 0 ELSE 1 END,
+            axes,
+            lastModified,
+            menu,
+            colorCapabilities
+        FROM data2;
+
+        /* Delete any previously uploaded fonts no longer on Google */
+        FOR C IN (
+            SELECT COUNT(google),family
+            FROM
+            (
+            SELECT 1 google, TO_NUMBER(null) dogface, family FROM google_font
+            UNION ALL
+            SELECT TO_NUMBER(null),1, family FROM font
+            )
+           GROUP BY family
+            HAVING COUNT(google)=0
+        ) LOOP
+            pck_core.log('Deleting font no longer supported by Google: ' || C.family);
+            DELETE font WHERE family=C.family;
+        END LOOP;
+
+        /* Update font table from staging table */
+        MERGE INTO font t
+        USING
+        (
+            SELECT family, category, lastmodified, menu, NVL(INSTR(colorcapabilities,'COLRv1'),0) color, italic, variable, axes,
+                    CASE WHEN INSTR(axes,'wdth')>0 THEN 1 ELSE 0 END wdth, 
+                    CASE WHEN INSTR(axes,'opsz')>0 THEN 1 ELSE 0 END opsz,
+                    CASE WHEN ASCII(axes) BETWEEN 65 AND 90 THEN 1 ELSE 0 END custom
+            FROM google_font
+        ) s
+        ON (t.family=s.family)
+        WHEN MATCHED THEN UPDATE SET
+            t.category=s.category,
+            t.menu=s.menu,
+            t.color=s.color,
+            t.last_modified=s.lastmodified,
+            t.italic=s.italic,
+            t.variable=s.variable,
+            t.wdth=s.wdth,
+            t.opsz=s.opsz,
+            t.custom=s.custom,
+            t.axes=s.axes,
+            t.updated_date=current_timestamp
+        WHEN NOT MATCHED THEN 
+            INSERT (id, family, category, menu, color, last_modified, italic, variable, axes, wdth, opsz, custom, created_date) 
+            VALUES (seq_font.nextval, s.family, s.category, s.menu, s.color, s.lastmodified, s.italic, s.variable, s.axes, s.wdth, s.opsz, s.custom, current_timestamp);
+        
+        l_nb_fonts:=sql%rowcount;
+        pck_core.log('Uploaded ' ||l_nb_fonts || ' Google Fonts');
+
+        /*
+        ** LOAD STATIC FONT WEIGHTS FOR NORMAL AND ITALIC STYLES
+        */
+        DELETE font_static_wght;
+        
+        INSERT INTO font_static_wght
+        (
+            font_id, wght_normal, wght_italic
+        )
+        SELECT id, CASE WHEN normal=1 THEN wght END normal,  CASE WHEN italic=1 THEN wght END italic
+        FROM
+        (
+        SELECT COUNT(normal) normal, COUNT(italic) italic, id, wght
+        FROM
+        (    
+            SELECT 1 normal, TO_NUMBER(null) italic, font.id, wght
+            FROM 
+            (
+                SELECT family, DECODE(variant,'regular','400',variant) wght
+                FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, axes VARCHAR2(5) EXISTS PATH '$.axes', NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$')))
+                WHERE axes='false'
+            ) data, font
+            WHERE INSTR(data.wght,'italic')=0
+            AND font.family=data.family
+            UNION ALL
+            SELECT TO_NuMBER(null) normal, 1 italic, font.id, SUBSTR(data.wght,1,INSTR(wght,'italic')-1)
+            FROM
+            (
+                SELECT family, DECODE(variant,'italic','400italic',variant) wght
+                FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family, axes VARCHAR2(5) EXISTS PATH '$.axes', NESTED PATH '$.variants[*]' COLUMNS (variant VARCHAR2(50) PATH '$')))
+                WHERE axes='false'
+            ) data,font
+            WHERE INSTR(data.wght,'italic')>0
+            AND font.family=data.family
+        )
+        GROUP BY id, wght
+        )
+        ORDER BY 1;
+
+        /*
+        ** LOAD VARIABLE FONT AXES. 
+        ** NOTE THAT "ital" AXIS ALREADY COMPUTED
+        */
+        DELETE font_axes;
+
+        INSERT INTO font_axes
+        (
+            font_id, axis, axis_start, axis_end
+        )
+        WITH 
+        data AS
+        (
+            SELECT f.id,  tag, "start" as tag_start, "end" as tag_end
+            FROM font f,
+                JSON_TABLE(l_clob, '$.items[*]' COLUMNS(family,
+                    NESTED '$.axes[*]' COLUMNS(tag varchar2(4) PATH '$.tag', "start" number PATH '$.start', "end" number PATH '$.end'))) g
+            WHERE f.family=g.family
+            UNION ALL
+            SELECT id, 'ital', 0, 1 
+              FROM font 
+             WHERE italic=1 
+               AND variable=1
+        ) 
+        SELECT id, tag, tag_start, tag_end
+        FROM data
+        WHERE tag IS NOT NULL
+        ORDER BY id, tag;
+
+        /*
+        ** SET "bold" in "font" table
+        */
+        UPDATE font 
+           SET bold=1 
+        WHERE id IN
+            (
+                SELECT font_id
+                FROM font_axes
+                WHERE axis='wght'
+                UNION ALL
+                SELECT font_id
+                FROM
+                (
+                    SELECT font_id, COUNT(*)
+                     FROM  font_static_wght
+                    GROUP BY font_id
+                    HAVING COUNT(*)>1
+                )
+            );
+
+        FOR i IN 1..pck_fonts.G_CAPABILITIES.COUNT LOOP
+            l_capabilities:=l_capabilities || pck_fonts.G_CAPABILITIES(i) || ',';
+        END LOOP;
+        l_capabilities:=RTRIM(l_capabilities,',');
+
+        EXECUTE IMMEDIATE 'UPDATE font SET capabilities=BIN_TO_NUM(' || l_capabilities || ')';
+        
+    END;
+
+    /*
+    **  Load Google font metadata
+    */
+    PROCEDURE loadGoogleFontMetadata IS 
+        l_clob CLOB;
+        l_nb_fonts PLS_INTEGER;
+    BEGIN
+        pck_api.callGoogleAPI('https://fonts.google.com/metadata/fonts',pData=>l_clob);
+
+        DELETE font_metadata;
+        
+        INSERT INTO font_metadata
+        (
+            axis, display_name, min_value, max_value, default_value, precision, description
+        )
+        SELECT tag AS axis, displayName AS display_name, min AS min_value, max AS max_value, defaultvalue AS default_value, precision, description
+        FROM JSON_TABLE(l_clob, '$.axisRegistry[*]' COLUMNS(tag, displayName, min, max, defaultValue, precision, description));
+        
+    END;
+
+end pck_google;
+/
