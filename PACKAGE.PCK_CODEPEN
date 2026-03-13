@@ -76,12 +76,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 pck_deploy.buildLoginForm || pck_deploy.buildContentDialog ||
             '</body>';
 
+            pck_css.buildEditorTokens(pWebsiteid);
+
             FOR C1 IN (
                 SELECT ordr, content FROM 
                 (
-                SELECT 0 as ordr, REPLACE(css,'/fonts','https://' || l_session_data.url || '/fonts') content
-                  FROM website
-                 WHERE id=pWebsiteid
+                SELECT 0 as ordr, content
+                  FROM website_cssfiles_temp
                  UNION ALL
                 SELECT 2, apex_util.blob_to_clob(file_content)
                   FROM apex_application_static_files 
