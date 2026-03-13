@@ -167,7 +167,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
 
         /*
         ** LOAD VARIABLE FONT AXES. 
-        ** NOTE THAT "ital" AXIS ALREADY COMPUTED
+        ** NOTE THAT "ital" AXIS ALREADY COMPUTED IN FONT TABLEL
         */
         DELETE font_axes;
 
@@ -193,6 +193,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
         FROM data
         WHERE tag IS NOT NULL
         ORDER BY id, tag;
+
+        -- Add "wght-bold" axis so users can maintain different weights within same context
+        INSERT INTO font_axes (font_id, axis, axis_start, axis_end)
+        SELECT font_id, axis || '-bold', axis_start, axis_end FROM font_axes WHERE axis='wght';
 
         /*
         ** SET "bold" in "font" table
