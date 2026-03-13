@@ -437,6 +437,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             IF (C.axis='ital' AND pContext<>'logo') THEN
                 CONTINUE;
             END IF;
+            IF (C.axis='wght-bold' AND pContext='headings') THEN
+                CONTINUE;
+            END IF;
             n:=n+1;
             l_variations:=l_variations || 
             '<div>';
@@ -572,7 +575,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
                 WHEN 'text' THEN
                     l_html:=l_html || 
-                    '<p>Text formatted in the ' || C.family || ' font family';
+                    '<p>' || C.family || ' text';
                     
                     IF (C.bold=1 OR C.italic=1) THEN
                         l_html_bi:=l_html_bi || 
@@ -954,19 +957,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN(null);
     END;
 
-    PROCEDURE appendObj(pName IN VARCHAR2, pValue IN VARCHAR2, pProperties IN OUT JSON_ARRAY_T) IS
-        l_obj JSON_OBJECT_T;
-    BEGIN
-        l_obj:=new JSON_OBJECT_T;
-        l_obj.put('name',pName);
-        l_obj.put('value',pValue);
-        pProperties.append(l_obj);
-    END;
-
     /*
     ** BUILD GOOGLE FONTS API QUERY PARAMETERS FOR STATIC FONT
     */
-    FUNCTION getStaticFontApiUrl(pContext IN VARCHAR2, pFontid IN NUMBER, pProperties IN OUT JSON_ARRAY_T) RETURN VARCHAR2 IS 
+    FUNCTION getStaticFontApiUrl(pWebsiteid IN NUMBER, pContext IN VARCHAR2, pFontid IN NUMBER) RETURN VARCHAR2 IS 
         l_api_url VARCHAR2(500);
         l_closest_400 NUMBER;
         l_closest_700 NUMBER;
@@ -982,8 +976,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 ELSE
                     l_api_url:='1,' || l_closest_700_i;
                 END IF;
-                appendObj('--' || pContext || '-font-wght',NVL(l_closest_700,l_closest_700_i),pProperties);
-
+                updateFontAxisValue(pWebsiteid, pContext, 'wght', NVL(l_closest_700,l_closest_700_i));
+                
             WHEN 'text' THEN
                 l_closest_400:=closestWght(pFontid,'normal',400);
                 l_closest_400_i:=closestWght(pFontid,'italic',400);
@@ -1002,15 +996,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 ELSE
                     l_api_url:='1,' || l_closest_400_i;
                 END IF;
-                appendObj('--' || pContext || '-font-wght',NVL(l_closest_400,l_closest_400_i),pProperties);
+                updateFontAxisValue(pWebsiteid, pContext, 'wght', NVL(l_closest_400,l_closest_400_i));
 
                 IF (l_closest_700 IS NOT NULL) THEN
                     l_api_url:=l_api_url || ';0,'|| l_closest_700 || CASE WHEN l_closest_700_i IS NOT NULL THEN ';1,' || l_closest_700_i END;
                 ELSIF (l_closest_700_i IS NOT NULL) THEN
                     l_api_url:=l_api_url || ';1,' || l_closest_700_i;
                 END IF;
-                appendObj('--' || pContext || '-font-wght',NVL(l_closest_700,l_closest_700_i),pProperties);
-                
+                updateFontAxisValue(pWebsiteid, pContext, 'wght-bold', NVL(l_closest_700,l_closest_700_i));
 
             WHEN 'logo' THEN
                 l_closest_700:=closestWght(pFontid,'normal',700);
@@ -1020,7 +1013,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 ELSE
                     l_api_url:='1,' || l_closest_700_i;
                 END IF;
-                appendObj('--' || pContext || '-font-wght',NVL(l_closest_700,l_closest_700_i),pProperties);
+                updateFontAxisValue(pWebsiteid, pContext, 'wght', NVL(l_closest_700,l_closest_700_i));
         END CASE;
 
         l_api_url:='ital,wght@' || l_api_url;
@@ -1037,7 +1030,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_api_url VARCHAR2(500);
         l_closest_700 NUMBER;
         l_closest_400 NUMBER;
-        l_properties_arr JSON_ARRAY_T;
         
         n PLS_INTEGER;
 
@@ -1067,8 +1059,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         DELETE font_axes_value WHERE website_id=pWebsiteid AND context=pContext;
 
-        l_properties_arr:=new JSON_ARRAY_T;
-
         IF (l_variable=1) THEN
             FOR C IN (
                 SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) ||
@@ -1078,6 +1068,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                        MAX(DECODE(fa.axis,'wght',fa.axis_end)) max_wght
                   FROM font_axes fa
                  WHERE fa.font_id=pFontid
+                   AND LENGTH(fa.axis)=4
                  GROUP BY fa.font_id
             ) LOOP
                 
@@ -1090,31 +1081,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 CASE pContext
                     WHEN 'headings' THEN 
                         l_closest_700:=getClosest(700,C.min_wght,C.max_wght);
-                        appendObj('--' || pContext || '-font-wght',l_closest_700,l_properties_arr);
+                        updateFontAxisValue(pWebsiteid, pContext, 'wght', l_closest_700);
                     WHEN 'text' THEN 
                         l_closest_400:=getClosest(400,C.min_wght,C.max_wght);
                         l_closest_700:=getClosest(700,C.min_wght,C.max_wght);
-                        appendObj('--' || pContext || '-font-wght',l_closest_400,l_properties_arr);
-                        appendObj('--' || pContext || '-font-wght-bold',l_closest_700,l_properties_arr);
+                        updateFontAxisValue(pWebsiteid, pContext, 'wght', l_closest_400);
+                        updateFontAxisValue(pWebsiteid, pContext, 'wght-bold', l_closest_700);
                     WHEN 'logo' THEN 
                         l_closest_400:=getClosest(400,C.min_wght,C.max_wght);
-                        appendObj('--' || pContext || '-font-wght',l_closest_400,l_properties_arr);
+                        updateFontAxisValue(pWebsiteid, pContext, 'wght', l_closest_400);
                 END CASE;
             END LOOP;
         ELSE
             /* For STATIC fonts API parameters are tuples based on "font_static_wght" */
-            l_api_url:=getStaticFontApiUrl(pContext, pFontid, l_properties_arr);
+            l_api_url:=getStaticFontApiUrl(pWebsiteid, pContext, pFontid);
         END IF;
-        
-
-        /* Create JSON array of CSS property name/value pairs */
                 
         FOR C IN (
-            SELECT family, category, capabilities FROM font WHERE id=pFontid
+            SELECT family FROM font WHERE id=pFontid
         ) LOOP
-            appendObj('--' || pContext || '-font-family',C.family, l_properties_arr);
-            pJson.put('properties',l_properties_arr);
-
             pJson.put('urls',getFontfaces(pWebsiteid, pFontid, C.family, l_api_url, C.family));
             pJson.put('variations',getFontVariations(pWebsiteid, pFontid, pContext));
             pJson.put('sample',getFontSample(pWebsiteid));
@@ -1160,17 +1145,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_session_data pck_sec.t_session_data;
         l_message VARCHAR2(100);
         l_api_url VARCHAR2(500);
-        l_static_font_family VARCHAR2(50);
         l_json JSON_OBJECT_T;
         l_properties_arr JSON_ARRAY_T;
+
+        PROCEDURE appendObj(pName IN VARCHAR2, pValue IN VARCHAR2) IS
+            l_obj JSON_OBJECT_T;
+        BEGIN
+            l_obj:=new JSON_OBJECT_T;
+            l_obj.put('name',pName);
+            l_obj.put('value',pValue);
+            l_properties_arr.append(l_obj);
+        END;
+
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         l_json:= new JSON_OBJECT_T;
 
         FOR C IN (
-            SELECT context, category, capabilities, font, id, value
-              FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, category, capabilities, font, id, value))
+            SELECT j.context, j.category, j.capabilities, j.font, j.id, j.value, f.family, f.variable
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, category, capabilities, font, id, value)) j, font f
+             WHERE f.id=j.font
         ) LOOP
             CASE C.id
                 WHEN 'context' THEN
@@ -1190,29 +1185,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
                     updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
+                    IF (C.id='wght' AND C.variable=0) THEN
+                        l_api_url:=getStaticFontApiUrl(pWebsiteid, C.context, C.font);
+                        l_json.put('urls',getFontfaces(pWebsiteid, C.font, C.family, l_api_url, C.family || C.value));
+                    END IF;
             END CASE;
 
-            /* Download font file(s) if user selected a new static font weight */
-            IF (C.id='wght') THEN
-                FOR C1 IN (
-                    SELECT family FROM font WHERE id=C.font AND variable=0
-                ) LOOP
-                    l_properties_arr:=new JSON_ARRAY_T;
-                    l_api_url:=getStaticFontApiUrl(C.context, C.font, l_properties_arr);
+            /* Return array of all font properties */
+            l_properties_arr:=new JSON_ARRAY_T;
 
-                    -- set static font family name
-                    l_static_font_family:=C1.family || ' ' || C.value;
-                    appendObj('--' || C.context || '-font-family',l_static_font_family, l_properties_arr);
-                    l_json.put('properties',l_properties_arr);
-                    l_json.put('urls',getFontfaces(pWebsiteid, C.font, C1.family, l_api_url, l_static_font_family));
-                END LOOP;
-            END IF;
-
+            appendObj('--' || C.context || '-font-family', C.family);
+            
+            FOR C1 IN (
+                SELECT '--' || C.context || '-font-' || axis AS name, value 
+                  FROM font_axes_value 
+                 WHERE website_id=pWebsiteid
+                   AND context=C.context 
+            ) LOOP
+                appendObj(C1.name, C1.value);
+            END LOOP;
         END LOOP;
 
         l_json.put('success',true);
         IF (l_message IS NOT NULL) THEN
             l_json.put('message',l_message);
+        END IF;
+        IF (l_properties_arr IS NOT NULL) THEN
+            l_json.put('properties',l_properties_arr);
         END IF;
 
         apex_util.prn(l_json.to_clob,false);
