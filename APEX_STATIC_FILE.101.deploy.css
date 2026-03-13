@@ -33,8 +33,14 @@ body {
     animation: 3s infinite flip-synthesis;   
 }
 
+/* BOLD - ONLY APPLIES FOR CONTEXT 'text' */
 strong {
     font-weight: var(--text-font-wght-bold, 700);
+}
+
+/* ITALIC - ONLY APPLIES FOR FONTS WITH 'slnt' AXIS */
+i {
+  font-style: var(--text-font-slnt);
 }
 
 /* LINK STYLES */
