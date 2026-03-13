@@ -235,6 +235,10 @@ const inputHandler = (e) => {
         if (id==="wdth") {
             value+="%";
         }
+        if (id==="slnt") {
+            value = -value;
+            value=`oblique ${value}deg`;
+        }
         document.documentElement.style.setProperty(`--${context}-font-${id}`, value);   
     }
     if (id === "logo-font-text") {
