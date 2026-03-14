@@ -167,7 +167,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
 
         /*
         ** LOAD VARIABLE FONT AXES. 
-        ** NOTE THAT "ital" AXIS ALREADY COMPUTED IN FONT TABLEL
+        ** NOTE THAT "ital" AXIS ALREADY COMPUTED IN FONT TABLE
         */
         DELETE font_axes;
 
@@ -188,6 +188,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
               FROM font 
              WHERE italic=1 
                AND variable=1
+               AND INSTR(axes,'slnt')=0
         ) 
         SELECT id, tag, tag_start, tag_end
         FROM data
