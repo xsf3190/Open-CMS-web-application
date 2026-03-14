@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type);
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pReduced IN BOOLEAN DEFAULT FALSE);
     --
     PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type);
     --
@@ -223,7 +223,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     /* 
     ** BUILD FONT-FACE RULES AND DESIGN TOKENS FOR EDITOR SITE
     */
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type) IS
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pReduced IN BOOLEAN DEFAULT FALSE) IS
         l_font_variation_settings VARCHAR2(4000);
         l_css CLOB;
         l_sha1 website_cssfiles_temp.sha1%type;
@@ -260,22 +260,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ** CREATE CUSTOM VARIABLES FOR ALL AVAILABLE FONT AXES
         */
         FOR C IN (
-            SELECT wf.context, m.axis, NVL(fa.value,m.default_value) value,
+            SELECT wf.context, m.axis, NVL(fav.value,m.default_value) value,
                     ROW_NUMBER() OVER (PARTITION BY wf.context ORDER BY ASCII(m.axis) DESC) rn,
                     COUNT(*) OVER (PARTITION BY wf.context) nb
-              FROM website_font wf, font_metadata m, font_axes_value fa
+              FROM website_font wf, font_metadata m, font_axes_value fav
              WHERE wf.website_id=pWebsiteId
-               AND fa.website_id(+)=wf.website_id
-               AND fa.axis(+)=m.axis
                AND m.axis<>'ital'
-               AND fa.context(+)=wf.context
+               AND fav.website_id(+)=wf.website_id
+               AND fav.axis(+)=m.axis
+               AND fav.context(+)=wf.context
              ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), rn
         ) LOOP
             -- ital custom variable depends on whether font is variable
             l_css:=l_css || 
             '--' || C.context || '-font-' || C.axis || ': ' ||
-            C.value || CASE WHEN C.axis='wdth' THEN '%' END || ';';
-            IF (C.axis NOT IN ('wdth','wght')) THEN
+            CASE C.axis
+                WHEN 'wdth' THEN C.value || '%'
+                WHEN 'slnt' THEN 'oblique ' || C.value || 'deg'
+                ELSE TO_CHAR(C.value)
+            END || ';';
+            IF (C.axis NOT IN ('wdth','wght','wght-bold','slnt')) THEN
                 l_font_variation_settings:=l_font_variation_settings ||
                 '"' || C.axis || '" var(--' || C.context || '-font-' || C.axis || '),';
             END IF;
@@ -310,13 +314,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END LOOP;
 
         -- Font faces for Google fonts
-        FOR C IN (
-            SELECT id, family, menu
-              FROM font
-             ORDER BY id
-        ) LOOP
-            dbms_lob.append(l_css, '@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
-        END LOOP;
+        IF (NOT pReduced) THEN
+            FOR C IN (
+                SELECT id, family, menu
+                  FROM font
+                 ORDER BY id
+            ) LOOP
+                dbms_lob.append(l_css, '@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
+            END LOOP;
+        END IF;
 
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
@@ -368,7 +374,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END LOOP;
 
         FOR C IN (
-            SELECT wf.context, fav.axis, fav.value,
+            SELECT wf.context, 
+                    '--' || wf.context || '-font-' || fav.axis AS axis,
+                    fav.value || CASE WHEN fav.axis='wdth' THEN '%' END AS value,
                     ROW_NUMBER() OVER (PARTITION BY wf.context ORDER BY fav.axis ) rn,
                     COUNT(*) OVER (PARTITION BY wf.context) nb
               FROM website_font wf, font_axes_value fav
@@ -378,7 +386,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
              ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), axis
         ) LOOP
             l_root_css:=l_root_css || 
-            '--' || C.context || '-font-' || C.axis || ': ' || C.value || ';';
+            C.axis || ': ' || C.value || ';';
         END LOOP;
 
         l_root_css:=l_root_css ||
