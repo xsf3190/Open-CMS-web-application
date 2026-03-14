@@ -76,7 +76,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 pck_deploy.buildLoginForm || pck_deploy.buildContentDialog ||
             '</body>';
 
-            pck_css.buildEditorTokens(pWebsiteid);
+            pck_css.buildEditorTokens(pWebsiteid, pReduced=>TRUE);
 
             FOR C1 IN (
                 SELECT ordr, content FROM 
