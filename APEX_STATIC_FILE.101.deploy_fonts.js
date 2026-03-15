@@ -141,16 +141,16 @@ const changeHandler = (e) => {
                 variations.replaceChildren();
                 variations.insertAdjacentHTML("afterbegin",data.variations);
             }
-            if (data.sample) {
-                const sample = document.getElementById("sample");
-                sample.replaceChildren();
-                sample.insertAdjacentHTML("afterbegin",data.sample);
-            }
             if (data.urls) {
                 loadFont(data.urls,context);
             }
             if (data.properties) {
                 setProperties(data.properties,context);
+            }
+            if (data.sample) {
+                const sample = document.getElementById("sample");
+                sample.replaceChildren();
+                sample.insertAdjacentHTML("afterbegin",data.sample);
             }
             if (obj.id.endsWith("size")) {
                 const sizeValue = (obj.id.includes("font")) ? `--step-${value}` : value;
@@ -236,7 +236,6 @@ const inputHandler = (e) => {
             value+="%";
         }
         if (id==="slnt") {
-            value = -value;
             value=`oblique ${value}deg`;
         }
         document.documentElement.style.setProperty(`--${context}-font-${id}`, value);   
