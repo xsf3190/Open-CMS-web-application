@@ -30,17 +30,13 @@ body {
     background-color: var(--color-bg);
     color: var(--color-text);
     /* font-synthesis: none; */
-    animation: 3s infinite flip-synthesis;   
-}
-
-/* BOLD - ONLY APPLIES FOR CONTEXT 'text' */
-strong {
-    font-weight: var(--text-font-wght-bold, 700);
-}
-
-/* ITALIC - ONLY APPLIES FOR FONTS WITH 'slnt' AXIS */
-i {
-  font-style: var(--text-font-slnt);
+    animation: 3s infinite flip-synthesis;
+    strong {
+        font-weight: var(--text-font-wght-bold, 700);
+    }
+    i {
+        font-style: var(--text-font-slnt);
+    }
 }
 
 /* LINK STYLES */
@@ -269,9 +265,14 @@ body>footer>a {
   font-family: var(--logo-font-family);
   font-size: var(--logo-font-size);
   font-weight: var(--logo-font-wght);
-  font-style: var(--logo-font-style);
   font-variation-settings: var(--logo-font-variation-settings);
   text-box: cap alphabetic;
+    strong {
+        font-weight: var(--logo-font-wght-bold, 700);
+    }
+    i {
+        font-style: var(--logo-font-slnt);
+    }
 }
 
 nav {
@@ -470,6 +471,12 @@ small {
     font-stretch: var(--headings-font-wdth);
     font-variation-settings: var(--headings-font-variation-settings);
     text-box: cap alphabetic;
+    strong {
+        font-weight: var(--headings-font-wght-bold, 700);
+    }
+    i {
+        font-style: var(--headings-font-slnt);
+    }
 }
 
 /* CARD STYLES */
