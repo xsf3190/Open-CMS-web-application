@@ -378,9 +378,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             IF (C.axis='ital' AND pContext<>'logo') THEN
                 CONTINUE;
             END IF;
-            IF (C.axis='wght-bold' AND pContext='headings') THEN
-                CONTINUE;
-            END IF;
+
             n:=n+1;
             l_variations:=l_variations || 
             '<div>';
@@ -1004,10 +1002,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             FOR C IN (
                 SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) ||
                        '@' AS axes,
-                       LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges,
+                    --    LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges,
+                       LISTAGG(
+                        CASE 
+                            WHEN fa.axis='ital' THEN '0' 
+                            WHEN fa.axis='slnt' AND fa.axis_start+fa.axis_end<>0 THEN fa.axis_end*-1||'..'||fa.axis_start
+                            ELSE fa.axis_start||'..'||fa.axis_end 
+                        END,',') 
+                        WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges,
                        MIN(DECODE(fa.axis,'wght',fa.axis_start)) min_wght,
                        MAX(DECODE(fa.axis,'wght',fa.axis_end)) max_wght,
-                       MIN(DECODE(fa.axis,'slnt',fa.axis_start)) min_slnt
+                       MAX(DECODE(fa.axis,'slnt',fa.axis_end)) max_slnt
                   FROM font_axes fa
                  WHERE fa.font_id=pFontid
                    AND LENGTH(fa.axis)=4 -- don't want "wght-bold"
@@ -1017,12 +1022,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 l_api_url:=l_api_url || C.axes || C.ranges;
                 IF (INSTR(C.axes,'ital')>0) THEN
                     l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
+                    updateFontAxisValue(pWebsiteid, pContext, 'slnt', null);
                 END IF;
                 
-                IF (C.min_slnt IS NOT NULL) THEN
-                     updateFontAxisValue(pWebsiteid, pContext, 'slnt', C.min_slnt*-1);
+                IF (INSTR(C.axes,'slnt')>0) THEN
+                    updateFontAxisValue(pWebsiteid, pContext, 'slnt', C.max_slnt);
                 END IF;
-                
+
                 /* Default css custom variable settings for wght */
                 CASE pContext
                     WHEN 'headings' THEN 
@@ -1149,7 +1155,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 SELECT '--' || C.context || '-font-' || axis AS name, 
                         CASE axis
                             WHEN 'wdth' THEN value || '%'
-                            WHEN 'slnt' THEN 'oblique ' || value || 'deg'
+                            WHEN 'slnt' THEN NVL2(value,'oblique ' || value || 'deg',null)
                             ELSE TO_CHAR(value)
                         END AS value 
                   FROM font_axes_value 
