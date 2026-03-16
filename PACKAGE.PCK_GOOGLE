@@ -220,6 +220,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
                 )
             );
 
+        /*
+        ** REVERSE THE DATA LOGIC FOR 'slnt' AXIS TO MAKE IT CSS-FRIENDLY
+        */
+        UPDATE font_axes
+           SET axis_start=axis_end,
+               axis_end=axis_start*-1
+         WHERE axis='slnt'
+           AND axis_start+axis_end<>0;
+
         FOR i IN 1..pck_fonts.G_CAPABILITIES.COUNT LOOP
             l_capabilities:=l_capabilities || pck_fonts.G_CAPABILITIES(i) || ',';
         END LOOP;
