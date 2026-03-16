@@ -220,6 +220,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         RETURN (l_fontfaces);
     END;
 
+    FUNCTION writeToken(pContext IN VARCHAR2, pAxis IN VARCHAR2, pValue IN NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN (
+            '--' || pContext || '-font-' || pAxis || ': ' ||
+            CASE 
+                WHEN pAxis='wdth' THEN pValue || '%'
+                WHEN pAxis='slnt' AND pValue IS NULL THEN 'italic'
+                WHEN pAxis='slnt' AND pValue IS NOT NULL THEN 'oblique ' || pValue || 'deg'
+                ELSE TO_CHAR(pValue)
+            END || ';'
+        );
+    END;
+
     /* 
     ** BUILD FONT-FACE RULES AND DESIGN TOKENS FOR EDITOR SITE
     */
@@ -271,14 +284,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                AND fav.context(+)=wf.context
              ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), rn
         ) LOOP
-            -- ital custom variable depends on whether font is variable
+            l_css:=l_css || writeToken(C.context, C.axis, C.value);
+            /*
             l_css:=l_css || 
             '--' || C.context || '-font-' || C.axis || ': ' ||
-            CASE C.axis
-                WHEN 'wdth' THEN C.value || '%'
-                WHEN 'slnt' THEN 'oblique ' || C.value || 'deg'
+            CASE 
+                WHEN C.axis='wdth' THEN C.value || '%'
+                WHEN C.axis='slnt' AND C.value IS NULL THEN 'italic'
+                WHEN C.axis='slnt' AND C.value IS NOT NULL THEN 'oblique ' || C.value || 'deg'
                 ELSE TO_CHAR(C.value)
             END || ';';
+            */
             IF (C.axis NOT IN ('wdth','wght','wght-bold','slnt')) THEN
                 l_font_variation_settings:=l_font_variation_settings ||
                 '"' || C.axis || '" var(--' || C.context || '-font-' || C.axis || '),';
