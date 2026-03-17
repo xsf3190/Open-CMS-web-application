@@ -189,7 +189,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
      *  DOWNLOAD OPTIMIZED @font-face RULES FROM GOOGLE
     */
-    PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pItalic IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2, pFontface OUT VARCHAR2) IS
+    PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2, pFontface OUT VARCHAR2) IS
         l_api_url VARCHAR2(200);
         l_api_axes VARCHAR2(100);
         l_api_values VARCHAR2(100);
@@ -200,35 +200,65 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_url_new website_fontfiles_temp.path%type;
         l_sha1 website_fontfiles_temp.sha1%type;
         n PLS_INTEGER;
-
+        l_sql LONG;
+        l_where VARCHAR2(100);
+        l_font_id font.id%type;
+        l_family font.family%type;
+        l_axes VARCHAR2(100);
+        l_tuple VARCHAR2(100);
     BEGIN
-        n:=0;
-        FOR C IN (
-            SELECT wf.font_id, f.family, fav.axis, fav.value
-              FROM website_font wf, font f, font_axes_value fav
-             WHERE wf.website_id=pWebsiteId
-               AND wf.context=pContext
-               AND f.id=wf.font_id
-               AND fav.website_id=wf.website_id
-               AND fav.context=wf.context
-             ORDER BY CASE WHEN ASCII(fav.axis)>100 THEN 1 ELSE 2 END, fav.axis
-        ) LOOP
-            n:=n+1;
-            IF (n=1) THEN
-                l_api_url:=
-                    'https://fonts.googleapis.com/css2?family=' || REPLACE(C.family,' ','+') || ':';
-                l_api_axes:='ital';
-                l_api_values:=pItalic;
-            END IF;
-            l_api_axes:=l_api_axes || ',' || C.axis;
-            l_api_values:=l_api_values || ',' || C.value;
-        END LOOP;
+        l_where:=
+            CASE pStyles
+                WHEN 'normal' THEN
+                    q'{fav.axis NOT IN ('slnt','wght-bold')}'
+                WHEN 'italic' THEN
+                    q'{fav.axis NOT IN ('wght-bold')}'
+                WHEN 'bold' THEN
+                    q'{fav.axis NOT IN ('wght','slnt')}'
+                WHEN 'bold.italic' THEN
+                    q'{fav.axis NOT IN ('wght')}'
+            END;
+
+        l_sql:=
+        'WITH data AS ' ||
+        '(' ||
+            'SELECT wf.font_id, f.family, ' ||
+                'CASE ' || 
+                    q'{WHEN fav.axis='wght-bold' THEN 'wght' }' ||
+                    q'{WHEN fav.axis='slnt' AND fav.value IS NULL THEN 'ital' }' ||
+                    'ELSE fav.axis ' ||
+                'END AS axis,' ||
+                'CASE ' || 
+                    q'{WHEN fav.axis='slnt' AND fav.value>0 THEN fav.value*-1 }' ||
+                    q'{WHEN fav.axis='slnt' AND fav.value IS NULL THEN 1 }' ||
+                'ELSE fav.value ' ||
+                'END AS value ' ||
+              'FROM website_font wf, font f, font_axes_value fav ' ||
+             'WHERE wf.website_id=:b1 ' ||
+               'AND wf.context=:b2 ' ||
+               'AND f.id=wf.font_id ' ||
+               'AND fav.website_id=wf.website_id ' ||
+               'AND fav.context=wf.context ' ||
+               'AND ' || l_where ||
+        ') ' ||
+        'SELECT font_id, family, ' ||
+            q'{LISTAGG(axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS axes, }' ||
+            q'{LISTAGG(value,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS tuple }' ||
+        'FROM data ' ||
+        'GROUP BY font_id,family';
         
-        l_api_url:=l_api_url || 
-            l_api_axes || '@' || 
-            l_api_values || 
-            '&display=swap' || 
-            '&text=' || utl_url.escape(pText,TRUE,'UTF-8');
+        pck_core.log(l_sql);
+
+        EXECUTE IMMEDIATE l_sql 
+            INTO l_font_id, l_family, l_axes, l_tuple
+            USING pWebsiteid, pContext;
+
+        l_api_url:=
+            'https://fonts.googleapis.com/css2?family=' || 
+                REPLACE(l_family,' ','+') || ':' ||
+                l_axes || '@' || l_tuple ||
+                '&display=swap' || 
+                '&text=' || utl_url.escape(pText,TRUE,'UTF-8');
 
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
 
@@ -326,22 +356,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_context:=l_chars_used.FIRST;
         WHILE l_context IS NOT NULL LOOP
             IF (l_chars_used(l_context).normal IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, '0', l_chars_used(l_context).normal, 'normal', l_fontface);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).normal, 'normal', l_fontface);
                 l_fontfaces:=l_fontfaces || l_fontface;
             END IF;
 
             IF (l_chars_used(l_context).italic IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context,  '1', l_chars_used(l_context).italic, 'italic', l_fontface);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).italic, 'italic', l_fontface);
                 l_fontfaces:=l_fontfaces || l_fontface;
             END IF;
 
             IF (l_chars_used(l_context).bold_normal IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context,  '0', l_chars_used(l_context).bold_normal, 'bold.normal', l_fontface);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_normal, 'bold', l_fontface);
                 l_fontfaces:=l_fontfaces || l_fontface;
             END IF;
             
             IF (l_chars_used(l_context).bold_italic IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context,  '1', l_chars_used(l_context).bold_italic, 'bold.italic', l_fontface);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_italic, 'bold.italic', l_fontface);
                 l_fontfaces:=l_fontfaces || l_fontface;
             END IF;
             
