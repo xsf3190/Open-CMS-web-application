@@ -26,7 +26,7 @@ export const init = async (element) => {
     document.head.appendChild(link);
 
 
-    /* Get apprpriate set of plugins from CKEDITOR CDN */
+    /* Get appropriate set of plugins from CKEDITOR CDN */
     const { InlineEditor, 
             Essentials, 
             Alignment, 
@@ -202,16 +202,6 @@ export const init = async (element) => {
             } );
         }
     }
-
-    /*
-    function CustomTitleExtension(editor) {
-        editor.model.schema.addAttributeCheck((context, attributeName) => {
-            if (context.endsWith('title-content $text') && ['italic','fontSize','fontColor','underline'].includes(attributeName)) {
-                return true;
-            }
-        })
-    }
-    */
 
     const headerConfig = {
         plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Heading, Italic, Paragraph, Underline, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
