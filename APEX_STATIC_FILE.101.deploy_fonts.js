@@ -152,10 +152,6 @@ const changeHandler = (e) => {
                 sample.replaceChildren();
                 sample.insertAdjacentHTML("afterbegin",data.sample);
             }
-            if (obj.id.endsWith("size")) {
-                const sizeValue = (obj.id.includes("font")) ? `--step-${value}` : value;
-                document.documentElement.style.setProperty(`--${id}`, `var(${sizeValue})`); 
-            }
 
             liveRegion(data);
         })
@@ -207,12 +203,6 @@ const clickHandler = (e) => {
             }
             if (data.properties) {
                 setProperties(data.properties,context);
-            }
-            if (id==="ital") {
-                const varStyle = (value==="0") ? "normal" : "italic";
-                document.documentElement.style.setProperty(`--${context}-font-style`, varStyle);
-            } else {
-                document.documentElement.style.setProperty(`--${context}-font-${id}`, value); 
             }
             
             liveRegion(data);
