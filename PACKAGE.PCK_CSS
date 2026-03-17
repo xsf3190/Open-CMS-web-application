@@ -233,6 +233,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         );
     END;
 
+    FUNCTION writeFontVariationSetting(pContext IN VARCHAR2, pAxis IN VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        IF (pAxis NOT IN ('wdth','wght','wght-bold','slnt')) THEN
+            RETURN(
+                '"' || pAxis || '" var(--' || pContext || '-font-' || pAxis || '),'
+            );
+        ELSE
+            RETURN (null);
+        END IF;
+    END;
+
     /* 
     ** BUILD FONT-FACE RULES AND DESIGN TOKENS FOR EDITOR SITE
     */
@@ -284,21 +295,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                AND fav.context(+)=wf.context
              ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), rn
         ) LOOP
-            l_css:=l_css || writeToken(C.context, C.axis, C.value);
-            /*
             l_css:=l_css || 
-            '--' || C.context || '-font-' || C.axis || ': ' ||
-            CASE 
-                WHEN C.axis='wdth' THEN C.value || '%'
-                WHEN C.axis='slnt' AND C.value IS NULL THEN 'italic'
-                WHEN C.axis='slnt' AND C.value IS NOT NULL THEN 'oblique ' || C.value || 'deg'
-                ELSE TO_CHAR(C.value)
-            END || ';';
-            */
-            IF (C.axis NOT IN ('wdth','wght','wght-bold','slnt')) THEN
-                l_font_variation_settings:=l_font_variation_settings ||
-                '"' || C.axis || '" var(--' || C.context || '-font-' || C.axis || '),';
-            END IF;
+                writeToken(C.context, C.axis, C.value);
+            l_font_variation_settings:=l_font_variation_settings || 
+                writeFontVariationSetting(C.context, C.axis);
 
             IF (C.rn=C.nb) THEN
                 l_css:=l_css ||
@@ -353,6 +353,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type) IS
         l_root_css CLOB;
         l_css CLOB;
+        l_font_variation_settings VARCHAR2(4000);
         l_sha1 website_cssfiles_temp.sha1%type;
     BEGIN
         l_root_css:=
@@ -390,9 +391,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END LOOP;
 
         FOR C IN (
-            SELECT wf.context, 
-                    '--' || wf.context || '-font-' || fav.axis AS axis,
-                    fav.value || CASE WHEN fav.axis='wdth' THEN '%' END AS value,
+            SELECT wf.context, fav.axis, fav.value,
                     ROW_NUMBER() OVER (PARTITION BY wf.context ORDER BY fav.axis ) rn,
                     COUNT(*) OVER (PARTITION BY wf.context) nb
               FROM website_font wf, font_axes_value fav
@@ -401,8 +400,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                AND fav.context=wf.context
              ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), axis
         ) LOOP
-            l_root_css:=l_root_css || 
-            C.axis || ': ' || C.value || ';';
+            l_root_css:=l_root_css ||
+                writeToken(C.context, C.axis, C.value);
+            l_font_variation_settings:=l_font_variation_settings || 
+                writeFontVariationSetting(C.context, C.axis);
+
+            IF (C.rn=C.nb) THEN
+                l_root_css:=l_root_css ||
+                '--' || C.context || '-font-variation-settings: ' || RTRIM(l_font_variation_settings,',') || ';';
+                l_font_variation_settings:=null;
+            END IF;
         END LOOP;
 
         l_root_css:=l_root_css ||
