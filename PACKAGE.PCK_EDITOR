@@ -945,7 +945,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        body_html=l_html,
                        updated_date = current_timestamp
                  WHERE id=pArticleId
-                 RETUrNING parent_id INTO l_parent_id;
+                 RETURNING parent_id INTO l_parent_id;
 
                 IF (l_parent_id IS NOT NULL) THEN
                     UPDATE article
