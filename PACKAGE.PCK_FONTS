@@ -1,7 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
-    TYPE t_capabilities IS VARRAY(6) OF VARCHAR2(30);
-    G_CAPABILITIES CONSTANT t_capabilities:=t_capabilities('bold','italic','wdth','color');
+    TYPE t_capabilities IS VARRAY(4) OF VARCHAR2(30);
+    G_CAPABILITIES CONSTANT t_capabilities:=t_capabilities('bold','italic','wdth','opsz');
     --
     FUNCTION distinct_chars(pCharacters IN VARCHAR2) RETURN VARCHAR2;
     --
@@ -190,7 +190,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
      *  DOWNLOAD OPTIMIZED @font-face RULES FROM GOOGLE
     */
     PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2, pFontface OUT VARCHAR2) IS
-        l_api_url VARCHAR2(200);
+        l_api_url VARCHAR2(500);
         l_api_axes VARCHAR2(100);
         l_api_values VARCHAR2(100);
         l_fontface CLOB;
@@ -199,13 +199,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_url website_fontfiles_temp.path%type;
         l_url_new website_fontfiles_temp.path%type;
         l_sha1 website_fontfiles_temp.sha1%type;
-        n PLS_INTEGER;
+        
         l_sql LONG;
         l_where VARCHAR2(100);
         l_font_id font.id%type;
         l_family font.family%type;
         l_axes VARCHAR2(100);
+        l_axes2 VARCHAR2(100);
         l_tuple VARCHAR2(100);
+        l_nb_axes PLS_INTEGER;
+        n1 PLS_INTEGER;
+        n2 PLS_INTEGER;
     BEGIN
         l_where:=
             CASE pStyles
@@ -242,21 +246,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                'AND ' || l_where ||
         ') ' ||
         'SELECT font_id, family, ' ||
-            q'{LISTAGG(axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS axes, }' ||
-            q'{LISTAGG(value,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS tuple }' ||
+            'COUNT(*),' ||
+            q'{LISTAGG(axis||':'||value,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS axes }' ||
         'FROM data ' ||
         'GROUP BY font_id,family';
         
-        pck_core.log(l_sql);
+        -- pck_core.log(l_sql);
 
         EXECUTE IMMEDIATE l_sql 
-            INTO l_font_id, l_family, l_axes, l_tuple
+            INTO l_font_id, l_family, l_nb_axes, l_axes
             USING pWebsiteid, pContext;
+        
+        l_axes:=l_axes||',';
+
+        FOR i IN 1..l_nb_axes LOOP
+            n1:=INSTR(l_axes,',',i,i);
+            n2:=INSTR(l_axes,':',i,i);
+            l_axes2:=l_axes2 || SUBSTR(l_axes,n2-4,4)||',';
+            l_tuple:=l_tuple || SUBSTR(l_axes,n2,n1-n2);
+        END LOOP;
+        l_axes2:=RTRIM(l_axes2,',');
+        l_tuple:=LTRIM(REPLACE(l_tuple,':',','),',');
 
         l_api_url:=
             'https://fonts.googleapis.com/css2?family=' || 
                 REPLACE(l_family,' ','+') || ':' ||
-                l_axes || '@' || l_tuple ||
+                l_axes2 || '@' || l_tuple ||
                 '&display=swap' || 
                 '&text=' || utl_url.escape(pText,TRUE,'UTF-8');
 
@@ -278,11 +293,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             '*/' || chr(10) ||
             l_fontface;
 
-        SELECT COUNT(*) INTO n FROM dual 
+        SELECT COUNT(*) INTO n1 FROM dual 
          WHERE EXISTS (
             SELECT null FROM website_files WHERE sha1=l_sha1 AND path=l_url_new
         );
-        IF (n=0) THEN
+        IF (n1=0) THEN
             INSERT INTO website_fontfiles_temp(path, sha1, fontface, content) 
             VALUES (l_url_new, l_sha1, REPLACE(l_fontface, l_url, l_url_new), l_blob);
         END IF;
@@ -386,7 +401,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /*
-    ** CREATE HTML FORM ELEMENTS FOR uSER TO CONFIGURE AVAILABLE FONT FEATURES
+    ** CREATE CONTROL ELEMENTS FOR USER TO CONFIGURE AVAILABLE FONT FEATURES
     */
     FUNCTION getFontVariations(pWebsiteid IN website.id%type, pFontid IN font.id%type, pContext IN website_font.context%type) RETURN VARCHAR2 IS
         l_variations LONG;
@@ -394,7 +409,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_current_wght font_axes_value.value%type;
         n PLS_INTEGER:=0;
     BEGIN
-        /* Start with variable fonts - add control for Weight Bold */
+        /* Start with variable fonts */
         FOR C IN (
             SELECT fa.axis, fa.axis_start, fa.axis_end, fm.display_name, fv.value
               FROM font_axes fa, font_metadata fm, font_axes_value fv
@@ -430,37 +445,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END IF;
 
         /*
-        ** Build weight select element for static fonts
-        ** Skip if font has single weight
+        ** Build weight select elements for static fonts having more than 2 weights
         */
-        l_italic:=FALSE;
         FOR C IN (
-            SELECT fav.value 
-              FROM font_axes_value fav 
-             WHERE fav.website_id=pWebsiteid
+            SELECT fsw.wght_normal, fav.axis, DECODE(fav.axis,'wght','Weight','wght-bold','Weight Bold') label, fav.value, COUNT(*) OVER (PARTITION BY fav.axis) nb, ROW_NUMBER() OVER (PARTITION BY fav.axis ORDER BY fsw.wght_normal) rn
+              FROM font_static_wght fsw, font_axes_value fav
+             WHERE fsw.font_id=pFontid
+               AND fav.website_id=pWebsiteid
                AND fav.context=pContext
-               AND fav.axis='wght'
+               AND fav.axis IN ('wght','wght-bold')
+             ORDER BY fav.axis,fsw.wght_normal
         ) LOOP
-            l_current_wght:=C.value;
-        END LOOP;
 
-        FOR C IN (
-            SELECT fsw.wght_normal, fsw.wght_italic, COUNT(*) OVER () nb, ROW_NUMBER() OVER (ORDER BY fsw.wght_normal) rn
-              FROM font_static_wght fsw
-             WHERE fsw.font_id=pFontid 
-             ORDER BY fsw.wght_normal
-        ) LOOP
-            l_italic:=(C.wght_italic IS NOT NULL);
-
-            IF (C.nb=1) THEN
+            IF (C.nb<3) THEN
                 EXIT;
             END IF;
 
             IF (C.rn=1) THEN
                 l_variations:=l_variations || 
                 '<div>' ||
-                    '<label for="wght">Weight</label>' ||
-                    '<select id="wght">' ||
+                    '<label for="' || C.axis || '">' || C.label || '</label>' ||
+                    '<select id="' || C.axis || '">' ||
                         '<button>' ||
                             '<selectedcontent></selectedcontent>' ||
                             '<span class="arrow"></span>' ||
@@ -469,7 +474,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
             l_variations:=l_variations || 
             '<option value="' || TO_CHAR(C.wght_normal) || '"' || 
-                CASE WHEN C.wght_normal=l_current_wght THEN ' selected' END || 
+                CASE WHEN C.wght_normal=C.value THEN ' selected' END || 
                 ' style="font-weight:' || C.wght_normal || '" >' || 
                 CASE C.wght_normal
                     WHEN 100 THEN 'Thin'
@@ -489,13 +494,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             '</div>';
             END IF;
         END LOOP;
-            
-        IF (l_italic AND pContext='logo') THEN
-            l_variations:=l_variations || 
-            '<div>' ||
-                '<button type="button" class="toggle" id="ital" aria-pressed="false" data-variable="0">Italic</button>' ||
-            '</div>';
-        END IF;
 
         IF (l_variations IS NULL) THEN
             l_variations:='<p></p>';
@@ -548,7 +546,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     
                     IF (C.bold=1 OR C.italic=1) THEN
                         l_html_bi:=l_html_bi || 
-                        ', which supports ';
+                        ' supports ';
                     END IF;
 
                     IF (C.bold=1) THEN
@@ -582,6 +580,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_obj JSON_OBJECT_T;
         n PLS_INTEGER:=0;
     BEGIN
+    
         l_arr:=new JSON_ARRAY_T;
 
         FOR C IN (
@@ -691,40 +690,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 END LOOP;
                 l_article:=l_article || 
                 '</fieldset>' ||
-                -- Languages
-                /*
-                '<fieldset class="flex-items">' ||
-                    '<legend>Languages: ';
-                    FOR C1 IN (
-                        SELECT language_code 
-                          FROM website_language 
-                         WHERE website_id=pWebsiteid 
-                         ORDER BY created_date 
-                    ) LOOP
-                        l_article:=l_article || 
-                        '<span>' || C1.language_code || '</span>';
-                    END LOOP;
-                    l_article:=l_article || 
-                    '</legend>' || 
-                    '<select id="language">' ||
-                        '<button>' ||
-                            '<selectedcontent></selectedcontent>' ||
-                            '<span class="arrow"></span>' ||
-                        '</button>' ||
-                        '<option value="">--Add language--</option>';
-                    FOR C1 IN (
-                        SELECT code, name 
-                          FROM language 
-                         WHERE name IS NOT NULL 
-                         ORDER BY name
-                    ) LOOP
-                        l_article:=l_article || 
-                        '<option value="' || C1.code || '">' || C1.name || ' (' || C1.code || ')</option>';
-                    END LOOP;
-                    l_article:=l_article || 
-                    '</select>' ||
-                '</fieldset>' ||
-                */
             '</div>';
 
             -- Font categories and capabilities
@@ -924,6 +889,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 END LOOP;
         END CASE;
         RETURN(null);
+    END;
+
+    /*
+    ** BUILD GOOGLE FONTS API QUERY PARAMETERS FOR SELECTED STATIC FONT WEIGHT
+    */
+    FUNCTION getNewStaticFontApiUrl(pWebsiteid IN NUMBER, pContext IN VARCHAR2, pFontid IN NUMBER) RETURN VARCHAR2 IS 
+        l_api_url VARCHAR2(500);
+    BEGIN
+        l_api_url:='ital,wght@';
+
+        FOR C IN (
+            SELECT fav.axis, f.italic, fav.value
+              FROM font_axes_value fav, font f
+             WHERE fav.website_id=pWebsiteid
+               AND fav.context=pContext
+               AND fav.axis IN ('wght','wght-bold')
+               AND f.id=pFontid
+             ORDER BY fav.axis
+        ) LOOP
+            l_api_url:=l_api_url || '0,' || C.value;
+            IF (C.italic=1) THEN
+                l_api_url:=l_api_url || ';1,' || C.value;
+            END IF;
+            l_api_url:=l_api_url || ';';
+        END LOOP;
+        RETURN(RTRIM(l_api_url,';'));
     END;
 
     /*
@@ -1147,7 +1138,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         FOR C IN (
             SELECT j.context, j.category, j.capabilities, j.font, j.id, j.value, f.family, f.variable
               FROM JSON_TABLE(pBodyText, '$' COLUMNS(context, category, capabilities, font, id, value)) j, font f
-             WHERE f.id=j.font
+             WHERE f.id(+)=j.font
         ) LOOP
             CASE C.id
                 WHEN 'context' THEN
@@ -1161,15 +1152,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     l_message:='Updated font select list to reflect new capability setting';
                 WHEN 'family' THEN
                     updateFamily(pWebsiteid, l_json, C.context, C.value);
-                WHEN 'language' THEN
-                    l_message:='Selected language ' || C.value || ' - will add to Google API &text parameter, later';
-                    addLanguage(pWebsiteid,C.value);
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
                     updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
-                    IF (C.id='wght' AND C.variable=0) THEN
-                        l_api_url:=getStaticFontApiUrl(pWebsiteid, C.context, C.font);
-                        l_json.put('urls',getFontfaces(pWebsiteid, C.font, C.family, l_api_url, C.family || C.value));
+                    IF (C.variable=0 AND C.id IN ('wght','wght-bold')) THEN
+                        l_api_url:=getNewStaticFontApiUrl(pWebsiteid, C.context, C.font);
+                        l_json.put('urls',getFontfaces(pWebsiteid, C.font, C.family, l_api_url, C.family));
                     END IF;
             END CASE;
 
