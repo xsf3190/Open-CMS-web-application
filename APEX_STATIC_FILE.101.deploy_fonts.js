@@ -12,7 +12,7 @@ export const init = (element) => {
             dialog_article.addEventListener("click", clickHandler);
             dialog_article.addEventListener("input", inputHandler);
             dialog_footer.addEventListener("click", footerHandler);
-            replaceOptions(data.options);
+            replaceOptions("family",data.options);
         })
         .catch((error) => {
             handleError(error);
@@ -51,8 +51,8 @@ const getSelectedFont = () => {
 /*
 ** REPLACE FONT FAMILY options
 */
-const replaceOptions = (options) => {
-    const family = document.getElementById("family");
+const replaceOptions = (id, options) => {
+    const family = document.getElementById(id);
     // remove existing options
     let index = family.options.length;
 	while (index--) {
@@ -105,6 +105,8 @@ export const setProperties = (properties,context) => {
 */
 const changeHandler = (e) => {
     if (e.target.value===0) return;
+    if (e.target.id==="family2") return;
+
     
     const context = getContext();
 
@@ -134,7 +136,7 @@ const changeHandler = (e) => {
                 }
             }
             if (data.options) {
-                replaceOptions(data.options);
+                replaceOptions("family",data.options);
             }
             if (data.variations) {
                 const variations = document.getElementById("variations");
@@ -189,7 +191,7 @@ const clickHandler = (e) => {
     callAPI(endpoint,"PUT",{context:context, category:getCategory(), font:getSelectedFont(), id:id, value:value})
         .then((data) => {
             if (data.options) {
-                replaceOptions(data.options);
+                replaceOptions("family",data.options);
             }
             if (data.variations) {
                 const variations = document.getElementById("variations");
@@ -218,6 +220,19 @@ const clickHandler = (e) => {
 */
 const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
+    
+    if (id==="family2" && e.target.value.length>2) {
+        callAPI(endpoint,"POST",{value:e.target.value})
+        .then((data) => {
+            if (data.datalist) {
+                const family2list = document.getElementById("family2list");
+                family2list.replaceChildren();
+                family2list.insertAdjacentHTML("afterbegin",data.datalist);
+                // replaceOptions("family2list",data.datalist);
+            }
+        })    
+    }
+    
     const context = getContext();
     
     if (e.target.classList.contains("slider")) {
