@@ -105,9 +105,7 @@ export const setProperties = (properties,context) => {
 */
 const changeHandler = (e) => {
     if (e.target.value===0) return;
-    if (e.target.id==="family2") return;
 
-    
     const context = getContext();
 
     const obj={context:context, capabilities:getCapabilities(), font:getSelectedFont()};
@@ -221,14 +219,13 @@ const clickHandler = (e) => {
 const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
     
-    if (id==="family2" && e.target.value.length>2) {
+    if (id==="family2" && e.target.value.length>1) {
         callAPI(endpoint,"POST",{value:e.target.value})
         .then((data) => {
             if (data.datalist) {
                 const family2list = document.getElementById("family2list");
                 family2list.replaceChildren();
                 family2list.insertAdjacentHTML("afterbegin",data.datalist);
-                // replaceOptions("family2list",data.datalist);
             }
         })    
     }
