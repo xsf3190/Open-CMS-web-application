@@ -7,6 +7,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE getCharsUsed(pArticleId IN article.id%type, pContent IN OUT NOCOPY CLOB);
     --
+   PROCEDURE getFontDatalist(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus IN OUT NUMBER);
+    --
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
     --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pStatus IN OUT NUMBER);
@@ -620,6 +622,36 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN (l_arr);
     END;
 
+    /*
+    ** RETURN DATALIST OPTIONS FOR FONT FAMILIES STARTING WITH ENTERED INPUT
+    */
+    PROCEDURE getFontDatalist(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus IN OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+        l_datalist LONG; 
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        FOR C IN (
+            SELECT f.id, f.family
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS(value)) j, font f
+             WHERE f.family LIKE INITCAP(j.value||'%')
+             ORDER BY f.family
+        ) LOOP
+            l_datalist:=l_datalist || '<option value="' || C.family || '" style="font-family:f' || C.id || '">' || C.family || '</option>';
+        END LOOP;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('datalist',l_datalist);
+        apex_util.prn(l_json.to_clob,false);
+    
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+    END;
+
     /* 
     **  BUILD INITIAL DIALOG CONTENT
     **   Select Context
@@ -729,14 +761,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
             /* Build <select> element of all Fonts in same category and with same capabilities as current context font */
             l_article:=l_article || 
-            '<div>' ||
-                '<label for="family">Select font</label>' ||
-                '<select id="family">' ||
-                    '<button>' ||
-                        '<selectedcontent></selectedcontent>' ||
-                        '<span class="arrow"></span>' ||
-                    '</button>' || 
-                '</select>' ||
+            '<div class="flex-items">' ||
+                '<div>' ||
+                    '<label for="family">Select font</label>' ||
+                    '<select id="family">' ||
+                        '<button>' ||
+                            '<selectedcontent></selectedcontent>' ||
+                            '<span class="arrow"></span>' ||
+                        '</button>' || 
+                    '</select>' ||
+                '</div>' ||
+                '<span><u>OR</u></span>' ||
+                '<div>' ||
+                    '<label for="family2">Enter font name</label>' ||
+                    '<input type="text" autocomplete="off" id="family2" value="" list="family2list">' ||
+                    '<datalist id="family2list">' ||
+                    '</datalist>' ||
+                '</div>' ||
             '</div>' ||
             '<div class="separator">Configure ' || C.context || '</div>' ||
             '<div class="flex-items">' ||
@@ -1152,6 +1193,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     l_message:='Updated font select list to reflect new capability setting';
                 WHEN 'family' THEN
                     updateFamily(pWebsiteid, l_json, C.context, C.value);
+                WHEN 'family2' THEN
+                    l_message:='Entered value ' || C.value;
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
                     updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
