@@ -633,12 +633,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         FOR C IN (
-            SELECT f.id, f.family
+            SELECT f.family
               FROM JSON_TABLE(pBodyText, '$' COLUMNS(value)) j, font f
              WHERE f.family LIKE INITCAP(j.value||'%')
              ORDER BY f.family
         ) LOOP
-            l_datalist:=l_datalist || '<option value="' || C.family || '" style="font-family:f' || C.id || '">' || C.family || '</option>';
+            l_datalist:=l_datalist || '<option value="' || C.family || '">';
         END LOOP;
 
         l_json:= new JSON_OBJECT_T;
@@ -771,7 +771,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         '</button>' || 
                     '</select>' ||
                 '</div>' ||
-                '<span><u>OR</u></span>' ||
+                '<span class="separator" style="inline-size:5rem"><strong>OR</strong></span>' ||
                 '<div>' ||
                     '<label for="family2">Enter font name</label>' ||
                     '<input type="text" autocomplete="off" id="family2" value="" list="family2list">' ||
@@ -1122,6 +1122,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /* 
+    **  USER SELECTED FONT FAMILY FROM <datalist>
+    */
+    PROCEDURE updateFamily2(pWebsiteid IN NUMBER, pJson IN OUT JSON_OBJECT_T, pContext IN VARCHAR2, pFontfamily IN VARCHAR2, pUpdated IN OUT NUMBER) IS
+    BEGIN
+        pUpdated:=0;
+        FOR C IN (
+            SELECT id, category, capabilities FROM font WHERE family=pFontfamily
+        ) LOOP
+            pUpdated:=1;
+            pJson.put('category',C.category);
+            pJson.put('capabilities',getCapabilities(C.capabilities));
+            pJson.put('options',getFontOptions(pWebsiteid, C.category, C.capabilities, C.id));
+            updateFamily(pWebsiteid, pJson, pContext, C.id);
+        END LOOP;
+    END;
+
+    /* 
     **  USER CHANGES CONTEXT -> UPDATE UI TO REFLECT NEW CONTEXT FONT
     */
     PROCEDURE changeContext(pWebsiteId IN website.id%type, pJson IN OUT JSON_OBJECT_T, pContext IN website_font.context%type) IS
@@ -1161,6 +1178,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_api_url VARCHAR2(500);
         l_json JSON_OBJECT_T;
         l_properties_arr JSON_ARRAY_T;
+        l_updated NUMBER;
 
         PROCEDURE appendObj(pName IN VARCHAR2, pValue IN VARCHAR2) IS
             l_obj JSON_OBJECT_T;
@@ -1194,7 +1212,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 WHEN 'family' THEN
                     updateFamily(pWebsiteid, l_json, C.context, C.value);
                 WHEN 'family2' THEN
-                    l_message:='Entered value ' || C.value;
+                    updateFamily2(pWebsiteid, l_json, C.context, C.value, l_updated);
+                    IF (l_updated=0) THEN
+                        l_json.put('success',true);
+                        l_json.put('message','Pick a font from the list');
+                        apex_util.prn(l_json.to_clob,false);
+                        pStatus:=200;
+                        RETURN;
+                    END IF;
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
                     updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
@@ -1210,7 +1235,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             */
             l_properties_arr:=new JSON_ARRAY_T;
 
-            appendObj('--' || C.context || '-font-family', C.family);
+            appendObj('--' || C.context || '-font-family', CASE WHEN C.id='family2' THEN C.value ELSE C.family END);
             
             FOR C1 IN (
                 SELECT '--' || C.context || '-font-' || axis AS name, 
