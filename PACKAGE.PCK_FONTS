@@ -534,7 +534,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 WHEN 'logo' THEN
                     l_html:=l_html ||
                     '<div class="topnav flex-items space-between">' ||
-                        '<span class="logo">Logo</span>' || 
+                        '<span class="logo" contenteditable>Logo</span>' || 
                         '<nav>' || pck_deploy.buildNav(pWebsiteId) || '</nav>' || 
                     '</div>';
 
@@ -566,8 +566,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     IF (l_html_bi) IS NOT NULL THEN
                         l_html:=l_html || 
                         l_html_bi ||
-                        ' characters.</p>' ||
-                        '<p>Adjust using the controls.</p>';
+                        ' characters.</p>';
                     END IF;
             END CASE;
         END LOOP;
@@ -1143,6 +1142,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     */
     PROCEDURE changeContext(pWebsiteId IN website.id%type, pJson IN OUT JSON_OBJECT_T, pContext IN website_font.context%type) IS
     BEGIN
+        -- pck_core.log('pContext:'||pContext);
         FOR C IN (
             SELECT wf.font_id, f.family, f.category, f.capabilities
               FROM website_font wf, font f
@@ -1179,6 +1179,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_json JSON_OBJECT_T;
         l_properties_arr JSON_ARRAY_T;
         l_updated NUMBER;
+        n PLS_INTEGER;
 
         PROCEDURE appendObj(pName IN VARCHAR2, pValue IN VARCHAR2) IS
             l_obj JSON_OBJECT_T;
@@ -1234,20 +1235,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             ** enabling all website pages to be viewed with latest font design choices
             */
             l_properties_arr:=new JSON_ARRAY_T;
-
-            appendObj('--' || C.context || '-font-family', CASE WHEN C.id='family2' THEN C.value ELSE C.family END);
-            
+            n:=0;
             FOR C1 IN (
-                SELECT '--' || C.context || '-font-' || axis AS name, 
-                        CASE axis
-                            WHEN 'wdth' THEN value || '%'
-                            WHEN 'slnt' THEN NVL2(value,'oblique ' || value || 'deg',null)
-                            ELSE TO_CHAR(value)
+                SELECT f.family, '--' || C.context || '-font-' || fav.axis AS name, 
+                        CASE fav.axis
+                            WHEN 'wdth' THEN fav.value || '%'
+                            WHEN 'slnt' THEN NVL2(fav.value,'oblique ' || fav.value || 'deg',null)
+                            ELSE TO_CHAR(fav.value)
                         END AS value 
-                  FROM font_axes_value 
-                 WHERE website_id=pWebsiteid
-                   AND context=C.context 
+                  FROM website_font wf, font f, font_axes_value fav
+                 WHERE wf.website_id=pWebsiteid
+                   AND wf.context=C.context 
+                   AND f.id=wf.font_id
+                   AND fav.website_id=wf.website_id
+                   AND fav.context=wf.context 
             ) LOOP
+                n:=n+1;
+                IF (n=1) THEN
+                    appendObj('--' || C.context || '-font-family', C1.family);
+                END IF;
                 appendObj(C1.name, C1.value);
             END LOOP;
         END LOOP;
