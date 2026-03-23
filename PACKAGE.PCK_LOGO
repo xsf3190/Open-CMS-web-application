@@ -49,17 +49,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                     '<selectedcontent></selectedcontent>' ||
                     '<span class="arrow"></span>' ||
                 '</button>';
-                IF (pLogotype='font') THEN
-                    FOR i IN 1..l_fontsizes.COUNT LOOP
-                        l_html:=l_html || 
-                        '<option value="' || l_fontsizes(i).value || '"' || CASE WHEN l_fontsizes(i).value=pInlineSize THEN ' selected' END || '>' || l_fontsizes(i).name || '</option>';
-                    END LOOP;
-                ELSE
-                    FOR i IN 1..l_sizes.COUNT LOOP
-                        l_html:=l_html || 
-                        '<option value="' || l_sizes(i).value || '"' || CASE WHEN l_sizes(i).value=pInlineSize THEN ' selected' END || '>' || l_sizes(i).name || '</option>';
-                    END LOOP;
-                END IF;
+                FOR i IN 1..l_sizes.COUNT LOOP
+                    l_html:=l_html || 
+                    '<option value="' || l_sizes(i).value || '"' || CASE WHEN l_sizes(i).value=pInlineSize THEN ' selected' END || '>' || l_sizes(i).name || '</option>';
+                END LOOP;
             l_html:=l_html || 
             '</select>';
         END IF;
@@ -151,181 +144,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     END;
 
     /*
-    ** CREATE HTML FOR VARIABLE FONT AXES
-    */
-    FUNCTION buildFontVariations(pWebsiteid IN website.id%type, pFontid IN font.id%type, pContext IN website_font.context%type) RETURN VARCHAR2 IS
-        l_variations LONG;
-        l_italic BOOLEAN;
-        l_current_wght font_axes_value.value%type;
-        n PLS_INTEGER:=0;
-    BEGIN
-        l_variations:=
-        '<div class="font-variations flow">';
-        FOR C IN (
-            SELECT fa.axis, fa.axis_start, fa.axis_end, fm.display_name, fv.value
-              FROM font_axes fa, font_metadata fm, font_axes_value fv
-             WHERE fa.font_id=pFontid
-               AND fm.axis=fa.axis
-               AND fv.axis(+)=fa.axis
-               AND fv.website_id(+)=pWebsiteid
-               AND fv.context(+)=pContext
-             ORDER BY fa.axis
-        ) LOOP
-            n:=n+1;
-            l_variations:=l_variations || 
-            '<div>';
-            -- For accessibility implement toggle as button
-            IF (C.axis_end-C.axis_start=1) THEN
-                l_variations:=l_variations || 
-                    '<button type="button" class="toggle" id="' || C.axis || '" aria-pressed="' || CASE WHEN C.value='1' THEN 'true' ELSE 'false' END || '" data-variable="1">' || C.display_name || '</button>';
-            ELSE
-                l_variations:=l_variations || 
-                    '<label for="' || C.axis || '">' || C.display_name || '</label>' ||
-                    '<input type="range" id="' || C.axis || '" class="slider" min="' || TO_CHAR(C.axis_start) || '"' || CASE WHEN C.value IS NOT NULL THEN ' value="' || TO_CHAR(C.value) || '"' END || ' max="'|| TO_CHAR(C.axis_end) || '" step="1" />';
-            END IF;
-            l_variations:=l_variations || 
-            '</div>';
-        END LOOP;
-
-        IF (n>0) THEN
-            l_variations:=l_variations || '</div>';
-            RETURN (l_variations);
-        END IF;
-
-        /*
-        ** Build weight select element for static fonts
-        ** Skip if font has single weight
-        */
-        l_italic:=FALSE;
-        FOR C IN (
-            SELECT fav.value 
-              FROM font_axes_value fav 
-             WHERE fav.website_id=pWebsiteid
-               AND fav.context=pContext
-               AND fav.axis='wght'
-        ) LOOP
-            l_current_wght:=C.value;
-        END LOOP;
-
-        FOR C IN (
-            SELECT fsw.wght_normal, fsw.wght_italic, COUNT(*) OVER () nb, ROW_NUMBER() OVER (ORDER BY fsw.wght_normal) rn
-              FROM font_static_wght fsw
-             WHERE fsw.font_id=pFontid 
-             ORDER BY fsw.wght_normal
-        ) LOOP
-            IF (C.rn=1 AND C.wght_italic IS NOT NULL) THEN
-                l_italic:=TRUE;
-            END IF;
-            IF (C.nb=1) THEN
-                EXIT;
-            END IF;
-            IF (C.rn=1) THEN
-                l_variations:=l_variations || 
-                '<div>' ||
-                    '<label for="wght">Weight</label>' ||
-                    '<select id="wght">' ||
-                        '<button>' ||
-                            '<selectedcontent></selectedcontent>' ||
-                            '<span class="arrow"></span>' ||
-                        '</button>';
-            END IF;
-
-            l_variations:=l_variations || 
-            '<option value="' || TO_CHAR(C.wght_normal) || '"' || CASE WHEN C.wght_normal=l_current_wght THEN ' selected' END || '>' || 
-                CASE C.wght_normal
-                    WHEN 100 THEN 'Thin'
-                    WHEN 200 THEN 'Extra Light'
-                    WHEN 300 THEN 'Light'
-                    WHEN 400 THEN 'Normal'
-                    WHEN 500 THEN 'Medium'
-                    WHEN 600 THEN 'Semi Bold'
-                    WHEN 700 THEN 'Bold'
-                    WHEN 800 THEN 'Extra Bold'
-                    WHEN 900 THEN 'Ultra Bold'
-                END
-            || '</option>';
-            IF (C.rn=C.nb) THEN
-                l_variations:=l_variations || 
-                '</select>' ||
-            '</div>';
-            END IF;
-        END LOOP;
-            
-        IF (l_italic) THEN
-            l_variations:=l_variations || 
-            '<div>' ||
-                '<button type="button" class="toggle" id="ital" aria-pressed="false" data-variable="0">Italic</button>' ||
-            '</div>';
-        END IF;
-
-        l_variations:=l_variations || 
-        '</div>';
-
-        RETURN (l_variations);
-    END;
-
-    /*
-    ** CREATE HTML FOR FONT LOGO FORM
-    */
-    PROCEDURE buildFontLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
-        l_font_id website_font.font_id%type;
-        l_logo_font_size website.logo_font_size%type;
-        l_logo_font_text website.logo_font_text%type;
-        l_maxchars user_tab_columns.data_length%type;
-        l_family font.family%type;
-    BEGIN
-        pHeader:='<span>Create Website Logo using selected font</span>';
-
-        SELECT w.logo_font_size, NVL(w.logo_font_text,w.domain_name), wf.font_id, c.data_length
-          INTO l_logo_font_size, l_logo_font_text, l_font_id, l_maxchars
-          FROM website w, website_font wf, user_tab_columns c
-         WHERE w.id=pWebsiteid
-           AND wf.website_id(+)=w.id
-           AND wf.context(+)='logo'
-           AND c.table_name='WEBSITE'
-           AND c.column_name='LOGO_FONT_TEXT';
-
-        FOR C IN (
-            SELECT family FROM font WHERE id=l_font_id
-        ) LOOP
-            l_family:=C.family;
-        END LOOP;
-
-        pArticle:=
-        '<fieldset class="flow">' ||
-            '<legend>Enter logo text and select font</legend>' ||
-            '<div>' ||
-                '<label for="logo-font-id">Select Font</label>' ||
-                '<select id="logo-font-id">' ||
-                    '<button>' ||
-                      '<selectedcontent></selectedcontent>' ||
-                      '<span class="arrow"></span>' ||
-                    '</button>';
-
-                FOR C IN (SELECT id, family FROM font ORDER BY 2)
-                LOOP
-                    pArticle:=pArticle || 
-                    '<option value="' || TO_CHAR(C.id) || '"' || CASE WHEN C.id=l_font_id THEN ' selected' END || '>' || C.family || '</option>';
-                END LOOP;
-
-        pArticle:=pArticle || 
-                '</select>' ||
-            '</div>' ||
-            '<div>' ||
-                '<label for="logo-font-text">Logo text</label>' ||
-                '<input type="text" id="logo-font-text" value="' || l_logo_font_text || '" maxlength="' || TO_CHAR(l_maxchars) || '"/>' ||
-            '</div>' ||
-            '<div>' ||
-                getInlineSizes('font',l_logo_font_size) ||
-            '</div>' ||
-            buildFontVariations(pWebsiteid, l_font_id, 'logo');
-
-        pArticle:=pArticle || 
-        '</fieldset>';
-    END;
-
-
-    /*
     ** CREATE HTML FOR PAGE OPTIONS FORM
     */
     PROCEDURE getLogoForm(pWebsiteId IN website.id%type,  pLogoType IN VARCHAR2, pStatus OUT NUMBER) IS
@@ -339,7 +157,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
 
         CASE pLogoType
             WHEN 'image' THEN buildImageLogoForm(pWebsiteId, l_header, l_article);
-            WHEN 'font' THEN buildFontLogoForm(pWebsiteId, l_header, l_article);
             WHEN 'svg' THEN buildSvgLogoForm(pWebsiteId, l_header, l_article);
         END CASE;
 
@@ -363,48 +180,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             pck_core.log_error(pStatus);
     END;
 
-    FUNCTION getFontfaces(pWebsiteid IN website.id%type, pFontid IN font.id%type, pApiurl IN VARCHAR2, pWght IN VARCHAR2 DEFAULT NULL) RETURN JSON_ARRAY_T
-    IS 
-        l_fontfaces CLOB;
-        l_api_url VARCHAR2(500);
-        l_fontfaces_json JSON_ARRAY_T;
-        l_fontface JSON_OBJECT_T;
-        n PLS_INTEGER;
-    BEGIN
-        FOR C IN (
-            SELECT w.language_code, f.family 
-              FROM website w, font f 
-             WHERE w.id=pWebsiteid
-               AND f.id=pFontid
-        ) LOOP
-            l_api_url:='https://fonts.googleapis.com/css2?family=' || 
-                C.family || ':' || 
-                pApiurl || 
-                '&text=' || pck_fonts.getLanguage(C.language_code);
-        END LOOP;
-            
-        pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
-
-        UPDATE website_font SET editor_fontfaces=l_fontfaces WHERE website_id=pWebsiteid AND font_id=pFontid AND context='logo';
-
-        l_fontfaces_json:= new JSON_ARRAY_T;
-        n:=REGEXP_COUNT(l_fontfaces,'@font-face');
-        FOR i IN 1..n LOOP
-            l_fontface:= new JSON_OBJECT_T;
-            -- l_fontface.put('family',REGEXP_SUBSTR(l_fontfaces,'font-family: (.+?);',1,i,null,1) || pWght);
-            l_fontface.put('style',REGEXP_SUBSTR(l_fontfaces,'font-style: (.+?);',1,i,null,1));
-            l_fontface.put('weight',REGEXP_SUBSTR(l_fontfaces,'font-weight: (.+?);',1,i,null,1));
-            l_fontface.put('stretch',REGEXP_SUBSTR(l_fontfaces,'font-stretch: (.+?);',1,i,null,1));
-            l_fontface.put('source',REPLACE(REPLACE(REGEXP_SUBSTR(l_fontfaces,'url(.+?)\)',1,i),'(','("'),')','")'));
-
-            l_fontfaces_json.append(l_fontface);
-        END LOOP;
-        RETURN(l_fontfaces_json);
-    END; 
-
     /*
     ** UPDATE WEBSITE LOGO. 
-    ** IMAGE | FONT | SVG  ARE MUTUALLY EXCLUSIVE.
+    ** IMAGE | SVG  ARE MUTUALLY EXCLUSIVE.
     */
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -412,14 +190,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_column_name user_tab_columns.column_name%type;
         l_column_value VARCHAR2(4000);
         l_table_updated PLS_INTEGER;
-        l_menu font.menu%type;
-        l_menu_text font.menu%type;
-        l_variations LONG;
-        l_fontfaces VARCHAR2(1000);
-        l_api_url VARCHAR2(500);
-        l_variable font.variable%type;
-        l_fontfaces_json JSON_ARRAY_T;
-        l_fontface JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
         l_message VARCHAR2(100);
         n PLS_INTEGER;
@@ -435,9 +205,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
           INTO l_column_name, l_column_value 
           FROM JSON_TABLE(pBodyText, '$' COLUMNS (column_name, column_value));
 
-        IF (INSTR(l_column_name,'font')>0) THEN
-            l_logo_type:='font';
-        ELSIF (INSTR(l_column_name,'img')>0) THEN
+        IF (INSTR(l_column_name,'img')>0) THEN
             l_logo_type:='img';
         ELSIF (INSTR(l_column_name,'svg')>0) THEN
             l_logo_type:='svg';
@@ -447,114 +215,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
 
         IF (n=1) THEN
             EXECUTE IMMEDIATE 'UPDATE website SET logo_updated_date=current_timestamp, logo_type=:B1,' || l_column_name || '=:B2 WHERE id=:B3' USING l_logo_type, l_column_value, pWebsiteId;
-        ELSE
-            UPDATE font_axes_value 
-               SET updated_date=current_timestamp, 
-                   value=l_column_value
-             WHERE website_id=pWebsiteid
-               AND context='logo'
-               AND axis=l_column_name;
-            n:=sql%rowcount;
-            IF (n=0) THEN
-                INSERT INTO font_axes_value(website_id, context, axis, value)
-                VALUES (pWebsiteid, 'logo', l_column_name, l_column_value);
-            END IF;
         END IF;
-
-        /* FONT WEIGHT CHANGE FOR STATIC FONTS REQUIRES NEW DOWNLOAD */
-        IF (l_column_name='wght') THEN
-            FOR C IN (
-                SELECT f.id, fsw.wght_italic
-                  FROM website_font wf, font f, font_static_wght fsw
-                 WHERE wf.website_id=pWebsiteid
-                   AND wf.context='logo'
-                   AND f.id=wf.font_id
-                   AND fsw.font_id=f.id
-                   AND fsw.font_id=f.id
-                   AND fsw.wght_normal=to_NUMBER(l_column_value)
-            ) LOOP
-                UPDATE font_axes_value 
-                   SET value=l_column_value
-                 WHERE website_id=pWebsiteid
-                   AND context='logo'
-                   AND axis=l_column_name;
-
-                IF (C.wght_italic IS NOT NULL) THEN
-                    l_api_url:='ital,wght@0,' || l_column_value || ';1,' || l_column_value;
-                ELSE
-                    l_api_url:='wght@' || l_column_value;
-                END IF;
-
-                l_fontfaces_json:=getFontfaces(pWebsiteid, C.id, l_api_url, l_column_value);
-            END LOOP;
-        END IF;
-
-        /* FONT LOGO CHANGE REQUIRES NEW FONT DOWNLOAD */
-        IF (l_column_name='logo_font_id') THEN
-            UPDATE website_font 
-               SET font_id=l_column_value, updated_date=current_timestamp
-             WHERE website_id=pWebsiteid
-               AND context='logo';
-            n:=sql%rowcount;
-            IF (n=0) THEN
-                INSERT INTO website_font(website_id, font_id, context)
-                VALUES (pWebsiteid,l_column_value, 'logo');
-            END IF;
-
-            DELETE font_axes_value WHERE website_id=pWebsiteid AND context='logo';
-
-            /*
-            ** Build input range controls for variable font axes
-            */
-            l_variations:=buildFontVariations(pWebsiteid, l_column_value, 'logo');
-
-            /*
-            ** Build Google Fonts CSS API url
-            */
-            SELECT variable
-              INTO l_variable
-              FROM font
-             WHERE id=TO_NUMBER(l_column_value);
-
-            IF (l_variable=1) THEN
-                FOR C IN (
-                    SELECT LISTAGG(fa.axis,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) ||
-                           '@' AS axes,
-                           LISTAGG(CASE WHEN fa.axis='ital' THEN '0' ELSE fa.axis_start||'..'||fa.axis_end END,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(fa.axis)>100 THEN 1 ELSE 2 END, fa.axis) AS ranges
-                      FROM font_axes fa
-                     WHERE fa.font_id=TO_NUMBER(l_column_value)
-                     GROUP BY fa.font_id
-                ) LOOP
-                    l_api_url:=l_api_url || C.axes || C.ranges;
-                    IF (INSTR(C.axes,'ital')>0) THEN
-                        l_api_url:=l_api_url || ';' || '1' || SUBSTR(C.ranges,2);
-                    END IF;
-                END LOOP;
-            ELSE
-                FOR C IN (
-                    SELECT wght_normal, wght_italic
-                      FROM font_static_wght
-                     WHERE font_id=TO_NUMBER(l_column_value)
-                     ORDER BY ABS(wght_normal - 400)
-                     FETCH FIRST ROW ONLY
-                ) LOOP
-                    IF (C.wght_italic IS NOT NULL) THEN
-                        l_api_url:=l_api_url || 'ital,wght@0,' || C.wght_normal || ';1,' || C.wght_normal;
-                    ELSE
-                        l_api_url:=l_api_url || 'wght@' || C.wght_normal;
-                    END IF;
-                END LOOP;
-            END IF;
-
-            l_fontfaces_json:=getFontfaces(pWebsiteid, TO_NUMBER(l_column_value), l_api_url);
-        END IF;
-
         l_message:=l_column_name || ' updated' || CASE WHEN l_column_name<>'logo_svg' THEN ' to ' || l_column_value END;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('urls',l_fontfaces_json);
-        l_json.put('variations',l_variations);
         l_json.put('message',l_message);
         apex_util.prn(l_json.to_clob,false);
 
