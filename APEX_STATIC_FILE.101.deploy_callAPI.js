@@ -84,6 +84,12 @@ const responseok = (response, result) => {
 const callAPI = async (endpoint, method, data) => {
     let url;
 
+    // After logout / login this module will have "lost" its local variables
+    if (!access_token) {
+        access_token = sessionStorage.getItem("token");
+        refresh_token = localStorage.getItem("refresh");
+    }
+
     if (expiredToken(access_token)) {
         if (expiredToken(refresh_token)) {
             forceLogout();
