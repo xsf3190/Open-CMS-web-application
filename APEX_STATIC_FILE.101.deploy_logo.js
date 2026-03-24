@@ -24,41 +24,6 @@ const loadImg = (src) => {
     img.src = src;
 }
 
-/*
-** LOAD SELECTED FONT
-*/
-const loadFont = (data) => {
-    let family = document.querySelector("#logo-font-id selectedContent").textContent;
-    const wght = document.querySelector("#wght selectedContent");
-    if (wght) {
-        family+=" "+wght.textContent;
-    }
-    for (const fontface of data.urls) {
-        const fontFile = new FontFace(family,fontface.source);
-        fontFile.style = fontface.style;
-        fontFile.weight = fontface.weight;
-        if (fontface.stretch) {
-            fontFile.stretch = fontface.stretch;
-        }
-        document.fonts.add(fontFile);
-        fontFile.load();
-    };
-    document.fonts.ready.then(()=>{
-        document.documentElement.style.setProperty('--font-family-logo', family);
-        console.log(`Loaded ${family}`);
-    });
-    if (data.variations) {
-        const font_variations = dialog_article.querySelector(".font-variations");
-        font_variations.replaceChildren();
-        font_variations.insertAdjacentHTML('afterbegin',data.variations);
-
-        /* Reset font custom variables if new font loaded */
-        document.documentElement.style.setProperty('--logo-font-style', "normal");
-        document.documentElement.style.setProperty('--logo-font-wght', 400);
-        document.documentElement.style.setProperty('--logo-font-wdth', 100);
-    }
-}
-
 const liveRegion = (data) => {
     const live=dialog_footer.querySelector("[aria-live]");
     live.replaceChildren();
@@ -69,16 +34,24 @@ const liveRegion = (data) => {
 ** UPDATE DATABASE ON ALL CHANGE EVENTS
 */
 const changeHandler = async (e) => {
-    const id = e.target.getAttribute("id");
+    let id, value; 
 
-    const value = (e.target.tagName === "SELECT") ? e.target.options[e.target.selectedIndex].value : e.target.value;
+    if (e.target.getAttribute("type")==="radio") {
+        id=e.target.getAttribute("name");
+        value=e.target.id;
+    } else {
+        id = e.target.getAttribute("id");
+        value = (e.target.tagName === "SELECT") ? e.target.options[e.target.selectedIndex].value : e.target.value;
+    }
 
     callAPI(endpoint,"PUT",{column_name:id,column_value:value})
         .then((data) => {
-            if (data.urls) {
-                loadFont(data);
-            }
-            if (id === "logo-img-id") {
+            if (data.logoform) {
+                const logoform = document.getElementById("logoform");
+                logoform.replaceChildren();
+                logoform.insertAdjacentHTML('beforeend',data.logoform);
+            } 
+            else if (id === "logo-img-id") {
                 loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
             }
             else if (id === "logo-svg") {
@@ -89,9 +62,6 @@ const changeHandler = async (e) => {
                 const sizeValue = (id.includes("font")) ? "--step-" + value : value;
                 document.documentElement.style.setProperty("--" + id, "var(" + sizeValue + ")"); 
             }
-            else if (id==="wght" && !e.target.classList.contains("slider")) {
-                document.documentElement.style.setProperty('--logo-font-wght', value);
-            }
 
             liveRegion(data);
         })
@@ -101,38 +71,18 @@ const changeHandler = async (e) => {
 }
 
 /*
-**  BUTTON HANDLER. ALL BUTTONS ARE TOGGLE SWITCHES.
+**  BUTTON HANDLER
 */
 const clickHandler = (e) => {
-    if (!e.target.classList.contains("toggle")) return;
+    if (!e.target.id === "apply-svg") return;
 
-    const id = e.target.getAttribute("id");
+    const logo_svg = document.getElementById("logo-svg");
 
-    // if (!getComputedStyle(document.documentElement).getPropertyValue('--logo-font-' + id)) return;
-
-    let value;
-    const toggle = e.target;
-    if (toggle.getAttribute("aria-pressed") == "false") {
-        toggle.setAttribute("aria-pressed", "true");
-        value = "1";
-    } else {
-        toggle.setAttribute("aria-pressed", "false");
-        value = "0";
-    }
-    callAPI(endpoint,"PUT",{column_name:id,column_value:value})
-        .then((data) => {
-            if (id==="ital") {
-                const varStyle = (value==="0") ? "normal" : "italic";
-                document.documentElement.style.setProperty('--logo-font-style', varStyle);
-            } else {
-                document.documentElement.style.setProperty('--logo-font-' + id, value); 
-            }
-            liveRegion(data);
+    callAPI(endpoint,"PUT",{column_name:"logo-svg",column_value:logo_svg.value})
+        .then(() => {
+            logo.replaceChildren();
+            logo.insertAdjacentHTML('beforeend',logo_svg.value);
         })
-        .catch((error) => {
-            handleError(error);
-        });
-
 }
 
 /*
@@ -141,13 +91,7 @@ const clickHandler = (e) => {
 const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
     
-    if (e.target.classList.contains("slider")) {
-        document.documentElement.style.setProperty("--logo-font-" + id, e.target.value); 
-    }
-    else if (id === "logo-font-text") {
-        logo.textContent = e.target.value;
-    }
-    else if (id === "logo-img-corner-shape") {
+    if (id === "logo-img-corner-shape") {
         const seValue = `superellipse(${e.target.value})`;
         document.documentElement.style.setProperty('--logo-img-corner-shape', seValue); 
     }
