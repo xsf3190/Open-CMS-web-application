@@ -1,0 +1,95 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FAVICON" as
+  --
+  PROCEDURE getFaviconForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+  --
+  PROCEDURE updateFavicon(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+  --
+end;
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
+
+    /*
+    ** CREATE HTML FOR FAVICON FORM
+    */
+    PROCEDURE getFaviconForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        l_header:='<span>Add favicon to your site (emojis are a good choice)</span>';
+
+        FOR C IN (
+            SELECT w.favicon
+              FROM website w
+             WHERE w.id=pWebsiteId
+        ) LOOP
+            l_article:=
+            '<fieldset class="flow">' ||
+                '<legend>Paste Favicon code here</legend>' ||
+                '<div>' ||
+                    '<textarea id="logo-svg">' || 
+                        C.favicon ||
+                    '</textarea>' ||
+                '</div>' ||
+                '<div>' ||
+                    '<button type="button" class="button">Apply</button>' ||
+                '</div>';
+        END LOOP;
+
+        l_footer:=
+        '<div class="flex-items">' ||
+            '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' || 'PUBLISH' || '</button>' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>' ||
+        '</div>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+    /*
+    ** UPDATE WEBSITE FAVICON
+    */
+    PROCEDURE updateFavicon(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+        l_message VARCHAR2(100);
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        FOR C IN (
+            SELECT favicon
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS (favicon))
+        ) LOOP
+            UPDATE website
+               SET favicon=C.favicon,
+                   favicon_updated_date=current_timestamp
+             WHERE id=pWebsiteId;
+            l_message:='Favicon updated successfully';
+        END LOOP;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('message',l_message);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+end;
+/
