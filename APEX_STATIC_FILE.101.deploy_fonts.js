@@ -119,7 +119,7 @@ const changeHandler = (e) => {
     }
 
     if (e.target.getAttribute("name")==="context") {
-        dialog_article.querySelector(".separator").textContent = `Finesse ${context}`;
+        document.getElementById("separator2").textContent = `Finesse ${context}`;
     }
 
     callAPI(endpoint,"PUT",obj)
@@ -229,6 +229,14 @@ const inputHandler = (e) => {
             }
         })    
     }
+
+    if (id==="logo-font-text") {
+        document.querySelector(".logo").textContent = e.target.textContent;
+        callAPI(endpoint,"PUT",{context:getContext(), id:id, value:e.target.textContent})
+        .then((data) => {
+            liveRegion(data);
+        })    
+    }
     
     const context = getContext();
     
@@ -241,8 +249,5 @@ const inputHandler = (e) => {
             value=`oblique ${value}deg`;
         }
         document.documentElement.style.setProperty(`--${context}-font-${id}`, value);   
-    }
-    if (id === "logo-font-text") {
-        logo.textContent = e.target.value;
     }
 }
