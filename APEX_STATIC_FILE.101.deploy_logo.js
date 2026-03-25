@@ -1,11 +1,10 @@
 /*
 **  WEBSITE LOGO
 */
-import { dialog_article, dialog_footer, initDialog, footerHandler } from "deploy_elements";
+import { dialog_article, dialog_footer, initDialog, footerHandler, liveRegion } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
-let logo_type;
 
 const logo = document.querySelector(".logo");
 
@@ -22,12 +21,6 @@ const loadImg = (src) => {
         logo.appendChild(img);
     }
     img.src = src;
-}
-
-const liveRegion = (data) => {
-    const live=dialog_footer.querySelector("[aria-live]");
-    live.replaceChildren();
-    live.insertAdjacentHTML('beforeend',data.message);
 }
 
 /*
@@ -103,9 +96,8 @@ const inputHandler = (e) => {
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
-    logo_type = element.dataset.logo;
 
-    callAPI(endpoint,"GET", "?logo=" + logo_type)
+    callAPI(endpoint,"GET")
         .then((data) => {
             initDialog(data);
             dialog_footer.addEventListener("click", footerHandler);
