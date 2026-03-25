@@ -265,6 +265,7 @@ body>footer>a {
   font-family: var(--logo-font-family);
   font-size: var(--logo-font-size);
   font-weight: var(--logo-font-wght);
+  font-stretch: var(--logo-font-wdth);
   font-variation-settings: var(--logo-font-variation-settings);
   text-box: cap alphabetic;
     strong {
