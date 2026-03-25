@@ -157,14 +157,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         );
     END;
 
+    /*
+    ** USER LOGS OUT
+    */
     PROCEDURE logout(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
         l_dropdown LONG;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
-        
-        DELETE refresh_token WHERE website_id=pWebsiteId AND user_id=l_session_data.user_id;
         
         l_dropdown:=addMenuitem('authenticate/:ID', 'blue', '👤', 'Log In');
 
@@ -446,10 +447,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'blue', '✎', 'Edit Content');
         l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'pink', '✎', 'Upload Media');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
-        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '🌐', 'Fonts');
-        l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo from Image', 'data-logo="image"');
-        l_html:=l_html || addMenuitem('logo/:ID', '', '0️⃣', 'Logo from Text', 'data-logo="font"');
-        l_html:=l_html || addMenuitem('logo/:ID', '', '😣', 'Logo from SVG', 'data-logo="svg"');
+        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '⛲', 'Fonts');
+        l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo');
+        l_html:=l_html || addMenuitem('favicon/:ID', '', '🍀', 'Favicon');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Manage Pages');
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
         
