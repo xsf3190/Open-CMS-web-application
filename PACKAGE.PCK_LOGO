@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_LOGO" as
     
-    PROCEDURE getLogoForm(pWebsiteId IN website.id%type, pLogoType IN VARCHAR2, pStatus OUT NUMBER);
+    PROCEDURE getLogoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -59,19 +59,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         RETURN(l_html);
     END;
 
-    PROCEDURE buildImageLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
-        l_logo_type website.logo_type%type;
+    FUNCTION buildImageLogoForm(pWebsiteId IN NUMBER, pLogoImgInlineSize IN VARCHAR2) RETURN VARCHAR2 IS
         l_logo_img_id website.logo_img_id%type;
         l_logo_img_inline_size website.logo_img_inline_size%type;
+        l_form LONG;
     BEGIN
-        pHeader:='<span>Create Website Logo from an uploaded image</span>';
-
-        SELECT w.logo_type, w.logo_img_id, w.logo_img_inline_size
-          INTO l_logo_type, l_logo_img_id, l_logo_img_inline_size
-          FROM website w
-         WHERE w.id=pWebsiteid;
-
-        pArticle:=
+        l_form:=
         '<fieldset class="flow">' ||
             '<legend>Select and configure image logo</legend>' ||
             '<div>' ||
@@ -94,19 +87,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                      ORDER BY a.created_date DESC
                 )
                 LOOP
-                    pArticle:=pArticle || 
+                    l_form:=l_form || 
                         '<option value="' || TO_CHAR(C.id) || '">' || 
                             '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">' ||
                         '</option>';
                 END LOOP;
                 
 
-        pArticle:=pArticle || 
+        l_form:=l_form || 
                     '</div>' ||
                 '</select>' ||
             '</div>' ||
             '<div>' ||
-                getInlineSizes('img',l_logo_img_inline_size) ||
+                getInlineSizes('img',pLogoImgInlineSize) ||
             '</div>' ||
             '<div>' ||
                 '<label for="logo-img-corner-shape">Change border shape:</label>' ||
@@ -117,36 +110,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '<input type="range" id="logo-img-border-radius" min="0" value="45" max="90" step="1" />' ||
             '</div>' ||
         '</fieldset>';
+
+        RETURN(l_form);
     END;
 
-    PROCEDURE buildSvgLogoForm(pWebsiteId IN website.id%type, pHeader IN OUT VARCHAR2, pArticle IN OUT NOCOPY CLOB) IS
+    FUNCTION buildSvgLogoForm(pWebsiteId IN website.id%type, pLogoSvg IN VARCHAR2, pLogoSvgInlineSize IN VARCHAR2) RETURN VARCHAR2 IS
+        l_form LONG;
     BEGIN
-        pHeader:='<span>Create Website Logo from SVG code</span>';
+        l_form:=
+        '<fieldset class="flow">' ||
+            '<legend>Enter SVG code for Logo</legend>' ||
+            '<div>' ||
+                '<textarea id="logo-svg">' || 
+                    pLogoSvg ||
+                '</textarea>' ||
+            '</div>' ||
+            '<button type="button" class="button" id="apply-svg">Apply</button>' ||
+            '<div>' ||
+                getInlineSizes('svg',pLogoSvgInlineSize) ||
+            '</div>' ||
+        '</fieldset>';
 
-        FOR C IN (
-            SELECT w.logo_svg, w.logo_svg_inline_size
-              FROM website w
-             WHERE w.id=pWebsiteid
-        ) LOOP
-            pArticle:=
-            '<fieldset class="flow">' ||
-                '<legend>Include SVG code for Logo</legend>' ||
-                '<div>' ||
-                    '<textarea id="logo-svg">' || 
-                        C.logo_svg ||
-                    '</textarea>' ||
-                '</div>' ||
-                '<div>' ||
-                    getInlineSizes('svg',C.logo_svg_inline_size) ||
-                '</div>' ||
-            '</fieldset>';
-        END LOOP;
+        RETURN(l_form);
     END;
 
     /*
     ** CREATE HTML FOR PAGE OPTIONS FORM
     */
-    PROCEDURE getLogoForm(pWebsiteId IN website.id%type,  pLogoType IN VARCHAR2, pStatus OUT NUMBER) IS
+    PROCEDURE getLogoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
         l_article CLOB;
@@ -155,10 +146,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        CASE pLogoType
-            WHEN 'image' THEN buildImageLogoForm(pWebsiteId, l_header, l_article);
-            WHEN 'svg' THEN buildSvgLogoForm(pWebsiteId, l_header, l_article);
-        END CASE;
+        l_header:='<span>Note that Logo can be set to text from Fonts menu</span>';
+
+        FOR C IN (
+            SELECT w.logo_type, w.logo_img_id, w.logo_img_inline_size, w.logo_svg, w.logo_svg_inline_size
+              FROM website w
+             WHERE w.id=pWebsiteId
+        ) LOOP
+            l_article:=
+            '<div class="flex-items">' ||
+                '<fieldset class="flex-items">' ||
+                    '<legend>Type of Logo</legend>' ||
+                    '<span>' ||
+        		        '<input type="radio" name="logo_type" id="img"' || CASE WHEN C.logo_type='img' THEN ' checked' END || '>' ||
+        		        '<label for="img">Image Logo</label>' ||
+        			'</span>' ||
+                    '<span>' ||
+        		        '<input type="radio" name="logo_type" id="svg"' || CASE WHEN C.logo_type='svg' THEN ' checked' END || '>' ||
+        		        '<label for="svg">SVG Logo</label>' ||
+        			'</span>' ||
+                '</fieldset>' ||
+                '<div id="logoform">' ||
+                    CASE C.logo_type
+                        WHEN 'img' THEN 
+                            buildImageLogoForm(pWebsiteId, C.logo_img_inline_size)
+                        WHEN 'svg' THEN 
+                            buildSvgLogoForm(pWebsiteId, C.logo_svg, C.logo_svg_inline_size)
+                    END ||
+                '</div>';
+        END LOOP;
 
         l_footer:=
         '<div class="flex-items">' ||
@@ -187,38 +203,59 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_logo_type website.logo_type%type;
-        l_column_name user_tab_columns.column_name%type;
-        l_column_value VARCHAR2(4000);
         l_table_updated PLS_INTEGER;
+        l_logo_form LONG;
         l_json JSON_OBJECT_T;
         l_message VARCHAR2(100);
         n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT REPLACE(column_name,'-','_'), 
-                CASE column_name 
-                    WHEN 'logo-img-corner-shape' THEN 'superellipse(' || column_value || ')' 
-                    WHEN 'logo-img-border-radius' THEN column_value || 'px'
-                    ELSE column_value 
-                END
-          INTO l_column_name, l_column_value 
-          FROM JSON_TABLE(pBodyText, '$' COLUMNS (column_name, column_value));
-
-        IF (INSTR(l_column_name,'img')>0) THEN
-            l_logo_type:='img';
-        ELSIF (INSTR(l_column_name,'svg')>0) THEN
-            l_logo_type:='svg';
-        END IF;
-
-        SELECT COUNT(*) INTO n FROM user_tab_columns WHERE table_name='WEBSITE' AND column_name=UPPER(l_column_name);
-
-        IF (n=1) THEN
-            EXECUTE IMMEDIATE 'UPDATE website SET logo_updated_date=current_timestamp, logo_type=:B1,' || l_column_name || '=:B2 WHERE id=:B3' USING l_logo_type, l_column_value, pWebsiteId;
-        END IF;
-        l_message:=l_column_name || ' updated' || CASE WHEN l_column_name<>'logo_svg' THEN ' to ' || l_column_value END;
-
         l_json:= new JSON_OBJECT_T;
+
+        FOR C IN (
+            SELECT REPLACE(column_name,'-','_') AS name,
+                    CASE column_name 
+                        WHEN 'logo-img-corner-shape' THEN 'superellipse(' || column_value || ')' 
+                        WHEN 'logo-img-border-radius' THEN column_value || 'px'
+                        ELSE column_value 
+                    END AS value
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS (column_name, column_value))
+        ) LOOP
+            /* Get logo details if user wants to change logo type */
+            IF (C.name='logo_type') THEN
+                FOR C1 IN (
+                    SELECT w.logo_img_inline_size, w.logo_svg, w.logo_svg_inline_size
+                      FROM website w
+                     WHERE w.id=pWebsiteId
+                ) LOOP
+                    l_logo_form:=
+                    CASE C.value
+                        WHEN 'img' THEN 
+                                buildImageLogoForm(pWebsiteId, C1.logo_img_inline_size)
+                        WHEN 'svg' THEN 
+                                buildSvgLogoForm(pWebsiteId, C1.logo_svg, C1.logo_svg_inline_size)
+                    END;
+                    l_json.put('logoform',l_logo_form);
+                END LOOP;
+                CONTINUE;
+            END IF;
+           
+            /* Update logo details in website table */
+            IF (INSTR(C.name,'img')>0) THEN
+                l_logo_type:='img';
+            ELSIF (INSTR(C.name,'svg')>0) THEN
+                l_logo_type:='svg';
+            END IF;
+
+            SELECT COUNT(*) INTO n FROM user_tab_columns WHERE table_name='WEBSITE' AND column_name=UPPER(C.name);
+            IF (n=1) THEN
+                EXECUTE IMMEDIATE 'UPDATE website SET logo_updated_date=current_timestamp, logo_type=:B1,' || C.name || '=:B2 WHERE id=:B3' USING l_logo_type, C.value, pWebsiteId;
+            END IF;
+            l_message:=C.name || ' updated' || CASE WHEN C.name<>'logo_svg' THEN ' to ' ||  C.value END;
+
+        END LOOP;
+
         l_json.put('success',true);
         l_json.put('message',l_message);
         apex_util.prn(l_json.to_clob,false);
