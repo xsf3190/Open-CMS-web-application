@@ -466,6 +466,7 @@ small {
 }
 
 :where(h1,h2,h3,h4) {
+    line-height: 1.1;
     text-wrap: pretty;
     font-family: var(--headings-font-family);
     font-weight: var(--headings-font-wght);
