@@ -321,10 +321,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         UPDATE website SET favicon=l_value, favicon_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
                     IF (l_name='logo-inline-size') THEN
-                        UPDATE website SET logo_inline_size=l_value || 'cqi', css_updated_date=current_timestamp WHERE id=pWebsiteid;
+                        UPDATE website SET logo_inline_size=l_value || 'cqi', logo_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
                     IF (l_name='img-border-radius') THEN
-                        UPDATE website SET img_border_radius=l_value || 'px', css_updated_date=current_timestamp WHERE id=pWebsiteid;
+                        UPDATE website SET img_border_radius=l_value || 'px', logo_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
             END CASE;
         END LOOP;
