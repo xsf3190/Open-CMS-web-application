@@ -269,8 +269,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         /*
         ** CREATE WEBSITE IN CMS DATABASE. COPIES FONTS FROM pWebsiteid
         */
-        INSERT INTO website (id, domain_name, user_id, css, esm_library, contact_email, netlify_site_id, netlify_site_id_custom, netlify_last_published, netlify_last_published_custom)
-        SELECT l_new_website_id, l_domain_name, l_session_data.user_id, css, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom, current_timestamp, current_timestamp
+        INSERT INTO website (id, domain_name, user_id, esm_library, contact_email, netlify_site_id, netlify_site_id_custom, netlify_last_published, netlify_last_published_custom)
+        SELECT l_new_website_id, l_domain_name, l_session_data.user_id, esm_library, l_contact_email, l_netlify_site_id, l_netlify_site_id_custom, current_timestamp, current_timestamp
           FROM website
          WHERE id=pWebsiteid;
 
