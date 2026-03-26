@@ -439,18 +439,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         
     BEGIN
         l_html:=l_html || addMenuitem('userinfo/:ID', 'blue', '👤', pEmail);
-        l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Website Analytics');
+        l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Analytics');
         IF (pScope='visitor') THEN
             RETURN(l_html);
         END IF;
 
-        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'blue', '✎', 'Edit Content');
-        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'pink', '✎', 'Upload Media');
-        l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish Website');
+        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'red', '✎', 'Edit Content');
+        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'orange', '❀', 'Upload');
+        l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish');
         l_html:=l_html || addMenuitem('fonts/:ID', 'green', '⛲', 'Fonts');
         l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo');
         l_html:=l_html || addMenuitem('favicon/:ID', '', '🍀', 'Favicon');
-        l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Manage Pages');
+        l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Pages');
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
         
         FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
