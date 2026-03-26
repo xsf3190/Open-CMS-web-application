@@ -146,7 +146,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         
         FOR C IN (
             SELECT netlify_site_id
-              FROM website 
+              FROM website
              WHERE id=pWebsiteid
         ) LOOP
             pck_css.buildEditorTokens(pWebsiteid);
@@ -171,7 +171,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pck_fonts.getFontFiles(pWebsiteid);
         pck_css.buildLiveTokens(pWebsiteid);
 
-        -- Temporary table website_fontfiles populated by pck_fonts procedure
+        -- Temporary table website_fontfiles_temp populated by pck_fonts procedure
 
         FOR C IN (
             SELECT netlify_site_id, netlify_site_id_custom
@@ -242,7 +242,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         WITH data AS
         (
-            SELECT w.css_updated_date, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published, CAST(x.last_updated_on AS TIMESTAMP WITH TIME ZONE) css2_updated_date
+            SELECT w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published, CAST(x.last_updated_on AS TIMESTAMP WITH TIME ZONE) css2_updated_date
             FROM website w, website_article wa, article a, website_font wf, apex_application_static_files x
             WHERE w.id=pWebsiteid
             AND wa.website_id=w.id
@@ -254,7 +254,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         SELECT MAX(netlify_last_published),MAX(updated_date)
         INTO l_netlify_last_published, l_last_updated_date
         FROM data
-        UNPIVOT  (updated_date FOR COL IN (css_updated_date, nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date, css2_updated_date));
+        UNPIVOT  (updated_date FOR COL IN (nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date, css2_updated_date));
 
         RETURN (l_last_updated_date>l_netlify_last_published);
     END;
