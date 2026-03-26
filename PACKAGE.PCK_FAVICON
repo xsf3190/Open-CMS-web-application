@@ -20,7 +20,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        l_header:='<span>Add favicon to your site (emojis are a good choice)</span>';
+        l_header:='<span>Add favicon to your site</span>';
 
         FOR C IN (
             SELECT w.favicon
@@ -29,14 +29,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
         ) LOOP
             l_article:=
             '<fieldset class="flow">' ||
-                '<legend>Paste Favicon code here</legend>' ||
+                '<legend>Enter emoji or SVG code</legend>' ||
                 '<div>' ||
-                    '<textarea id="logo-svg">' || 
+                    '<textarea id="favicon">' || 
                         C.favicon ||
                     '</textarea>' ||
                 '</div>' ||
                 '<div>' ||
-                    '<button type="button" class="button">Apply</button>' ||
+                    '<button type="button" class="button" id="update">Update</button>' ||
                 '</div>';
         END LOOP;
 
@@ -62,10 +62,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
 
     /*
     ** UPDATE WEBSITE FAVICON
+    **
+    ** VALID VALUES:
+    ** 1) EMOJI
+    ** 2) UP TO 2 LETTERS 
+    ** 3) SVG CODE
     */
     PROCEDURE updateFavicon(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
+        l_svg LONG:='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">#FAVICON#</text></svg>';
+        l_href LONG;
         l_message VARCHAR2(100);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -74,16 +81,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
             SELECT favicon
               FROM JSON_TABLE(pBodyText, '$' COLUMNS (favicon))
         ) LOOP
+            IF (C.favicon IS NULL) THEN
+                l_message:='Enter value for favicon';
+                CONTINUE;
+            END IF;
+            
             UPDATE website
                SET favicon=C.favicon,
                    favicon_updated_date=current_timestamp
              WHERE id=pWebsiteId;
+
             l_message:='Favicon updated successfully';
+            IF (C.favicon LIKE '<svg%') THEN
+                l_href:='data:image/svg+xml,' || utl_url.escape(C.favicon,TRUE,'UTF-8');
+            ELSE
+                l_svg:=REPLACE(l_svg,'#FAVICON#',C.favicon);
+                l_href:='data:image/svg+xml,' || utl_url.escape(l_svg,TRUE,'UTF-8');
+                IF (LENGTH(C.favicon)>1) THEN
+                    l_message:=l_message || ' - but may be clipped';
+                END IF;
+            END IF;
         END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('message',l_message);
+        l_json.put('href',l_href);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
