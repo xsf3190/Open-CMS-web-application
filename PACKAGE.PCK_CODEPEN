@@ -14,7 +14,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
     PROCEDURE getCodepen(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_domain_name website.domain_name%type;
         l_html CLOB;
-        l_css website.css%type;
+        l_css CLOB;
         l_javascript CLOB;
         l_logo LONG;
         l_nav VARCHAR2(4000);
@@ -125,7 +125,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
     END;
 
     /*
-     **  Update website HTML / CSS from the contents of an exported Codepen zip file
+     **  ?? Update website HTML / CSS from the contents of an exported Codepen zip file
      */        
     PROCEDURE uploadCodepen(pId IN VARCHAR2, pZipFile IN BLOB) IS
         l_website_id website.id%type;
@@ -183,7 +183,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             RETURN;
         END IF;
 
-        FOR C IN (SELECT css FROM website WHERE id=l_website_id) LOOP
+        -- FOR C IN (SELECT css FROM website WHERE id=l_website_id) LOOP
             
             SELECT apex_util.blob_to_clob(file_content)
               INTO l_deploy_css
@@ -206,7 +206,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 apex_string.push(l_updated_files,l_css);
             END IF;
 
-        END LOOP;
+        -- END LOOP;
 
         apex_json.open_object;
         apex_json.write('success', TRUE);
