@@ -237,7 +237,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 'CASE ' || 
                     q'{WHEN fav.axis='slnt' AND fav.value>0 THEN fav.value*-1 }' ||
                     q'{WHEN fav.axis='slnt' AND fav.value IS NULL THEN 1 }' ||
-                'ELSE fav.value ' ||
+                    'ELSE fav.value ' ||
                 'END AS value ' ||
               'FROM website_font wf, font f, font_axes_value fav ' ||
              'WHERE wf.website_id=:b1 ' ||
@@ -251,13 +251,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             'COUNT(*),' ||
             q'{LISTAGG(axis||':'||value,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS axes }' ||
         'FROM data ' ||
-        'GROUP BY font_id,family';
+        'GROUP BY font_id, family';
         
-        -- pck_core.log(l_sql);
+        pck_core.log(l_sql);
 
         EXECUTE IMMEDIATE l_sql 
             INTO l_font_id, l_family, l_nb_axes, l_axes
             USING pWebsiteid, pContext;
+        
         
         l_axes:=l_axes||',';
 
@@ -269,6 +270,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END LOOP;
         l_axes2:=RTRIM(l_axes2,',');
         l_tuple:=LTRIM(REPLACE(l_tuple,':',','),',');
+
+        /* Bizarre anomaly of Molle - only has italic static axis !!*/
+        FOR C IN (
+            SELECT wght_normal, wght_italic FROM font_static_wght WHERE font_id=l_font_id AND wght_normal IS NULL AND wght_italic IS NOT NULL
+        ) LOOP
+            l_axes2:='ital,' || l_axes2;
+            l_tuple:='1,' || l_tuple;
+        END LOOP;
 
         l_api_url:=
             'https://fonts.googleapis.com/css2?family=' || 
@@ -524,9 +533,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_html_bi VARCHAR2(500);
     BEGIN
         FOR C IN (
-            SELECT wf.context, f.family, f.bold, f.italic
-              FROM website_font wf, font f 
-             WHERE wf.website_id=pWebsiteid
+            SELECT wf.context, f.family, f.bold, f.italic, NVL(w.logo_font_text,'Logo') logo_font_text
+              FROM website_font wf, font f, website w
+             WHERE w.id=pWebsiteid
+               AND wf.website_id=w.id
                AND wf.font_id=f.id
              ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
         ) LOOP
@@ -534,7 +544,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 WHEN 'logo' THEN
                     l_html:=l_html ||
                     '<div class="topnav flex-items space-between">' ||
-                        '<span class="logo" contenteditable>Logo</span>' || 
+                        '<span class="logo" id="logo-font-text" contenteditable>' || C.logo_font_text || '</span>' || 
                         '<nav>' || pck_deploy.buildNav(pWebsiteId) || '</nav>' || 
                     '</div>';
 
@@ -568,6 +578,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         l_html_bi ||
                         ' characters.</p>';
                     END IF;
+                    l_html:=l_html ||
+                    '<p>Nb. To change Logo text just click on it and type</p>';
             END CASE;
         END LOOP;
         RETURN (l_html);
@@ -770,7 +782,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         '</button>' || 
                     '</select>' ||
                 '</div>' ||
-                '<span class="separator" style="inline-size:5rem"><strong>OR</strong></span>' ||
+                '<span class="separator" id="separator1" style="inline-size:10rem"><strong>OR</strong></span>' ||
                 '<div>' ||
                     '<label for="family2">Enter font name</label>' ||
                     '<input type="text" autocomplete="off" id="family2" value="" list="family2list">' ||
@@ -778,7 +790,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     '</datalist>' ||
                 '</div>' ||
             '</div>' ||
-            '<div class="separator">Configure ' || C.context || '</div>' ||
+            '<div class="separator" id="separator2">Configure ' || C.context || '</div>' ||
             '<div class="flex-items">' ||
                 '<div id="variations" class="flow" style="align-self:flex-start;flex-basis:min-content;flex-grow:1">' ||
                     NVL(getFontVariations(pWebsiteid, C.font_id, C.context),
@@ -1221,6 +1233,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         pStatus:=200;
                         RETURN;
                     END IF;
+                WHEN 'logo-font-text' THEN
+                    UPDATE website 
+                       SET logo_type='font', 
+                           logo_font_text=C.value,
+                           logo_updated_date=current_timestamp
+                     WHERE id=pWebsiteid;
+                    l_message:='Changed logo text';
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
                     updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
