@@ -51,10 +51,6 @@ const changeHandler = async (e) => {
                 logo.replaceChildren();
                 logo.insertAdjacentHTML('beforeend',value);
             }
-            else if (id.endsWith("size")) {
-                const sizeValue = (id.includes("font")) ? "--step-" + value : value;
-                document.documentElement.style.setProperty("--" + id, "var(" + sizeValue + ")"); 
-            }
 
             liveRegion(data);
         })
@@ -91,6 +87,10 @@ const inputHandler = (e) => {
     else if (id === "logo-img-border-radius") {
         const brValue = `${e.target.value}px`;
         document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
+    }
+    else if (id === "logo-img-inline-size") {
+        const cqiValue = `${e.target.value}cqi`;
+        document.documentElement.style.setProperty('--logo-img-inline-size', cqiValue); 
     }
 }
 
