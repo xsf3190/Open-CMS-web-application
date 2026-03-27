@@ -706,9 +706,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
             l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
             l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
-            
-            -- l_clob:=C.header_html || C.body_html || C.footer_html || '<p>' || C.excerpt || '</p>';
-            -- pck_fonts.getCharsUsed(pArticleId, l_clob);
 
             IF (C.parent_id IS NOT NULL) THEN
                 n:=0;
