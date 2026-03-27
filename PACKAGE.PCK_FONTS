@@ -253,7 +253,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         'FROM data ' ||
         'GROUP BY font_id, family';
         
-        pck_core.log(l_sql);
+        -- pck_core.log(pContext);
+        -- pck_core.log(pStyles);
+        -- pck_core.log(l_sql);
+
 
         EXECUTE IMMEDIATE l_sql 
             INTO l_font_id, l_family, l_nb_axes, l_axes
