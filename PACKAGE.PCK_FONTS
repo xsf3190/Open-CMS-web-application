@@ -9,7 +9,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
    PROCEDURE getFontDatalist(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus IN OUT NUMBER);
     --
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pArticleid IN article.id%type DEFAULT null);
     --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pStatus IN OUT NUMBER);
     --
@@ -191,7 +191,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
      *  DOWNLOAD OPTIMIZED @font-face RULES FROM GOOGLE
     */
-    PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2, pFontface OUT VARCHAR2) IS
+    PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2, pArticleid IN NUMBER DEFAULT null) IS
         l_api_url VARCHAR2(500);
         l_api_axes VARCHAR2(100);
         l_api_values VARCHAR2(100);
@@ -291,6 +291,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
 
+        /* E.g. called fir Codepen */
+        IF (pArticleid IS NOT NULL) THEN
+            INSERT INTO website_fontfiles_temp(fontface) 
+            VALUES (l_fontface);
+            RETURN;
+        END IF;
+
         l_url:=REGEXP_SUBSTR(l_fontface,'url\((.+?)\)',1,1,null,1);
 
         l_blob:=apex_web_service.make_rest_request_b(p_url=>l_url, p_http_method=>'GET');
@@ -298,14 +305,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_blob, typ => dbms_crypto.hash_sh1));
         l_url_new:='/fonts/' || pContext || '.' || pStyles || '.woff2';
-
-        pFontface:=
-            chr(10) || 
-            '/* ' || chr(10) || 
-            -- C.family || ' used for ' || pContext || ' - ' || LENGTH(pText) || ' ' || pStyles || ' characters - ' || apex_string_util.to_display_filesize(l_blob_size) || chr(10) || 
-            l_api_url || chr(10) ||
-            '*/' || chr(10) ||
-            l_fontface;
 
         SELECT COUNT(*) INTO n1 FROM dual 
          WHERE EXISTS (
@@ -322,7 +321,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     **  BUILD OPTIMIZED FONT FILES FOR EACH FONT USED IN A LIVE WEBSITE
     **  NB. EDITOR SITES USE FULL LANGUAGE FONTS DIRECTLY FROM GOOGLE
     */
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type) IS
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pArticleid IN article.id%type DEFAULT null) IS
         TYPE tt_chars_used IS RECORD (
             normal article_chars.chars_normal%type,
             italic article_chars.chars_italic%type,
@@ -355,6 +354,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
              WHERE wa.website_id=pWebsiteId
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND a.body_html IS NOT NULL
+               AND a.id=NVL(pArticleid,a.id)
         ) LOOP
             l_pages:=l_pages+1;
             l_html_size:=l_html_size + dbms_lob.getlength(C.content);
@@ -368,6 +368,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
              WHERE wa.website_id=pWebsiteId
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND ac.article_id=a.id
+               AND a.id=NVL(pArticleid,a.id)
         ) LOOP
             l_chars_used(C.context).bold_italic:=distinct_chars(l_chars_used(C.context).bold_italic || C.chars_bold_italic);
             l_chars_used(C.context).bold_normal:=distinct_chars(l_chars_used(C.context).bold_normal || C.chars_bold_normal);
@@ -385,33 +386,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_context:=l_chars_used.FIRST;
         WHILE l_context IS NOT NULL LOOP
             IF (l_chars_used(l_context).normal IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).normal, 'normal', l_fontface);
-                l_fontfaces:=l_fontfaces || l_fontface;
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).normal, 'normal', pArticleid);
             END IF;
 
             IF (l_chars_used(l_context).italic IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).italic, 'italic', l_fontface);
-                l_fontfaces:=l_fontfaces || l_fontface;
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).italic, 'italic', pArticleid);
             END IF;
 
             IF (l_chars_used(l_context).bold_normal IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_normal, 'bold', l_fontface);
-                l_fontfaces:=l_fontfaces || l_fontface;
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_normal, 'bold', pArticleid);
             END IF;
             
             IF (l_chars_used(l_context).bold_italic IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_italic, 'bold.italic', l_fontface);
-                l_fontfaces:=l_fontfaces || l_fontface;
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_italic, 'bold.italic', pArticleid);
             END IF;
             
             l_context:=l_chars_used.NEXT(l_context);
         END LOOP;
-
-        l_elapsed:=(dbms_utility.get_cpu_time() - l_cpu_used_start)/100;
-
-        l_fontfaces:='/* Scanned ' || l_pages || ' pages in ' || TO_CHAR(l_elapsed)|| ' seconds (' || apex_string_util.to_display_filesize(l_html_size) || ' html) */' || chr(10) || chr(10) || l_fontfaces;
-        
-        -- dbms_output.put_line(l_fontfaces);
     END;
 
     /*
