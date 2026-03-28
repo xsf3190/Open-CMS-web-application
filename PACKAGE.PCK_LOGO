@@ -93,13 +93,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                         '</option>';
                 END LOOP;
                 
+        -- pLogoImgInlineSize is expressed in cqi units
+        -- need to remove those for the range input and provide min / max values
 
         l_form:=l_form || 
                     '</div>' ||
                 '</select>' ||
             '</div>' ||
             '<div>' ||
-                getInlineSizes('img',pLogoImgInlineSize) ||
+                -- getInlineSizes('img',pLogoImgInlineSize) ||
+                '<label for="logo-img-inline-size">Size</label>' ||
+                '<input type="range" id="logo-img-inline-size" class="slider" min="5" value="' || SUBSTR(pLogoImgInlineSize,INSTR(pLogoImgInlineSize,'cqi')-1) || '" max="25" step="1" />' ||
             '</div>' ||
             '<div>' ||
                 '<label for="logo-img-corner-shape">Change border shape:</label>' ||
