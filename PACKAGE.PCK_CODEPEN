@@ -28,7 +28,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         FOR C IN (
-            SELECT w.domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo_type, wa.collection_type
+            SELECT w.domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo_type, wa.collection_type,
+                    w.logo_font_text, w.logo_svg
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -39,11 +40,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
 
             CASE C.logo_type
                 WHEN 'svg' THEN
-                    l_logo:='<span class="logo"><img src="https://' || l_session_data.url || '/images/logo.svg" alt="Image of website logo"></span>';
+                    l_logo:='<span class="logo">' || C.logo_svg || '</span>';
                 WHEN 'img' THEN
                     l_logo:='<span class="logo"><img src="https://' || l_session_data.url || '/images/logo.avif" alt="Image of website logo"></span>';
                 WHEN 'font' THEN
-                    l_logo:='<span class="logo">Logo</span>';
+                    l_logo:='<span class="logo">' || C.logo_font_text || '</span>';
                 ELSE
                     l_logo:='<span class="logo"></span>';
             END CASE;
@@ -51,7 +52,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             l_dropdown:=pck_deploy.buildDropdown(pWebsiteId);
             l_nav:=pck_deploy.buildNav(pWebsiteId);
             l_color_scheme:=pck_deploy.buildColorScheme;
-            
             
             IF (l_nav IS NOT NULL) THEN
                 n:=INSTR(l_nav,pArticleid);
@@ -76,7 +76,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 pck_deploy.buildLoginForm || pck_deploy.buildContentDialog ||
             '</body>';
 
-            pck_css.buildEditorTokens(pWebsiteid, pReduced=>TRUE);
+            pck_fonts.getFontFiles(pWebsiteid, pArticleid);
+            pck_css.buildLiveTokens(pWebsiteid);
 
             FOR C1 IN (
                 SELECT ordr, content FROM 
