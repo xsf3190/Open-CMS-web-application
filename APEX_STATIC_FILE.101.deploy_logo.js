@@ -88,9 +88,9 @@ const inputHandler = (e) => {
         const brValue = `${e.target.value}px`;
         document.documentElement.style.setProperty('--logo-img-border-radius', brValue); 
     }
-    else if (id === "logo-img-inline-size") {
-        const cqiValue = `${e.target.value}cqi`;
-        document.documentElement.style.setProperty('--logo-img-inline-size', cqiValue); 
+    else if (id === "logo-img-block-size") {
+        const vhValue = `${e.target.value}vh`;
+        document.documentElement.style.setProperty('--logo-img-block-size', vhValue); 
     }
 }
 
