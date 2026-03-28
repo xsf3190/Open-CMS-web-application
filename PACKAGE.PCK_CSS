@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pReduced IN BOOLEAN DEFAULT FALSE);
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type);
     --
     PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type);
     --
@@ -247,7 +247,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     /* 
     ** BUILD FONT-FACE RULES AND DESIGN TOKENS FOR EDITOR SITE
     */
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pReduced IN BOOLEAN DEFAULT FALSE) IS
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type) IS
         l_font_variation_settings VARCHAR2(4000);
         l_css CLOB;
         l_sha1 website_cssfiles_temp.sha1%type;
@@ -328,18 +328,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ) LOOP
             l_css:=l_css || C.editor_fontfaces;
         END LOOP;
-
-        -- Font faces for Google fonts
-        IF (NOT pReduced) THEN
-            FOR C IN (
-                SELECT id, family, menu
-                  FROM font
-                 ORDER BY id
-            ) LOOP
-                dbms_lob.append(l_css, '@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
-            END LOOP;
-        END IF;
-
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
 
