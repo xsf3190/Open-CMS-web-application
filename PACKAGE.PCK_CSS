@@ -265,18 +265,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         -- USERS CHOOSE FROM 3 DIFFERENT LOGO OPTIONS - IMAGE, SVG AND FONT
         FOR C IN (
             SELECT w.logo_type,
-                    w.logo_img_inline_size, w.logo_img_border_radius, w.logo_img_corner_shape,
-                    w.logo_svg_inline_size,
+                    w.logo_img_block_size, w.logo_img_border_radius, w.logo_img_corner_shape,
                     w.logo_font_size
               FROM website w
              WHERE w.id=pWebsiteId
             )
         LOOP
             l_css:=l_css || 
-            '--logo-img-inline-size: ' || 'var(' || C.logo_img_inline_size || ');' ||
+            '--logo-img-block-size: ' || C.logo_img_block_size || 'vh;' ||
             '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
             '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
-            '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');' ||
             '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
         END LOOP;
 
@@ -355,8 +353,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         -- CONFIGURE ANY SELECTED LOGO OPTION
         FOR C IN (
             SELECT w.logo_type,
-                    w.logo_img_inline_size, w.logo_img_border_radius, w.logo_img_corner_shape,
-                    w.logo_svg_inline_size,
+                    w.logo_img_block_size, w.logo_img_border_radius, w.logo_img_corner_shape,
                     w.logo_font_size
               FROM website w
              WHERE w.id=pWebsiteId
@@ -366,12 +363,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             CASE C.logo_type
                 WHEN 'img' THEN
                     l_root_css:=l_root_css || 
-                    '--logo-img-inline-size: ' || 'var(' || C.logo_img_inline_size || ');' ||
+                    '--logo-img-block-size: ' || C.logo_img_block_size || 'vh;' ||
                     '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
                     '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';';
                 WHEN 'svg' THEN
                     l_root_css:=l_root_css || 
-                    '--logo-svg-inline-size: ' || 'var(' || C.logo_svg_inline_size || ');';
+                    '--logo-img-block-size: ' || C.logo_img_block_size || 'vh;';
                 WHEN 'font' THEN
                     l_root_css:=l_root_css || 
                     '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
