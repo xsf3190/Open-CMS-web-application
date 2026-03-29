@@ -59,9 +59,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         RETURN(l_html);
     END;
 
-    FUNCTION buildImageLogoForm(pWebsiteId IN NUMBER, pLogoImgInlineSize IN VARCHAR2) RETURN VARCHAR2 IS
+    FUNCTION buildImageLogoForm(pWebsiteId IN NUMBER, pLogoImgBlockSize IN VARCHAR2) RETURN VARCHAR2 IS
         l_logo_img_id website.logo_img_id%type;
-        l_logo_img_inline_size website.logo_img_inline_size%type;
+        l_logo_img_block_size website.logo_img_block_size%type;
         l_form LONG;
     BEGIN
         l_form:=
@@ -101,9 +101,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '</select>' ||
             '</div>' ||
             '<div>' ||
-                -- getInlineSizes('img',pLogoImgInlineSize) ||
                 '<label for="logo-img-inline-size">Size</label>' ||
-                '<input type="range" id="logo-img-inline-size" class="slider" min="5" value="' || SUBSTR(pLogoImgInlineSize,INSTR(pLogoImgInlineSize,'cqi')-1) || '" max="25" step="1" />' ||
+                '<input type="range" id="logo-img-block-size" class="slider" min="5" value="' || SUBSTR(pLogoImgBlockSize,INSTR(pLogoImgBlockSize,'vh')-1) || '" max="15" step="1" />' ||
             '</div>' ||
             '<div>' ||
                 '<label for="logo-img-corner-shape">Change border shape:</label>' ||
@@ -118,7 +117,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         RETURN(l_form);
     END;
 
-    FUNCTION buildSvgLogoForm(pWebsiteId IN website.id%type, pLogoSvg IN VARCHAR2, pLogoSvgInlineSize IN VARCHAR2) RETURN VARCHAR2 IS
+    FUNCTION buildSvgLogoForm(pWebsiteId IN website.id%type, pLogoSvg IN VARCHAR2, pLogoImgBlockSize IN VARCHAR2) RETURN VARCHAR2 IS
         l_form LONG;
     BEGIN
         l_form:=
@@ -131,7 +130,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             '</div>' ||
             '<button type="button" class="button" id="apply-svg">Apply</button>' ||
             '<div>' ||
-                getInlineSizes('svg',pLogoSvgInlineSize) ||
+                '<label for="logo-img-inline-size">Size</label>' ||
+                '<input type="range" id="logo-img-block-size" class="slider" min="5" value="' || SUBSTR(pLogoImgBlockSize,INSTR(pLogoImgBlockSize,'vh')-1) || '" max="15" step="1" />' ||
             '</div>' ||
         '</fieldset>';
 
@@ -153,7 +153,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_header:='<span>Note that Logo can be set to text from Fonts menu</span>';
 
         FOR C IN (
-            SELECT w.logo_type, w.logo_img_id, w.logo_img_inline_size, w.logo_svg, w.logo_svg_inline_size
+            SELECT w.logo_type, w.logo_img_id, w.logo_img_block_size, w.logo_svg
               FROM website w
              WHERE w.id=pWebsiteId
         ) LOOP
@@ -173,9 +173,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '<div id="logoform">' ||
                     CASE C.logo_type
                         WHEN 'img' THEN 
-                            buildImageLogoForm(pWebsiteId, C.logo_img_inline_size)
+                            buildImageLogoForm(pWebsiteId, C.logo_img_block_size)
                         WHEN 'svg' THEN 
-                            buildSvgLogoForm(pWebsiteId, C.logo_svg, C.logo_svg_inline_size)
+                            buildSvgLogoForm(pWebsiteId, C.logo_svg, C.logo_img_block_size)
                     END ||
                 '</div>';
         END LOOP;
@@ -229,14 +229,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
             /* Get logo details if user wants to change logo type */
             IF (C.name='logo_type') THEN
                 FOR C1 IN (
-                    SELECT w.logo_img_inline_size, w.logo_svg, w.logo_svg_inline_size
+                    SELECT w.logo_img_block_size, w.logo_svg, w.logo_svg_inline_size
                       FROM website w
                      WHERE w.id=pWebsiteId
                 ) LOOP
                     l_logo_form:=
                     CASE C.value
                         WHEN 'img' THEN 
-                                buildImageLogoForm(pWebsiteId, C1.logo_img_inline_size)
+                                buildImageLogoForm(pWebsiteId, C1.logo_img_block_size)
                         WHEN 'svg' THEN 
                                 buildSvgLogoForm(pWebsiteId, C1.logo_svg, C1.logo_svg_inline_size)
                     END;
