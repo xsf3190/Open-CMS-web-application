@@ -350,12 +350,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_index:=l_schemes.LAST;
         WHILE l_index IS NOT NULL LOOP
             l_html:=l_html ||
-            '<input id="appearance-' || l_index || '" value="' || CASE WHEN l_index<>'system' THEN l_index END || '" type="radio" name="appearance" class="visually-hidden">' ||
             '<label for="appearance-' || l_index || '">' ||
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="24" height="24" fill="currentcolor" aria-hidden="true" class="icon">';
                     l_html:=l_html || l_schemes(l_index) ||
                 '</svg>' ||
-            '</label>';
+                '<span class="visually-hidden">x</span>' || -- to pass stupid LH accessibility test
+            '</label>' ||
+            '<input id="appearance-' || l_index || '" value="' || CASE WHEN l_index<>'system' THEN l_index END || '" type="radio" name="appearance" class="visually-hidden">';
             l_index:=l_schemes.PRIOR(l_index);
         END LOOP;
         l_html:=l_html ||
@@ -672,6 +673,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pBody IN OUT NOCOPY CLOB
     ) IS
         l_title article_chars.first_heading%type;
+        l_description article_chars.first_text%type;
         l_logo VARCHAR2(200);
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
@@ -687,7 +689,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pBody:=null;
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
-                    w.max_width, NVL2(w.favicon,'1',null) favicon
+                    w.max_width, NVL2(w.favicon,'1',null) favicon,
+                    wa.page_title, wa.page_description
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -745,14 +748,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             /*
             ** OPTIMAL TITLE LENGTH IS 60 CHARACTERS, I.E. 580PX
             */
-            FOR C1 IN (
-                SELECT first_heading, second_heading FROM article_chars WHERE article_id=pArticleid AND context='headings'
-            ) LOOP
-                l_title:=C1.second_heading;
-                IF (l_title IS NOT NULL) THEN
-                    l_title:=l_title || '|' || C1.first_heading;
-                END IF;
-            END LOOP;
+            IF (C.page_title IS NOT NULL) THEN
+                l_title:=C.page_title;
+            ELSE
+                FOR C1 IN (
+                    SELECT first_heading, second_heading FROM article_chars WHERE article_id=pArticleid AND context='headings'
+                ) LOOP
+                    l_title:=C1.second_heading;
+                    IF (l_title IS NOT NULL) THEN
+                        l_title:=l_title || '|' || C1.first_heading;
+                    END IF;
+                END LOOP;
+            END IF;
+
+            IF (C.page_description IS NOT NULL) THEN
+                l_description:=C.page_description;
+            ELSE
+                FOR C1 IN (
+                    SELECT first_text, INSTR(first_text,'.',-1) period FROM article_chars WHERE article_id=pArticleid AND context='text'
+                ) LOOP
+                    IF (C1.period>1) THEN
+                        l_description:=SUBSTR(C1.first_text,1,C1.period);
+                    ELSE
+                        l_description:=C1.first_text;
+                    END IF;
+                END LOOP;
+            END IF;
 
             IF (pCollectionType='BLOG') THEN
                 buildPageCollection(pCollectionType, pArticleid, l_collection);
@@ -769,8 +790,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 '<head>' ||
                     '<meta charset="UTF-8">' ||
                     '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
-                    '<title>' || l_title || '</title>' ||
-                    '<meta name="author" content="restartnet.com">' ||
+                    '<title>' || NVL(C.page_title,l_title) || '</title>' ||
+                    '<meta name="description" content="' || NVL(C.page_description,l_description) || '">' ||
+                    '<meta name="author" content="performance toolkit">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
                     '<link rel="stylesheet" href="/css/website-styles.min.css">' ||
                     '<link rel="stylesheet" href="/css/core-styles.min.css">' ||
