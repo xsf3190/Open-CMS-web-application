@@ -21,9 +21,15 @@ const clickHandler = (e) => {
             if (data.href) {
                 favicon.setAttribute("href", data.href); 
             }
-        
             liveRegion(data);
         })
+}
+
+/*
+**  CHANGE HANDLER - CALL CLICK INSTEAD
+*/
+const changeHandler = () => {
+    document.getElementById("update").trigger("click");
 }
 
 
@@ -35,6 +41,7 @@ export const init = (element) => {
             initDialog(data);
             dialog_footer.addEventListener("click", footerHandler);
             dialog_article.addEventListener("click", clickHandler);
+            dialog_article.addEventListener("change", changeHandler);
         })
         .catch((error) => {
             handleError(error);
