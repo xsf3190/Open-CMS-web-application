@@ -176,16 +176,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_chars_bold_normal:=l_chars_bold_normal || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_text,l_bold_regex,1,i)));
         END LOOP;
         l_text:=REGEXP_REPLACE(l_text,l_bold_regex,null,1,0);
+        l_text:=utl_i18n.unescape_reference(apex_escape.striphtml(l_text));
         /*
         ** THE REST IS NORMAL !
         */
-        l_chars_normal:=distinct_chars(utl_i18n.unescape_reference(apex_escape.striphtml(l_text)));
+        l_chars_normal:=distinct_chars(l_text);
         l_chars_bold_normal:=distinct_chars(l_chars_bold_normal);
         l_chars_italic:=distinct_chars(l_chars_italic);
         l_chars_bold_italic:=distinct_chars(l_chars_bold_italic);
 
-        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
-        VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal);   
+        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal, first_text)
+        VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal, SUBSTR(l_text,1,200));   
     END;
 
     /*
