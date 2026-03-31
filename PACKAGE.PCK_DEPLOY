@@ -481,30 +481,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
-    ** GET WEBSITE FAVICON. DEFAULTS TO FIRST 2 LETTERS OF DOMAIN
-    ** RETURN FAVICON AS ESCAPED SVG CODE IN XML FORMAT
-    */
-    FUNCTION buildFavicon(pWebsiteId IN website.id%type) RETURN website.favicon%type IS
-        l_favicon_template website.favicon%type:=
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="1em" fill="darkgreen" font-family="system-ui" font-size="90">#FAVICON#</text></svg>';
-        l_favicon website.favicon%type;
-    BEGIN
-        FOR C IN (
-            SELECT NVL(favicon, UPPER(SUBSTR(domain_name,1,2))) favicon FROM website WHERE id=pWebsiteid
-        ) LOOP
-            IF (INSTR(C.favicon,'svg')=0) THEN
-                l_favicon:=REPLACE(l_favicon_template,'#FAVICON#', C.favicon);
-            ELSE
-                l_favicon:=C.favicon;
-            END IF;
-        END LOOP;
-        
-        l_favicon:='data:image/svg+xml,' || REPLACE(REPLACE(l_favicon,'"','%22'),'#','%23');
-
-        RETURN (l_favicon);
-    END;
-
-    /*
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT THE FIRST WHICH WE ASSUME WILL BE IN VIEWPORT
     */
     PROCEDURE setImgSrcset(pArticleid IN article.id%type, pMaxWidth IN website.max_width%type, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
@@ -689,8 +665,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pBody:=null;
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
-                    w.max_width, NVL2(w.favicon,'1',null) favicon,
-                    wa.page_title, wa.page_description
+                    w.max_width, 
+                    wa.page_title, wa.page_description, w.domain_name
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -754,9 +730,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 FOR C1 IN (
                     SELECT first_heading, second_heading FROM article_chars WHERE article_id=pArticleid AND context='headings'
                 ) LOOP
-                    l_title:=C1.second_heading;
-                    IF (l_title IS NOT NULL) THEN
-                        l_title:=l_title || '|' || C1.first_heading;
+                    IF (C1.second_heading IS NOT NULL) THEN
+                        l_title:=C1.second_heading || '|' || C1.first_heading;
+                    ELSIF (C1.first_heading IS NOT NULL) THEN
+                        l_title:=C1.first_heading || '|' || C.domain_name;
+                    ELSE
+                        l_title:=C.domain_name;
                     END IF;
                 END LOOP;
             END IF;
@@ -764,15 +743,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (C.page_description IS NOT NULL) THEN
                 l_description:=C.page_description;
             ELSE
-                FOR C1 IN (
-                    SELECT first_text, INSTR(first_text,'.',-1) period FROM article_chars WHERE article_id=pArticleid AND context='text'
-                ) LOOP
-                    IF (C1.period>1) THEN
-                        l_description:=SUBSTR(C1.first_text,1,C1.period);
-                    ELSE
-                        l_description:=C1.first_text;
-                    END IF;
-                END LOOP;
+                SELECT first_text INTO l_description FROM article_chars WHERE article_id=pArticleid AND context='text';
             END IF;
 
             IF (pCollectionType='BLOG') THEN
@@ -791,7 +762,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<meta charset="UTF-8">' ||
                     '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
                     '<title>' || NVL(C.page_title,l_title) || '</title>' ||
-                    '<meta name="description" content="' || NVL(C.page_description,l_description) || '">' ||
+                    '<meta name="description" content="' || l_description || '">' ||
                     '<meta name="author" content="performance toolkit">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
                     '<link rel="stylesheet" href="/css/website-styles.min.css">' ||
@@ -997,11 +968,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH source AS
             (
-                SELECT '/images/favicon.svg' AS deploy_filename, favicon AS file_content, favicon_updated_date AS updated_date
+                SELECT '/images/favicon.svg' AS deploy_filename, favicon, favicon_updated_date AS updated_date
                   FROM website
                  WHERE id=pWebsiteid
             )
-            SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
+            SELECT s.deploy_filename, s.favicon, s.updated_date, wf.sha1,
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
@@ -1013,10 +984,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_files.put(C.deploy_filename, C.sha1);
                 CONTINUE;
             END IF;
-
-            IF (C.file_content IS NOT NULL) THEN
-                addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
+            
+            IF (C.favicon LIKE '<svg%') THEN
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.favicon);
+            ELSIF (ASCII(C.favicon)<=122 AND LENGTH(C.favicon)<=2) THEN
+                l_clob:=REPLACE(pck_favicon.SVG_LETTERS,'#FAVICON#',C.favicon);
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_clob);
+            ELSIF (LENGTH(C.favicon)<=2) THEN /* Consider it an Emoji */
+                l_clob:=REPLACE(pck_favicon.SVG_EMOJI,'#FAVICON#',C.favicon);
+                addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_clob);
             END IF;
+
         END LOOP;
 
         /*
