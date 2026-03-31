@@ -94,6 +94,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         it pls_integer;
         bi pls_integer;
         b pls_integer;
+        n pls_integer;
 
         l_heading LONG;
         l_heading_regex varchar2(30):='<h[1-4](.+?)</h[1-4]>';
@@ -112,10 +113,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_first_heading article_chars.first_heading%type;
         l_second_heading article_chars.second_heading%type;
+        l_first_text article_chars.first_text%type;
 
     BEGIN
-        DELETE article_chars WHERE article_id=pArticleId;
-        
         /* 
         ** REMOVE <code></code>  AND <p>&nbsp;</p>
         ** 1 - start at beginnning
@@ -150,8 +150,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_headings_italic:=distinct_chars(l_headings_italic);
         l_headings:=distinct_chars(l_headings);
 
-        INSERT INTO article_chars(article_id, context, chars_italic, chars_normal, first_heading, second_heading)
-        VALUES (pArticleId, 'headings', l_headings_italic, l_headings, l_first_heading, l_second_heading);
+        UPDATE article_chars
+           SET chars_italic=l_headings_italic,
+               chars_normal=l_headings,
+               first_heading=l_first_heading,
+               second_heading=l_second_heading,
+               updated_date=current_timestamp
+         WHERE article_id=pArticleId
+           AND context='headings';
+        
+        IF (sql%rowcount=0) THEN
+            INSERT INTO article_chars(article_id, context, chars_italic, chars_normal, first_heading, second_heading)
+            VALUES (pArticleId, 'headings', l_headings_italic, l_headings, l_first_heading, l_second_heading);
+        END IF;
 
         l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
 
@@ -185,8 +196,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_chars_italic:=distinct_chars(l_chars_italic);
         l_chars_bold_italic:=distinct_chars(l_chars_bold_italic);
 
-        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal, first_text)
-        VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal, SUBSTR(l_text,1,200));   
+        l_text:=SUBSTR(l_text,1,200);
+        n:=INSTR(l_text,'.',-1);
+        IF (n=0) THEN
+            n:=INSTR(l_text,' ',-1);
+        END IF;
+        l_first_text:=SUBSTR(l_text,1,n);
+
+        UPDATE article_chars
+           SET chars_italic=l_headings_italic,
+               chars_normal=l_headings,
+               chars_bold_italic=l_chars_bold_italic,
+               chars_bold_normal=l_chars_bold_normal,
+               first_text=l_first_text,
+               updated_date=current_timestamp
+         WHERE article_id=pArticleId
+           AND context='text';
+
+        IF (sql%rowcount=0) THEN
+            INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal, first_text)
+            VALUES (pArticleId, 'text', l_chars_bold_italic, l_chars_bold_normal, l_chars_italic, l_chars_normal, l_first_text);   
+        END IF;
     END;
 
     /*
@@ -253,11 +283,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             q'{LISTAGG(axis||':'||value,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS axes }' ||
         'FROM data ' ||
         'GROUP BY font_id, family';
-        
-        -- pck_core.log(pContext);
-        -- pck_core.log(pStyles);
-        -- pck_core.log(l_sql);
-
 
         EXECUTE IMMEDIATE l_sql 
             INTO l_font_id, l_family, l_nb_axes, l_axes
@@ -292,13 +317,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
 
-        /* E.g. called fir Codepen */
+        /* E.g. called for Codepen */
         IF (pArticleid IS NOT NULL) THEN
             INSERT INTO website_fontfiles_temp(fontface) 
             VALUES (l_fontface);
             RETURN;
         END IF;
 
+        /*
+        **  DOWNLOAD FONT FILES FROM GOOGLE INTO TEMPORARY TABLE. 
+        **  WILL BE SELF-HOSTED LATER IN DEPLOYMENT
+        */
         l_url:=REGEXP_SUBSTR(l_fontface,'url\((.+?)\)',1,1,null,1);
 
         l_blob:=apex_web_service.make_rest_request_b(p_url=>l_url, p_http_method=>'GET');
@@ -320,7 +349,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
     /* 
     **  BUILD OPTIMIZED FONT FILES FOR EACH FONT USED IN A LIVE WEBSITE
-    **  NB. EDITOR SITES USE FULL LANGUAGE FONTS DIRECTLY FROM GOOGLE
+    **  NB. 1) EDITOR SITES LINK TO FULL LANGUAGE FONTS DIRECTLY FROM GOOGLE
+    **      2) PARAMETER "pArticleid" FOR A SINGLE ARTICLE
     */
     PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pArticleid IN article.id%type DEFAULT null) IS
         TYPE tt_chars_used IS RECORD (
@@ -335,33 +365,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             'text' => tt_chars_used(null,null,null,null), 
             'logo' => tt_chars_used(null,null,null,null));
 
-        l_fontface VARCHAR2(1000);
-        l_fontfaces CLOB;
         l_context VARCHAR2(8);
-        l_html_size PLS_INTEGER:=0;
-        l_pages PLS_INTEGER:=0;
-        l_cpu_used_start NUMBER;
-        l_elapsed NuMBER;
-
     BEGIN
-        l_cpu_used_start:=dbms_utility.get_cpu_time();
-
-        /*
-        **  POPULATE ARTICLE_CHARS TABLE FOR EACH ARTICLE WITH CONTENT
-        */
-        FOR C IN (
-            SELECT a.id, a.body_html || wa.header_html || wa.footer_html AS content
-              FROM website_article wa, article a
-             WHERE wa.website_id=pWebsiteId
-               AND wa.article_id=NVL(a.parent_id,a.id)
-               AND a.body_html IS NOT NULL
-               AND a.id=NVL(pArticleid,a.id)
-        ) LOOP
-            l_pages:=l_pages+1;
-            l_html_size:=l_html_size + dbms_lob.getlength(C.content);
-            getCharsUsed(pArticleid=>C.id, pContent=>C.content);
-        END LOOP; 
-
         /* Get distinct set of characters in website for each font style / weight for each context */
         FOR C IN (
             SELECT ac.context, ac.chars_normal, ac.chars_italic, ac.chars_bold_normal, ac.chars_bold_italic 
