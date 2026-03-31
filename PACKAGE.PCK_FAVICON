@@ -1,9 +1,29 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FAVICON" as
   --
-  PROCEDURE getFaviconForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
-  --
-  PROCEDURE updateFavicon(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
-  --
+    SVG_EMOJI CONSTANT LONG:=
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' ||
+            '<text y=".9em" font-size="90">#FAVICON#</text>' ||
+        '</svg>';
+    --
+    SVG_LETTERS CONSTANT LONG:=
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' ||
+            '<text x="50" y="50" ' || 
+                'font-family="system-ui" ' || 
+                'font-size="100" ' ||  
+                'font-weight="bold" ' || 
+                'fill="red" ' || 
+                'text-anchor="middle" ' ||  
+                'dominant-baseline="central" ' || 
+                'textLength="100" ' || 
+                'lengthAdjust="spacingAndGlyphs">' || 
+                '#FAVICON#' ||
+            '</text>' ||
+        '</svg>';
+      --
+      PROCEDURE getFaviconForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+      --
+      PROCEDURE updateFavicon(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+      --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
@@ -31,7 +51,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
             '<fieldset class="flow">' ||
                 '<legend>Enter emoji or SVG code</legend>' ||
                 '<div>' ||
-                    '<textarea id="favicon">' || 
+                    '<textarea id="favicon" maxlength="4000">' || 
                         C.favicon ||
                     '</textarea>' ||
                 '</div>' ||
@@ -71,7 +91,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
     PROCEDURE updateFavicon(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
-        l_svg LONG:='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">#FAVICON#</text></svg>';
         l_href LONG;
         l_message VARCHAR2(100);
     BEGIN
@@ -90,16 +109,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
                SET favicon=C.favicon,
                    favicon_updated_date=current_timestamp
              WHERE id=pWebsiteId;
-
-            l_message:='Favicon updated successfully';
+            
             IF (C.favicon LIKE '<svg%') THEN
                 l_href:='data:image/svg+xml,' || utl_url.escape(C.favicon,TRUE,'UTF-8');
+                l_message:='Favicon updated as svg';
+            ELSIF (ASCII(C.favicon)<=122 AND LENGTH(C.favicon)<=2) THEN
+                l_href:='data:image/svg+xml,' || utl_url.escape(REPLACE(SVG_LETTERS,'#FAVICON#',C.favicon),TRUE,'UTF-8');
+                l_message:='Favicon updated as ' || CASE LENGTH(C.favicon) WHEN 1 THEN 'one letter' ELSE 'two letters' END || ' from english alphabet';
+            ELSIF (LENGTH(C.favicon)<=2) THEN /* Consider it an Emoji */
+                l_href:='data:image/svg+xml,' || utl_url.escape(REPLACE(SVG_EMOJI,'#FAVICON#',C.favicon),TRUE,'UTF-8');
+                l_message:='Updated favicon as an emoji';
             ELSE
-                l_svg:=REPLACE(l_svg,'#FAVICON#',C.favicon);
-                l_href:='data:image/svg+xml,' || utl_url.escape(l_svg,TRUE,'UTF-8');
-                IF (LENGTH(C.favicon)>1) THEN
-                    l_message:=l_message || ' - but may be clipped';
-                END IF;
+                l_message:='Only support svg, 2 letters or emoji';
             END IF;
         END LOOP;
 
