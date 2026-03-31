@@ -444,10 +444,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             RETURN(l_html);
         END IF;
 
-        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'red', '✎', 'Edit Content');
-        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'orange', '❀', 'Upload');
+        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'red', '✎', 'Editor');
+        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'orange', '🌅', 'Upload');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish');
-        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '⛲', 'Fonts');
+        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '📝', 'Fonts');
         l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo');
         l_html:=l_html || addMenuitem('favicon/:ID', '', '🍀', 'Favicon');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Pages');
@@ -458,7 +458,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         END LOOP;
 
         l_html:=l_html || addMenuitem('create-website/:ID/:PAGE', 'red', '🌐', 'New Website');
-        l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', 'cyan', '⚽', 'Codepen Editor');
+        l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', 'cyan', '⚽', 'Codepen');
 
         RETURN (l_html);
     END;
