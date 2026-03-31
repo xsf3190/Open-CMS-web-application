@@ -907,19 +907,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_parent_id article.parent_id%type;
         l_json JSON_OBJECT_T;
 
-        PROCEDURE setWebsiteUpdatedDate IS
-        BEGIN
-            UPDATE website 
-               SET nav_updated_date=current_timestamp
-             WHERE id=pWebsiteId
-               AND EXISTS (
-                SELECT null 
-                  FROM website_article
-                 WHERE website_id=pWebsiteId 
-                   AND article_id=pArticleid 
-                   AND display_order=1
-                );
-        END;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -934,8 +921,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        header_html_updated = current_timestamp
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
-
-                setWebsiteUpdatedDate;
 
             WHEN 'main' THEN
                 UPDATE article 
@@ -961,9 +946,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        footer_html_updated = current_timestamp
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
-
-                setWebsiteUpdatedDate;
         END CASE;
+
+        FOR C IN (
+            SELECT wa.header_html || a.body_html || wa.footer_html AS content, wa.display_order
+              FROM article a, website_article wa
+             WHERE wa.website_id=pWebsiteid
+               AND a.id=pArticleid
+               AND wa.article_id=NVL(a.parent_id,pArticleid)
+        ) LOOP
+            pck_fonts.getCharsUsed(pArticleid,C.content);
+            IF (C.display_order=1 AND l_id IN ('header','footer')) THEN
+                UPDATE website 
+                   SET nav_updated_date=current_timestamp
+                 WHERE id=pWebsiteId;
+            END IF;
+        END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
