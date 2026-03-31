@@ -1,0 +1,68 @@
+/*
+** MEDIA THUMBNAILS PAGE
+*/
+.gallery-list {
+  list-style: none;
+  margin: 0;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-2xs);
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--space-3xl), 100%), 1fr));
+}
+.gallery-list li {
+    border: 1px solid #ddd;
+    padding: var(--space-3xs);
+    display: grid;
+    grid-template-areas: "overlay";
+}
+.gallery-list li:hover {
+    box-shadow: 4.0px 8.0px 8.0px hsl(0deg 0% 0% / 0.38);
+}
+
+.gallery-list img, .gallery-list video, .gallery-list audio {
+    inline-size: 100%;
+}
+
+.gallery-list  .landscape {
+    grid-column: span 2;
+}
+
+/*
+** GALLERY FULLSCREEN STYLES
+*/
+.gallery-overlay {
+    display: none;
+    grid-template-areas: "overlay";
+}
+.gallery-overlay  img {
+    grid-area: overlay;
+    place-self: center;
+    inline-size: 100vw;
+    block-size: 100vh;
+    object-fit: contain;
+}
+.gallery-overlay :not(img) {
+    color: white;
+    font-size: var(--step-3);
+    grid-area: overlay;
+}
+.gallery-overlay  span {
+    place-self: start start;
+    font-size: var(--step-0);
+}
+.gallery-overlay  button {
+    background-color: transparent;
+    outline: 0;
+    border: 0;
+    padding: var(--space-s);
+    cursor: pointer;
+}
+.gallery-overlay  .close-fullscreen {
+    place-self: start end;
+}
+.gallery-overlay  .prev {
+    place-self: center start;
+}
+.gallery-overlay  .next {
+    place-self: center end;
+}
