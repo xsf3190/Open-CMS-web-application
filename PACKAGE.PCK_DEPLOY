@@ -10,7 +10,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2;
     --
-    PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB);
+    PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB, pCss IN OUT NOCOPY CLOB);
     --
     FUNCTION canDeploy(pWebsiteid IN website.id%type) RETURN BOOLEAN;
     --
@@ -150,6 +150,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              WHERE id=pWebsiteid
         ) LOOP
             pck_css.buildEditorTokens(pWebsiteid);
+            pck_css.buildEditorCSS;
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
         END LOOP;
@@ -170,6 +171,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         */
         pck_fonts.getFontFiles(pWebsiteid);
         pck_css.buildLiveTokens(pWebsiteid);
+        pck_css.buildLiveCSS;
 
         -- Temporary table website_fontfiles_temp populated by pck_fonts procedure
 
@@ -184,7 +186,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                   FROM website_files
                  WHERE website_id=pWebsiteid
                    AND site_id=C.netlify_site_id
-                   AND path<>'css/website-styles.min.css'
+                   AND path NOT IN (pck_css.PATH_NAME_TOKENS, pck_css.PATH_NAME_CORE)
                  UNION ALL
                 SELECT path, sha1
                   FROM website_fontfiles_temp
@@ -198,8 +200,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_json.put('files',l_files);
             pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id_custom || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
             
-            /* Upload required files to hosting platform */
-            
+            /* Upload required Font files to hosting platform */
             FOR C1 IN (
                 SELECT j.id, j.sha1, wf.path, wf.content
                   FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) j, website_fontfiles_temp wf
@@ -209,6 +210,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/files/' || C1.path, pMethod=>'PUT', pBody=>C1.content, pData=>l_clob);
             END LOOP;
 
+            /* Upload required CSS files to hosting platform */
             FOR C1 IN (
                 SELECT j.id, j.sha1, wc.path, wc.content
                   FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) j, website_cssfiles_temp wc
@@ -582,7 +584,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     /*
     ** BUILD PAGE COLLECTION. ANY IMAGES ARE DECORATIVE, HENCE EMPTY ALT TEXT 
     */
-    PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB) IS
+    PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB, pCss IN OUT NOCOPY CLOB) IS
         n PLS_INTEGER:=0;
     BEGIN
         pHtml:='<ul class="grid" role="list">';
@@ -627,6 +629,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             '</li>';
         END LOOP;
         pHtml:=pHtml || '</ul>';
+
+        FOR C IN (
+            SELECT apex_util.blob_to_clob(file_content) css
+              FROM apex_application_static_files 
+             WHERE application_id=101
+               AND file_name='deploy.card.min.css'
+        ) LOOP
+            pCss:='<style>' || C.css || '</style>';
+        END LOOP;
     END;
 
     /*
@@ -649,15 +660,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pBody IN OUT NOCOPY CLOB
     ) IS
         l_title article_chars.first_heading%type;
-        l_description article_chars.first_text%type;
+        l_description article_chars.first_text%type;  
         l_logo VARCHAR2(200);
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
         l_main article.body_html%type;
         l_footer website_article.footer_html%type;
         l_collection CLOB;
+        l_collection_css CLOB;
         l_article_links LONG;
-        
+        l_preload VARCHAR2(200):='<link rel="preload" href="/fonts/#FONT#" as="font" type="font/woff2" crossorigin>';
+        l_preload_fonts LONG;
         -- l_clob CLOB;
         n PLS_INTEGER;
         n1 PLS_INTEGER;
@@ -746,8 +759,37 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 SELECT first_text INTO l_description FROM article_chars WHERE article_id=pArticleid AND context='text';
             END IF;
 
+            FOR C1 IN (
+                SELECT context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic
+                  FROM article_chars
+                 WHERE article_id=pArticleid
+                 UNION ALL
+                SELECT 'logo', logo_font_text, null, null, null
+                  FROM website 
+                 WHERE id=pWebsiteid 
+                   AND logo_type='font' 
+                   AND logo_font_text IS NOT NULL
+            ) LOOP
+                IF (C1.chars_normal IS NOT NULL) THEN
+                    l_preload_fonts:=l_preload_fonts ||
+                    REPLACE(l_preload,'#FONT#',C1.context || '.normal.woff2');
+                END IF;
+                IF (C1.chars_italic IS NOT NULL) THEN
+                    l_preload_fonts:=l_preload_fonts ||
+                    REPLACE(l_preload,'#FONT#',C1.context || '.italic.woff2');
+                END IF;
+                IF (C1.chars_bold_normal IS NOT NULL) THEN
+                    l_preload_fonts:=l_preload_fonts ||
+                    REPLACE(l_preload,'#FONT#',C1.context || '.bold.woff2');
+                END IF;
+                IF (C1.chars_bold_italic IS NOT NULL) THEN
+                    l_preload_fonts:=l_preload_fonts ||
+                    REPLACE(l_preload,'#FONT#',C1.context || '.bold.italic.woff2');
+                END IF;
+            END LOOP;
+
             IF (pCollectionType='BLOG') THEN
-                buildPageCollection(pCollectionType, pArticleid, l_collection);
+                buildPageCollection(pCollectionType, pArticleid, l_collection, l_collection_css);
             END IF;
 
             /*
@@ -765,13 +807,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<meta name="description" content="' || l_description || '">' ||
                     '<meta name="author" content="performance toolkit">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
-                    '<link rel="stylesheet" href="/css/website-styles.min.css">' ||
-                    '<link rel="stylesheet" href="/css/core-styles.min.css">' ||
+                    l_preload_fonts ||
+                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
+                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
                     '<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
                     '<link rel="icon" href="/images/favicon.svg">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                 '</head>' ||
                 '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
+                    l_collection_css ||
                     '<a href="#main" class="skip-link">Skip to main content</a>' ||
                     pDropdown || 
                     '<div class="topnav flex-items space-between">' ||
@@ -1126,11 +1170,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH source AS
             (
-                SELECT '/css/core-styles.min.css' AS deploy_filename, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
-                  FROM apex_application_static_files 
-                 WHERE application_id=101
-                   AND file_name='deploy.min.css'
-                UNION ALL
                 SELECT '/css/' || file_name AS deploy_filename, '@layer{' || apex_util.blob_to_clob(file_content) || '}' file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
                   FROM apex_application_static_files 
                  WHERE application_id=101
