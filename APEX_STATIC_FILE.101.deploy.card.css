@@ -42,8 +42,12 @@
     text-underline-offset: 0.7ex;
   }
   a:hover::before, a:focus::before {
-    border-color: red;
+    border-color: var(--color-link-hover);
     text-decoration: underline;
+  }
+
+  h2 {
+    line-height: 1.5;
   }
   
   p {
