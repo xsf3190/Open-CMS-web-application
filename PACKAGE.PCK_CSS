@@ -1,14 +1,20 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
+    PATH_NAME_TOKENS CONSTANT website_cssfiles_temp.path%type:='/css/website-styles.min.css';
+    --
+    PATH_NAME_CORE CONSTANT website_cssfiles_temp.path%type:='/css/cores-styles.min.css';
+    --
+    PROCEDURE buildEditorCSS;
+    --
     PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type);
+    --
+    PROCEDURE buildLiveCSS;
     --
     PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type);
     --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
-
-    PATH_NAME CONSTANT website_cssfiles_temp.path%type:='css/website-styles.min.css';
 
     TYPE fluid_type_rt IS RECORD(
         property VARCHAR2(30),
@@ -329,7 +335,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
 
-        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME, l_sha1, l_css);
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_TOKENS, l_sha1, l_css);
     END;
 
     /*
@@ -407,7 +413,45 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
 
-        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME, l_sha1, l_css);
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_TOKENS, l_sha1, l_css);
+    END;
+
+    /*
+    ** BUILD CORE CSS STYLES FOR EDITOR SITE
+    */
+    PROCEDURE buildEditorCSS IS
+        l_sha1 website_cssfiles_temp.sha1%type;
+        l_css CLOB;
+    BEGIN
+        dbms_lob.createtemporary(l_css, TRUE);
+        FOR C IN (
+            SELECT apex_util.blob_to_clob(file_content) file_content
+              FROM apex_application_static_files 
+             WHERE application_id=101
+               AND file_name IN ('deploy.min.css','deploy.editor.min.css')
+             ORDER BY DECODE(file_name,'deploy.min.css',1,2)
+        ) LOOP
+            l_css:=l_css || C.file_content;    
+        END LOOP;
+        l_sha1:=LOWER(dbms_crypto.hash(src=>l_css, typ=>dbms_crypto.hash_sh1));
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_CORE, l_sha1, l_css);
+    END;
+
+    /*
+    ** BUILD CORE CSS STYLES FOR LIVE SITE
+    */
+    PROCEDURE buildLiveCSS IS
+        l_sha1 website_cssfiles_temp.sha1%type;
+    BEGIN
+        FOR C IN (
+            SELECT apex_util.blob_to_clob(file_content) file_content
+              FROM apex_application_static_files 
+             WHERE application_id=101
+               AND file_name='deploy.min.css'
+        ) LOOP
+            l_sha1:=LOWER(dbms_crypto.hash(src=>C.file_content, typ=>dbms_crypto.hash_sh1));
+            INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_CORE, l_sha1, C.file_content);
+        END LOOP;
     END;
 
 end;
