@@ -20,53 +20,9 @@ export const init = (element) => {
     });
 }
 
-const setLogo = (value) => {
-    const logo = document.querySelector(".logo");
-    logo.replaceChildren();
-    if (value) {
-        logo.insertAdjacentHTML("beforeend",value);
-        const svg = logo.querySelector("svg");
-        if (!svg) {
-            handleError("NOT VALID SVG");
-            return;
-        }
-        const viewBox = svg.getAttribute("viewBox")?.split(" ");
-        if (!viewBox) {
-            handleError("SVG MUST HAVE VIEWBOX");
-            return;
-        }
-        const width = Number(viewBox[0]) + Number(viewBox[2]);
-        const height = Number(viewBox[1]) + Number(viewBox[3]);
-
-        logo.style.aspectRatio = width + "/" + height;
-    }
-}
-
 /*
-** DEFAULT FAVICON IS GREEN LEAF EMOJI
+** SET IMAGE BORDER RADIUS
 */
-const setFavicon = (value) => {
-    const favicon = document.querySelector("head > link[rel='icon']");
-    
-    let replacedValue;
-    if (value) {
-        replacedValue = value.replaceAll('"','%22').replaceAll('#','%23');
-    } else {
-        replacedValue = "🌿";
-    }
-
-    /* Maximum length of emoji should be 5? */
-    if (value.length<=5) {
-        favicon.setAttribute("href", `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>${replacedValue}</text></svg>`);
-    } else {
-        favicon.setAttribute("href", `data:image/svg+xml,${replacedValue}`);
-    }
-}
-
-const setLogoWidth = (value) => {
-    document.documentElement.style.setProperty('--logo-inline-size', value + "cqi"); 
-}
-
 const setImgBorderRadius = (value) => {
     document.documentElement.style.setProperty('--img-border-radius', value + "px"); 
 }
