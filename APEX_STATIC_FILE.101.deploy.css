@@ -132,30 +132,6 @@ body>footer>a {
     anchor-name: --navlist-anchor;
 }
 
-#menulist-btn {
-    anchor-name: --menulist-anchor;
-}
-
-.popover-btn:has(+ *:popover-open) rect {
-  transition: all 0.5s ease-in-out;
-}
-
-.popover-btn:has(+ *:popover-open) .top,
-.popover-btn:has(+ *:popover-open) .bottom {
-  transform-origin: center;
-}
-
-.popover-btn:has(+ *:popover-open) .top {
-  transform: rotate(45deg)
-    translate(0, calc(var(--icon-translation-size) * 1px));
-}
-.popover-btn:has(+ *:popover-open) .middle {
-  opacity: 0;
-}
-.popover-btn:has(+ *:popover-open) .bottom {
-  transform: rotate(-45deg)
-    translate(0, calc(var(--icon-translation-size) * -1px));
-}
 
 .controls [popover] {
   
@@ -196,20 +172,6 @@ body>footer>a {
   }
 }
 
-#menulist {
-  inset: auto;
-  top: anchor(--menulist-anchor bottom);
-  right: anchor(--menulist-anchor right);
-  max-height: 100dvh;
-  &:focus {
-    outline: none;
-  }
-
-  &>*:is(:hover, :focus-visible) {
-    background-color: var(--color-text);
-    color: var(--color-bg);
-  }
-}
 
 [id="menulist"]:popover-open, [id="navlist"]:popover-open {
   /* End of fade-in and start of fade-out */
@@ -318,12 +280,7 @@ nav ul {
   }
 }
 
-/* 
-** FOCUS-VISIBLE STYLES
-*/
-input:focus-visible {
-  outline: var(--focus-outline);
-}
+
 
 /* 
 ** COLOUR SCHEME SWITCHER
