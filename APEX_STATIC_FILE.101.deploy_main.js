@@ -75,8 +75,6 @@ async function load_modules() {
         }
     }
 
-    
-
     module_name = "deploy_web_vitals5";
     const cwv = await import("deploy_web_vitals5")
     .catch((error) => {
