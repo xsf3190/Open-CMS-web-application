@@ -177,7 +177,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
-        l_favicon VARCHAR2(10);
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -185,7 +184,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         /* Form depends on Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.logo_type, w.favicon, w.logo_inline_size, w.img_border_radius
+            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.max_width, w.img_border_radius
               FROM website w, website_article wa, article a
              WHERE w.id=pWebsiteId 
                AND wa.website_id=w.id 
@@ -198,12 +197,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     l_header:='<h4>'|| INITCAP(C.navigation_label) || ': ' || C.title || '</h4>';
                     l_article:=
                     '<input type="hidden" name="dml" value="update">' ||
-                    '<p>This form enables you to:</p>' || 
-                    '<ol>' ||
-                        '<li>Edit the excerpt that appears on the index page and in the "related Posts" section</li>' ||
-                        '<li>Create links to "related ' || C.navigation_label || ' Posts"</li>' ||
-                        '<li>Permanently delete this Post</li>' ||
-                    '</ol>' ||
                     '<fieldset>' ||
                         '<legend>Excerpt (maximum 160 characters)</legend>' ||
                         '<textarea name="excerpt" style="min-width:50%" maxlength="160">' || C.excerpt || '</textarea>' ||
@@ -217,25 +210,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 /* Creating new BLOG item */
                 
                 ELSE
-                    l_favicon:=regexp_substr(C.favicon,'<text.+?>(.+?)</text>',1,1,null,1);
                     l_header:='<h4>Page Options</h4>';
                     l_article:=
-                    '<p>Use this form to:</p>' || 
-                    '<ol>' ||
-                        '<li>Set a Favicon. Either SVG or emoji (default is 🌿)</li>' ||
-                        '<li>Set image round borders</li>' ||
-                    '</ol>' ||
-                    /*
                     '<fieldset>' ||
-                        '<legend>Logo (maximum 4000 characters. SVG only)</legend>' ||
-                        '<textarea name="logo" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || C.logo || '</textarea>' ||
-                        '<input type="range" id="logo-inline-size" name="logo-inline-size" min="3" max="22" value="' || regexp_substr(C.logo_inline_size,'\d+') || '">' ||
-                        '<label for="logo-inline-size">Adjust Width</label>' ||
-                    '</fieldset>' ||
-                    */
-                    '<fieldset>' ||
-                        '<legend>Favicon (maximum 4000 characters. SVG or emoji)</legend>' ||
-                        '<textarea name="favicon" style="min-width:100%;font-family:monospace;font-size:var(--step--2)" maxlength="4000">' || NVL(l_favicon,C.favicon) || '</textarea>' ||
+                        '<legend>Resize width of main content</legend>' ||
+                        '<input type="range" min="1000" max="1500" value=' || C.max_width || '">' ||
                     '</fieldset>' ||
                     '<fieldset>' ||
                         '<legend>Set image round borders</legend>' ||
@@ -244,17 +223,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             END CASE;
 
             l_footer:=
-            '<div class="flex-items space-between">' ||
-                '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' ||
-                    'PUBLISH' ||
-                '</button>' ||
+            '<div class="flex-items">' ||
+                '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">PUBLISH</button>' ||
                 '<span aria-live="polite"></span>' ||
                 '<span class="loader icon"></span>' ||
-                CASE WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
-                '<button type="button" class="button delete" style="--button-bg:red">' ||
-                    'DELETE ' || UPPER(C.navigation_label) ||
-                '</button>' 
-                END ||
             '</div>';
         END LOOP;
 
@@ -309,20 +281,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         END;
                     END IF;
                 WHEN (C.parent_id IS NULL AND C.collection_type='N/A') THEN
-                    IF (l_name='logo') THEN
-                        -- UPDATE website SET logo=l_value, logo_updated_date=current_timestamp WHERE id=pWebsiteid;
-                        null;
-                    END IF;
-                    IF (l_name='favicon') THEN
-                        /* Build svg if emoji character */
-                        IF (LENGTH(l_value)=1) THEN
-                            l_value:=REPLACE(l_emoji_svg,'#EMOJI#',l_value);
-                        END IF;
-                        UPDATE website SET favicon=l_value, favicon_updated_date=current_timestamp WHERE id=pWebsiteid;
-                    END IF;
-                    IF (l_name='logo-inline-size') THEN
-                        UPDATE website SET logo_inline_size=l_value || 'cqi', logo_updated_date=current_timestamp WHERE id=pWebsiteid;
-                    END IF;
                     IF (l_name='img-border-radius') THEN
                         UPDATE website SET img_border_radius=l_value || 'px', logo_updated_date=current_timestamp WHERE id=pWebsiteid;
                     END IF;
