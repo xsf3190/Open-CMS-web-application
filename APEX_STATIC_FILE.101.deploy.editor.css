@@ -15,6 +15,50 @@
 }
 
 
+/* APPLICATION MENU STYLES */
+
+#menulist-btn {
+    anchor-name: --menulist-anchor;
+}
+
+.popover-btn:has(+ *:popover-open) rect {
+  transition: all 0.5s ease-in-out;
+}
+
+.popover-btn:has(+ *:popover-open) .top,
+.popover-btn:has(+ *:popover-open) .bottom {
+  transform-origin: center;
+}
+
+.popover-btn:has(+ *:popover-open) .top {
+  transform: rotate(45deg)
+    translate(0, calc(var(--icon-translation-size) * 1px));
+}
+.popover-btn:has(+ *:popover-open) .middle {
+  opacity: 0;
+}
+.popover-btn:has(+ *:popover-open) .bottom {
+  transform: rotate(-45deg)
+    translate(0, calc(var(--icon-translation-size) * -1px));
+}
+
+#menulist {
+  inset: auto;
+  top: anchor(--menulist-anchor bottom);
+  right: anchor(--menulist-anchor right);
+  max-height: 100dvh;
+  &:focus {
+    outline: none;
+  }
+
+  &>*:is(:hover, :focus-visible) {
+    background-color: var(--color-text);
+    color: var(--color-bg);
+  }
+}
+
+
+
 /* DIALOG STYLES */
 
 dialog[open] {
@@ -524,6 +568,13 @@ fieldset.flex-items {
         display: initial;
         margin-inline-start: 0.5em;
     }
+}
+
+/* 
+** FOCUS-VISIBLE STYLES
+*/
+input:focus-visible {
+  outline: var(--focus-outline);
 }
 
 /* CHECKBOX AND RADIO BUTTONS */
