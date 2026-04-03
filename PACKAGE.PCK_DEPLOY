@@ -150,7 +150,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              WHERE id=pWebsiteid
         ) LOOP
             pck_css.buildEditorTokens(pWebsiteid);
-            pck_css.buildEditorCSS;
+            pck_css.buildCSS(pEditor=>TRUE);
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
         END LOOP;
@@ -158,7 +158,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
     
     /*
-    **  DEPLY LIVE SITE. BUILD OPTIMIZED FONT FILES
+    **  DEPLOY LIVE SITE. BUILD OPTIMIZED FONT AND CSS FILES
     */
     PROCEDURE deployLiveSite(pWebsiteid IN website.id%type) IS
         l_files JSON_OBJECT_T;
@@ -166,12 +166,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_clob CLOB;
     BEGIN
         /*
-        ** Font files and supporting font face css rules are deployed to live site
+        ** Optimised Font files and CSS files are deployed to live site
         ** All other files are "copied" from editor site
         */
         pck_fonts.getFontFiles(pWebsiteid);
         pck_css.buildLiveTokens(pWebsiteid);
-        pck_css.buildLiveCSS;
+        pck_css.buildCSS(pEditor=>FALSE);
 
         -- Temporary table website_fontfiles_temp populated by pck_fonts procedure
 
@@ -186,7 +186,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                   FROM website_files
                  WHERE website_id=pWebsiteid
                    AND site_id=C.netlify_site_id
-                   AND path NOT IN (pck_css.PATH_NAME_TOKENS, pck_css.PATH_NAME_CORE)
+                   AND path NOT IN (pck_css.PATH_NAME_CORE,pck_css.PATH_NAME_TOKENS)
                  UNION ALL
                 SELECT path, sha1
                   FROM website_fontfiles_temp
@@ -870,11 +870,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
 
         /* CLOB SIGNATURE */
-        PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB) IS
+        PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB, pSha1 IN VARCHAR2 DEFAULT NULL) IS
             l_sha1 website_files.sha1%type;
         BEGIN
             dbms_output.put_line('new version : '||pFilename);
-            l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
+            l_sha1:=NVL(pSha1,LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1)));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content:=pFileContent;
             l_files.put(pFilename, l_sha1);
@@ -948,9 +948,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END;
 
     BEGIN
-        /* For logging when called by scheduler */
-        pck_sec.g_website_id:=pWebsiteId;
-
         /*
         ** WEBSITE SHOULD ALWAYS HAVE ENTRIES IN TABLE WEBSITE_FILES FROM PREVIOUS DEPLOYMENT
         **
@@ -1007,7 +1004,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  2.0 Build FAVICON svg file
+        **  2. Build FAVICON svg file
         */
         FOR C IN (
             WITH source AS
@@ -1042,7 +1039,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  2.1 Build LOGO svg file
+        **  3.1 Build LOGO svg file
         */
         FOR C IN (
             WITH source AS
@@ -1076,7 +1073,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  2.2 Build LOGO img file
+        **  3.2 Build LOGO img file
         */
         FOR C IN (
             WITH source AS
@@ -1109,7 +1106,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
         
         /*
-        **  3. Build HTML files
+        **  4. Build HTML files
         */
         n:=0;
         FOR C IN (
@@ -1158,39 +1155,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  4. Build FONT files. 
-        */
-        
-        
-        /*
         **  5. Build CSS files
         */
-        
-
         FOR C IN (
-            WITH source AS
-            (
-                SELECT '/css/' || file_name AS deploy_filename, '@layer{' || apex_util.blob_to_clob(file_content) || '}' file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
-                  FROM apex_application_static_files 
-                 WHERE application_id=101
-                   AND file_name='ckeditor.min.css'
-                UNION ALL
-                SELECT path, content, current_timestamp
-                  FROM website_cssfiles_temp
-            )
-            SELECT s.deploy_filename, s.file_content, s.updated_date, wf.sha1,
-                    CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
-              FROM source s, website_files wf
+            SELECT s.path, s.sha1 source_sha1, s.content, wf.sha1 deployed_sha1
+              FROM website_cssfiles_temp s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
-               AND wf.site_id(+)=pSiteid
-               AND wf.path(+)=s.deploy_filename
-               AND wf.mime_type(+)='css'
+               AND wf.path(+)=s.path
         ) LOOP
-            IF (C.build=0) THEN
-                l_files.put(C.deploy_filename, C.sha1);
-                CONTINUE;
+        pck_core.log(c.path || ':' || c.source_sha1  || ':' || c.deployed_sha1);
+            IF (C.source_sha1=C.deployed_sha1) THEN
+                l_files.put(C.path, C.deployed_sha1);
+            ELSE
+                addDeploy(pFilename=>C.path, pFileContent=>C.content, pSha1=>C.source_sha1);
             END IF;
-            addDeploy(pFilename=>C.deploy_filename, pFileContent=>C.file_content);
         END LOOP;
 
         /*
