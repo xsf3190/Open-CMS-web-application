@@ -24,9 +24,7 @@ export const init = (element) => {
 }
 
 const changeHandler = (e) => {
-    const name = e.target.getAttribute("name");
-    
-    callAPI(endpoint, "PUT", {name:name, value:e.target.value})
+    callAPI(endpoint, "PUT", {name:e.target.getAttribute("name"), value:e.target.value})
         .then((data) => {
             liveRegion(data);
         })
@@ -48,7 +46,15 @@ const clickHandler = () => {
 const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
 
-    if (id==="max-width") {
+    if (id === "max-width") {
         document.documentElement.style.setProperty(`--${id}`, e.target.value + "px");  
+    }
+    else if (id === "img-corner-shape") {
+        const seValue = `superellipse(${e.target.value})`;
+        document.documentElement.style.setProperty('--img-corner-shape', seValue); 
+    }
+    else if (id === "img-border-radius") {
+        const brValue = `${e.target.value}px`;
+        document.documentElement.style.setProperty('--img-border-radius', brValue); 
     }
 };
