@@ -184,12 +184,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         /* Form depends on Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.max_width, w.img_border_radius
-              FROM website w, website_article wa, article a
+            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.max_width, w.img_border_radius, au.asset_id
+              FROM website w, website_article wa, article a, asset_used au
              WHERE w.id=pWebsiteId 
                AND wa.website_id=w.id 
                AND a.id=pArticleId
                AND wa.article_id=NVL(a.parent_id,a.id)
+               AND au.article_id(+)=a.id
         ) LOOP
             CASE 
                 /* Updating Page Options for a selected BLOG */
@@ -198,7 +199,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     l_article:=
                     '<input type="hidden" name="dml" value="update">' ||
                     '<fieldset>' ||
-                        '<legend>Excerpt (maximum 160 characters)</legend>' ||
+                        '<legend>Excerpt for '|| C.navigation_label || '</legend>' ||
                         '<textarea name="excerpt" style="min-width:50%" maxlength="160">' || C.excerpt || '</textarea>' ||
                     '</fieldset>' ||
                     '<fieldset style="--flex-direction:column">' ||
@@ -214,12 +215,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     l_article:=
                     '<fieldset>' ||
                         '<legend>Resize width of main content</legend>' ||
-                        '<input type="range" min="1000" max="1500" value=' || C.max_width || '">' ||
-                    '</fieldset>' ||
-                    '<fieldset>' ||
-                        '<legend>Set image round borders</legend>' ||
-                        '<input type="range" id="img-border-radius" name="img-border-radius" min="0" max="30" value="' || regexp_substr(C.img_border_radius,'\d+') || '">' ||
+                        '<input type="range" id="max-width" name="max-width" min="900" max="1200" value="' || regexp_substr(C.max_width,'\d+') || '" step="10">' ||
                     '</fieldset>';
+                    IF (C.asset_id IS NOT NULL) THEN
+                        FOR C1 IN (
+                            SELECT cld_cloud_name, public_id FROM asset WHERE id=C.asset_id
+                        ) LOOP
+                            l_article:=l_article ||
+                            '<fieldset>' ||
+                                '<legend>Set image round borders</legend>' ||
+                                '<div class="flex-items">' ||
+                                    '<input type="range" id="img-border-radius" name="img-border-radius" min="0" max="30" value="' || regexp_substr(C.img_border_radius,'\d+') || '">' ||
+                                    '<img alt="" src="https://res.cloudinary.com/' || C1.cld_cloud_name || '/w_200/' || C1.public_id || '">' ||
+                                '</div>' ||
+                            '</fieldset>';
+                        END LOOP;
+                    END IF;
             END CASE;
 
             l_footer:=
@@ -251,44 +262,39 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json JSON_OBJECT_T;
         l_name VARCHAR2(30);
         l_value VARCHAR2(4000);
-        l_emoji_svg VARCHAR2(200):='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">#EMOJI#</text></svg>';
+        l_messsage VARCHAR2(100);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         SELECT name, value 
           INTO l_name, l_value
           FROM JSON_TABLE(pBodyText, '$' COLUMNS (name, value));
+        
+        CASE l_name
+            WHEN 'max-width' THEN
+                UPDATE website SET max_width=l_value || 'px', updated_date=current_timestamp WHERE id=pWebsiteid;
 
-        FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt
-              FROM website_article wa, article a
-             WHERE wa.website_id=pWebsiteId 
-               AND a.id=pArticleId
-               AND wa.article_id=NVL(a.parent_id,a.id)
-        ) LOOP
-            CASE 
-                WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
-                    IF (l_name='excerpt') THEN
-                        UPDATE article SET excerpt=l_value, updated_date=current_timestamp  WHERE id=pArticleid;
-                        UPDATE article SET updated_date=current_timestamp  WHERE id=C.parent_id;
-                    END IF;
-                    IF (l_name='link') THEN
-                        UPDATE article SET updated_date=current_timestamp WHERE id=pArticleid;
-                        BEGIN
-                            INSERT INTO article_link(article_id_1, article_id_2) VALUES (pArticleid, l_value);
-                            EXCEPTION WHEN DUP_VAL_ON_INDEX THEN
-                                DELETE article_link WHERE article_id_1=pArticleid AND article_id_2=l_value;
-                        END;
-                    END IF;
-                WHEN (C.parent_id IS NULL AND C.collection_type='N/A') THEN
-                    IF (l_name='img-border-radius') THEN
-                        UPDATE website SET img_border_radius=l_value || 'px', logo_updated_date=current_timestamp WHERE id=pWebsiteid;
-                    END IF;
-            END CASE;
-        END LOOP;
+            WHEN 'img-border-radius' THEN
+                UPDATE website SET img_border_radius=l_value || 'px', updated_date=current_timestamp WHERE id=pWebsiteid;
+
+            WHEN 'excerpt' THEN
+                UPDATE article SET excerpt=l_value, updated_date=current_timestamp  WHERE id=pArticleid;
+                UPDATE article SET updated_date=current_timestamp  WHERE id=(SELECT parent_id FROM article WHERE id=pArticleid);
+
+            WHEN 'link' THEN
+                UPDATE article SET updated_date=current_timestamp WHERE id=pArticleid;
+                BEGIN
+                    INSERT INTO article_link(article_id_1, article_id_2) VALUES (pArticleid, l_value);
+                    EXCEPTION WHEN DUP_VAL_ON_INDEX THEN
+                        DELETE article_link WHERE article_id_1=pArticleid AND article_id_2=l_value;
+                END;
+
+        END CASE;
+        l_messsage:=l_name || ' updated to ' || l_value;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
+        l_json.put('message',l_messsage);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
