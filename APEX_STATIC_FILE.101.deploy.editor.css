@@ -559,17 +559,6 @@ textarea {
   font: inherit;
 }
 
-fieldset.flex-items {
-    font: inherit;
-    inline-size: fit-content;
-    border-radius: 80px;
-    corner-shape: superellipse(2.8);
-    & input[type="checkbox"] + label, input[type="radio"] + label {
-        display: initial;
-        margin-inline-start: 0.5em;
-    }
-}
-
 /* 
 ** FOCUS-VISIBLE STYLES
 */
@@ -577,9 +566,38 @@ input:focus-visible {
   outline: var(--focus-outline);
 }
 
-/* CHECKBOX AND RADIO BUTTONS */
-fieldset.flex-items input[type="radio"],
-input[type="checkbox"] {
+/*
+** FIELDSETS IN DIALOG. 
+** NB. AVOID CONFLICT WITH <theme-machine> COMPONENT IN deploy.css
+*/
+dialog fieldset {
+    font: inherit;
+    inline-size: fit-content;
+    border-radius: 80px;
+    corner-shape: superellipse(2.8);
+}
+
+/* GROUP OF CHECKBOXES IN FIELDSET */
+dialog fieldset:has(input[type="checkbox"]) {
+    display: grid;
+    grid-template-columns: 1.5em auto;
+    gap: 1em;
+    & {
+        align-self: start;
+    }
+    p {
+        grid-column: 1 / span 2;
+        margin: 0 0 .5em 0;
+    }
+}
+
+/* GROUP OF RADIO BUTTONS */
+dialog fieldset:has(input[type="radio"]) {
+    display: flex;
+}
+
+/* RADIO BUTTONS */
+dialog input[type="radio"] {
 	appearance: none;
 	background: #fff; /* this is needed for iOS. Otherwise the background just becomes black. */
 	border: 1px solid #333;
@@ -590,10 +608,17 @@ input[type="checkbox"] {
 	vertical-align: text-bottom;
 	position: relative;
 
+    /*
 	&[disabled],
 	&[aria-disabled="true"] {
 		opacity: 0.4;
 	}
+    */
+
+    &+label {
+        display: initial;
+        margin-inline-start: 0.5em;
+    }
 
 	&::before {
 		content: "";
@@ -606,38 +631,15 @@ input[type="checkbox"] {
 		top: 0;
 	}
 
-	&:focus {
+    &:checked::before {
+        border: 5px solid transparent;
+        border-radius: 100%;
+        outline-offset: -6px;
+        background: #000;
+    }
+
+    &:focus {
 		outline: 2px solid;
 		outline-offset: 2px;
 	}
-}
-
-fieldset.flex-items input[type="checkbox"] {
-	border-radius: 10%;
-}
-
-fieldset.flex-items input[type="radio"]::before {
-	height: 0;
-	width: 0;
-}
-
-fieldset.flex-items input[type="radio"]:checked::before {
-	border: 5px solid transparent;
-	border-radius: 100%;
-	outline-offset: -6px;
-	background: #000;
-}
-
-fieldset.flex-items input[type="checkbox"]:indeterminate::before, input[type="checkbox"][aria-checked="mixed"]::before {
-	border: 2px solid #222;
-	height: 0;
-	width: 40%;
-}
-
-fieldset.flex-items input[type="checkbox"]:checked::before {
-	border-right: 3px solid #000;
-	border-bottom: 3px solid #000;
-	height: 50%;
-	width: 30%;
-	transform: rotate(45deg) translateY(-20%) translateX(-10%);
 }
