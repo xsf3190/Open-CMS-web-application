@@ -1,8 +1,3 @@
-.my-ck-button_with-text {
-  background-color:rebeccapurple !important;
-  color: white !important;
-}
-
 @media (prefers-reduced-motion: no-preference) {
     @view-transition {
         navigation: auto;
@@ -66,6 +61,17 @@ main:focus {
   outline: none;
 }
 
+/*
+** IMAGE STYLES
+*/
+img {
+    corner-shape: var(--img-corner-shape);
+    border-radius: var(--img-border-radius);
+}
+
+/*
+** SIGNAL MISSING ALT TEXT
+*/
 img:not([alt]) {
 	border: dashed 10px red;
     border-radius: 0;
