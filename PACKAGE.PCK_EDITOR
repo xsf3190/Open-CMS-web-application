@@ -37,8 +37,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         );
     TYPE t_labels IS TABLE OF tt_labels;
 
-            
-
     /*
     ** CREATE HTML FOR PAGE OPTIONS FORM
     */
@@ -96,7 +94,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /*
-    ** CREATE NEW COLLLECTION ITEM AND DEPLOY EDITOR SITE
+    ** CREATE NEW COLLECTION ITEM AND DEPLOY EDITOR SITE
     */
     PROCEDURE createCollectionItem(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -137,6 +135,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
@@ -192,46 +192,48 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND au.article_id(+)=a.id
         ) LOOP
-            CASE 
-                /* Updating Page Options for a selected BLOG */
-                WHEN (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
-                    l_header:='<h4>'|| INITCAP(C.navigation_label) || ': ' || C.title || '</h4>';
-                    l_article:=
-                    '<input type="hidden" name="dml" value="update">' ||
-                    '<fieldset>' ||
-                        '<legend>Excerpt for '|| C.navigation_label || '</legend>' ||
-                        '<textarea name="excerpt" style="min-width:50%" maxlength="160">' || C.excerpt || '</textarea>' ||
-                    '</fieldset>' ||
-                    '<fieldset style="--flex-direction:column">' ||
-                        '<legend>Link to related '|| C.navigation_label || 's</legend>' ||
-                        '<p><a href="#skip">Skip to next</a></p>' ||
-                            getLinkOptions(C.parent_id, pArticleId) ||
-                    '</fieldset>' ||
-                    '<p id="skip"></p>';
-                /* Creating new BLOG item */
-                
-                ELSE
-                    l_header:='<h4>Page Options</h4>';
-                    l_article:=
-                    '<fieldset>' ||
-                        '<legend>Resize width of main content</legend>' ||
-                        '<input type="range" id="max-width" name="max-width" min="900" max="1200" value="' || regexp_substr(C.max_width,'\d+') || '" step="10">' ||
-                    '</fieldset>';
-                    IF (C.asset_id IS NOT NULL) THEN
-                        FOR C1 IN (
-                            SELECT cld_cloud_name, public_id FROM asset WHERE id=C.asset_id
-                        ) LOOP
-                            l_article:=l_article ||
-                            '<fieldset>' ||
-                                '<legend>Set image round borders</legend>' ||
-                                '<div class="flex-items">' ||
-                                    '<input type="range" id="img-border-radius" name="img-border-radius" min="0" max="30" value="' || regexp_substr(C.img_border_radius,'\d+') || '">' ||
-                                    '<img alt="" src="https://res.cloudinary.com/' || C1.cld_cloud_name || '/w_200/' || C1.public_id || '">' ||
+            /* Updating Page Options for a selected BLOG */
+            IF (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
+                l_header:='<h4>'|| INITCAP(C.navigation_label) || ': ' || C.title || '</h4>';
+                l_article:=
+                '<input type="hidden" name="dml" value="update">' ||
+                '<fieldset>' ||
+                    '<legend>Excerpt for '|| C.navigation_label || '</legend>' ||
+                    '<textarea name="excerpt" style="min-width:50%" maxlength="160">' || C.excerpt || '</textarea>' ||
+                '</fieldset>' ||
+                '<fieldset>' ||
+                    '<legend>Link to related '|| C.navigation_label || 's</legend>' ||
+                    '<p><a href="#skip">Skip to next</a></p>' ||
+                        getLinkOptions(C.parent_id, pArticleId) ||
+                '</fieldset>' ||
+                '<p id="skip"></p>';
+            ELSE
+                l_header:='<h4>Page Options</h4>';
+                l_article:=
+                '<fieldset>' ||
+                    '<legend>Resize width of main content</legend>' ||
+                    '<input type="range" id="max-width" name="max-width" min="900" max="1200" value="' || regexp_substr(C.max_width,'\d+') || '" step="10">' ||
+                '</fieldset>';
+                IF (C.asset_id IS NOT NULL) THEN
+                    FOR C1 IN (
+                        SELECT cld_cloud_name, public_id FROM asset WHERE id=C.asset_id
+                    ) LOOP
+                        l_article:=l_article ||
+                        '<fieldset>' ||
+                            '<legend>Image round borders</legend>' ||
+                            '<div class="flex-items">' ||
+                                '<div class="flow">' ||
+                                    '<label for="img-corner-shape">Change border shape:</label>' ||
+                                    '<input type="range" name="img-corner-shape" id="img-corner-shape" min="-5" value="0" max="5" step="0.1" />' ||
+                                    '<label for="img-border-radius">Adjust effect:</label>' ||
+                                    '<input type="range" name="img-border-radius" id="img-border-radius" min="0" value="45" max="90" step="1" />' ||
                                 '</div>' ||
-                            '</fieldset>';
-                        END LOOP;
-                    END IF;
-            END CASE;
+                                '<img alt="" src="https://res.cloudinary.com/' || C1.cld_cloud_name || '/w_200/' || C1.public_id || '">' ||
+                            '</div>' ||
+                        '</fieldset>';
+                    END LOOP;
+                END IF;
+            END IF;
 
             l_footer:=
             '<div class="flex-items">' ||
@@ -262,7 +264,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json JSON_OBJECT_T;
         l_name VARCHAR2(30);
         l_value VARCHAR2(4000);
-        l_messsage VARCHAR2(100);
+        l_message VARCHAR2(100);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -277,6 +279,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             WHEN 'img-border-radius' THEN
                 UPDATE website SET img_border_radius=l_value || 'px', updated_date=current_timestamp WHERE id=pWebsiteid;
 
+            WHEN 'img-corner-shape' THEN
+                UPDATE website SET img_corner_shape='superellipse(' || l_value || ')', updated_date=current_timestamp WHERE id=pWebsiteid;
+
             WHEN 'excerpt' THEN
                 UPDATE article SET excerpt=l_value, updated_date=current_timestamp  WHERE id=pArticleid;
                 UPDATE article SET updated_date=current_timestamp  WHERE id=(SELECT parent_id FROM article WHERE id=pArticleid);
@@ -290,11 +295,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 END;
 
         END CASE;
-        l_messsage:=l_name || ' updated to ' || l_value;
+        l_message:=l_name || ' updated' || CASE WHEN l_name<>'excerpt' THEN ' to ' || l_value END;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('message',l_messsage);
+        l_json.put('message',l_message);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -444,6 +449,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
@@ -933,6 +940,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
