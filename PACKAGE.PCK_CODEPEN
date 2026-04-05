@@ -21,6 +21,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_color_scheme LONG;
         l_dropdown LONG;
         l_collection_html CLOB;
+        l_collection_css CLOB;
         n PLS_INTEGER;
         n1 PLS_INTEGER;
         l_session_data pck_sec.t_session_data;
@@ -62,7 +63,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             END IF;
 
             IF (C.collection_type<>'N/A') THEN
-                pck_deploy.buildPageCollection(C.collection_type,pArticleid,l_collection_html);
+                pck_deploy.buildPageCollection(C.collection_type,pArticleid,l_collection_html,l_collection_css);
             END IF;
 
             l_html:=
@@ -72,30 +73,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 '<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>' ||
                 '<main id="main" class="ck-content flow"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>' ||
                 l_collection_html ||
+                l_collection_css ||
                 '<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>' ||
                 pck_deploy.buildLoginForm || pck_deploy.buildContentDialog ||
             '</body>';
 
-            pck_fonts.getFontFiles(pWebsiteid, pArticleid);
-            pck_css.buildLiveTokens(pWebsiteid);
+            -- pck_fonts.getFontFiles(pWebsiteid, pArticleid);
+            pck_css.buildEditorTokens(pWebsiteid);
+            pck_css.buildCSS(pEditor=>TRUE);
 
             FOR C1 IN (
-                SELECT ordr, content FROM 
-                (
-                SELECT 0 as ordr, content
-                  FROM website_cssfiles_temp
-                 UNION ALL
-                SELECT 2, apex_util.blob_to_clob(file_content)
-                  FROM apex_application_static_files 
-                 WHERE application_id=101
-                   AND file_name='deploy.css'
-                UNION ALL
-                SELECT 3, '@layer{' || apex_util.blob_to_clob(file_content) || '}'
-                  FROM apex_application_static_files 
-                 WHERE application_id=101
-                   AND file_name='ckeditor.min.css'
-                )
-                ORDER BY 1
+                SELECT content FROM website_cssfiles_temp
             ) LOOP
                 l_css:=l_css || C1.content;
             END LOOP;
