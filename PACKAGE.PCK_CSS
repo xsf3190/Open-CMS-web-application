@@ -269,7 +269,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         FOR C IN (
             SELECT w.logo_type,
                     w.logo_img_block_size, w.logo_img_border_radius, w.logo_img_corner_shape,
-                    w.logo_font_size
+                    w.logo_font_size,
+                    w.img_corner_shape, w.img_border_radius
               FROM website w
              WHERE w.id=pWebsiteId
             )
@@ -278,7 +279,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             '--logo-img-block-size: ' || C.logo_img_block_size || 'vh;' ||
             '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
             '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
-            '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
+            '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');' ||
+            '--img-border-radius: ' || NVL(C.img_border_radius,0) || ';' ||
+            '--img-corner-shape: ' || C.img_corner_shape || ';';
         END LOOP;
 
         /*
@@ -310,11 +313,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
 
         l_css:=l_css ||
         '}';
-        
-        /*
-        l_root_css:=l_root_css || 
-        '--img-border-radius: ' || C.img_border_radius || ';';
-        */
 
         l_css:=l_css ||
         getDarkTheme;
