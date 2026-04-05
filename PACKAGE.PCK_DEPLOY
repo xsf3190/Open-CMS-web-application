@@ -485,7 +485,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     /*
     ** SET "loading="lazy" ON ALL <img> ELEMENTS EXCEPT THE FIRST WHICH WE ASSUME WILL BE IN VIEWPORT
     */
-    PROCEDURE setImgSrcset(pArticleid IN article.id%type, pMaxWidth IN website.max_width%type, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
+    PROCEDURE setImgSrcset(pArticleid IN article.id%type, pMaxWidth IN NUMBER, pBodyHtml IN OUT NOCOPY article.body_html%type) IS
         l_img_width_regex varchar2(100):='class=".*?image_resized".+?width:(.+?)%.+?src="(.+?)"';
         l_img_regex varchar2(50):='<img.+?src="(.+?)"';
         l_img_width varchar2(10);
@@ -524,15 +524,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         IF (n>0) THEN
-            /* CONVERT CONTAINER WIDTH TO PX */
-            n1:=INSTR(pMaxWidth,'rem');
-            IF (n1>0) THEN
-                l_max_width_px:=SUBSTR(pMaxWidth,1,n1-1)*16;
-            ELSE
-                l_max_width_px:=pMaxWidth;
-            END IF;
             /* remove padding 2rem */
-            l_max_width_px:=l_max_width_px-32;
+            l_max_width_px:=pMaxWidth-32;
         END IF;
         
 
@@ -732,7 +725,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             
             l_main:='<main id="main" class="ck-content flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
-            setImgSrcset(pArticleId, C.max_width, l_main);
+            setImgSrcset(pArticleId, regexp_substr(C.max_width,'\d+'), l_main);
 
             /*
             ** OPTIMAL TITLE LENGTH IS 60 CHARACTERS, I.E. 580PX
@@ -756,7 +749,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (C.page_description IS NOT NULL) THEN
                 l_description:=C.page_description;
             ELSE
-                SELECT first_text INTO l_description FROM article_chars WHERE article_id=pArticleid AND context='text';
+                FOR C1 IN (
+                    SELECT first_text FROM article_chars WHERE article_id=pArticleid AND context='text'
+                ) LOOP
+                    l_description:=C1.first_text;
+                END LOOP;
             END IF;
 
             FOR C1 IN (
