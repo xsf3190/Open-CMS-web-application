@@ -129,8 +129,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         FOR i IN 1..hd LOOP
             l_heading:=REGEXP_SUBSTR(l_text,l_heading_regex,1,i);
+            IF (i=1) THEN
+                l_first_heading:=utl_i18n.unescape_reference(apex_escape.striphtml(SUBSTR(l_heading,1,160)));
+            END IF;
+            IF (i=2) THEN
+                l_second_heading:=utl_i18n.unescape_reference(apex_escape.striphtml(SUBSTR(l_heading,1,160)));
+            END IF;
+            
             it:=REGEXP_COUNT(l_heading,l_italic_regex);
-
             FOR j IN 1..it LOOP
                 l_headings_italic:=l_headings_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_heading,l_italic_regex,1,j)));
             END LOOP;
@@ -139,14 +145,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_heading:=utl_i18n.unescape_reference(apex_escape.striphtml(l_heading));
 
             l_headings:=l_headings || l_heading;
-
-            IF (i=1) THEN
-                l_first_heading:=SUBSTR(l_heading,1,160);
-            END IF;
-            IF (i=2) THEN
-                l_second_heading:=SUBSTR(l_heading,1,160);
-            END IF;
         END LOOP;
+        
         l_headings_italic:=distinct_chars(l_headings_italic);
         l_headings:=distinct_chars(l_headings);
 
@@ -165,6 +165,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END IF;
 
         l_text:=REGEXP_REPLACE(l_text,l_heading_regex,null,1,0);
+
+        /* Get first sentence ending in a period, else a space */
+        l_first_text:=utl_i18n.unescape_reference(apex_escape.striphtml(SUBSTR(l_text,1,200)));
+        n:=INSTR(l_first_text,'.',-1);
+        IF (n=0) THEN
+            n:=INSTR(l_first_text,' ',-1);
+        END IF;
+        l_first_text:=SUBSTR(l_first_text,1,n);
 
         /*
         **  NOW PROCESS REST OF THE TEXT
@@ -196,16 +204,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_chars_italic:=distinct_chars(l_chars_italic);
         l_chars_bold_italic:=distinct_chars(l_chars_bold_italic);
 
-        l_text:=SUBSTR(l_text,1,200);
-        n:=INSTR(l_text,'.',-1);
-        IF (n=0) THEN
-            n:=INSTR(l_text,' ',-1);
-        END IF;
-        l_first_text:=SUBSTR(l_text,1,n);
-
         UPDATE article_chars
-           SET chars_italic=l_headings_italic,
-               chars_normal=l_headings,
+           SET chars_italic=l_chars_italic,
+               chars_normal=l_chars_normal,
                chars_bold_italic=l_chars_bold_italic,
                chars_bold_normal=l_chars_bold_normal,
                first_text=l_first_text,
