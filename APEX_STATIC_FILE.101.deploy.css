@@ -14,6 +14,13 @@
   box-sizing: border-box;
 }
 
+html {
+    -moz-text-size-adjust: none;
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
+    -webkit-font-smoothing: antialiased;
+}
+
 body {
     font-family: var(--text-font-family);
     font-weight: var(--text-font-wght);
