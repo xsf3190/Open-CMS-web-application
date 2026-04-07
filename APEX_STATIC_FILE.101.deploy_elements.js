@@ -55,6 +55,22 @@ export const initDialog = (data) => {
         dialog_header.removeChild(dialog_header.firstChild);
     }
 
+    try {
+        dialog_article.removeEventListener("change",changeHandler);
+    } catch (e) {
+        console.log("No changeHandler on dialog_article");
+    }
+    try {
+        dialog_article.removeEventListener("click",clickHandler);
+    } catch (e) {
+        console.log("No clickHandler on dialog_article");
+    }
+    try {
+        dialog_article.removeEventListener("input",inputHandler);
+    } catch (e) {
+        console.log("No inputHandler on dialog_article");
+    }
+
     dialog_header.insertAdjacentHTML('afterbegin',data.header);
 
     dialog_article.replaceChildren();
