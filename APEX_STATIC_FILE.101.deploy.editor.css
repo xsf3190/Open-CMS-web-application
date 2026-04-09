@@ -57,7 +57,15 @@
   }
 }
 
+/* All UI elements Inherit font */
 
+input,
+button,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+}
 
 /* DIALOG STYLES */
 
@@ -409,7 +417,6 @@ selectedcontent {
   border: none;
   color: inherit;
   background: none;
-  font: inherit;
   font-weight: 550;
   line-height: inherit;
   text-align: left;
@@ -540,11 +547,10 @@ form label {
   display: block;
   font-weight: 550;
 }
-form input[type="text"], form input[type="email"] {
-  inline-size: 100%;
-  font: inherit;
+input {
   line-height: 2;
-  /* field-sizing: content; */
+  field-sizing: content;
+  min-inline-size: 10ch;
 }
 
 form input+div {
@@ -556,7 +562,6 @@ textarea {
   field-sizing: content;
   line-height: 1.5;
   padding: 0.25em 0.5em;
-  font: inherit;
 }
 
 /* 
@@ -571,7 +576,6 @@ input:focus-visible {
 ** NB. AVOID CONFLICT WITH <theme-machine> COMPONENT IN deploy.css
 */
 dialog fieldset {
-    font: inherit;
     inline-size: fit-content;
     border-radius: 80px;
     corner-shape: superellipse(2.8);
