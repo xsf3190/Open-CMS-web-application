@@ -543,11 +543,14 @@ form {
   border-radius: 0.5em;
   padding-block: 0;
 }
+
 form label {
   display: block;
   font-weight: 550;
 }
-input {
+
+input(:not([type='radio'])),
+input(:not([type='checkbox'])) {
   line-height: 2;
   field-sizing: content;
   min-inline-size: 10ch;
@@ -605,8 +608,8 @@ dialog input[type="radio"] {
 	appearance: none;
 	background: #fff; /* this is needed for iOS. Otherwise the background just becomes black. */
 	border: 1px solid #333;
-	height: 1.5em;
-	width: 1.5em;
+	height: var(--space-s);
+	width: var(--space-s);
 	display: inline-block;
 	border-radius: 100%;
 	vertical-align: text-bottom;
