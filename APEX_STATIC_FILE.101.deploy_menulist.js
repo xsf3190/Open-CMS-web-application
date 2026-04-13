@@ -1,8 +1,110 @@
+import { callAPI, handleError } from "deploy_callAPI";
+
+const form = document.querySelector("dialog.output form");
+
+let isSending = false;
+
+const eventHandler = async (e) => {
+    /* Common controls */
+    if (e.target.classList.contains("reload")) {
+        window.location.reload();
+        return;
+    }
+    
+    if (e.target.classList.contains("close")) {
+        e.target.closest("dialog").close();
+        return;
+    }
+
+    if (e.target.classList.contains("publish")) {
+        if (isSending) {
+            console.log("Prevent double sends");
+            return;
+        }
+        const live=form.querySelector("[aria-live]");
+        const loader = form.querySelector(".loader");
+
+        isSending = true;
+        live.textContent = e.target.dataset.processing;
+        loader.style.opacity=1;
+
+        callAPI("publish-website/:ID", "POST", {})
+            .then((data) => {
+                isSending = false;
+                loader.style.opacity=0;        
+                live.replaceChildren();
+                if (data.link) {
+                    live.insertAdjacentHTML('beforeend',data.link);
+                    live.style.color = "green";
+                }
+                if (data.message) {
+                    live.insertAdjacentHTML('beforeend',data.message);
+                    live.style.color = "red";
+                }
+            })
+            .catch((error) => {
+                loader.style.opacity=0;
+                handleError(error);
+            });
+        return;
+    }
+
+    const module = await import(e.currentTarget.dataset.module)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + e.currentTarget.dataset.module);
+        return;
+    });
+    if (e.type==="click") {
+        module.clickHandler(e);
+    } else if (e.type==="input") {
+        module.inputHandler(e);
+    } else if (e.type==="change") {
+        module.changeHandler(e);
+    }
+}
+
+/* Event handlers on common dialog */
+form.addEventListener("input",eventHandler);
+form.addEventListener("click",eventHandler);
+form.addEventListener("change",eventHandler);
+
+async function load_modules() { 
+    let module_name = "deploy_edited-content";
+    const module = await import(module_name)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+        return;
+    });
+    module.init();
+
+    module_name = "deploy_fonts";
+    const fonts = await import(module_name)
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load " + module_name);
+        return;
+    });
+    const contexts = ["headings","text","logo"];
+    contexts.forEach((context) => {
+        if (localStorage.getItem(`${context}-font-urls`)) {
+            fonts.loadFont(JSON.parse(localStorage.getItem(`${context}-font-urls`)),context);
+        }
+        if (localStorage.getItem(`${context}-font-properties`)) {
+            fonts.setProperties(JSON.parse(localStorage.getItem(`${context}-font-properties`)),context);
+        }
+    })
+}
+
+load_modules();
+
 /*
  * DROPDOWN MENU ACTIONS
  * Applies keyboard interaction as described in https://www.w3.org/WAI/ARIA/apg/patterns/menubar/.
  * Also ensures that menu is closed when a menu option is activated (on click or enter).
  */
+
 class MenuNavigationHandler {
   constructor(menuEl) {
     this.menuEl = menuEl;
@@ -51,6 +153,7 @@ class MenuNavigationHandler {
         console.error("Failed to load " + module_name);
         return;
     });
+    form.dataset.module = module_name;
     module.init(event.target);
   }
 
