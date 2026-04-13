@@ -2,7 +2,7 @@
 **  GENERIC OPTIONS MODULE. FUNCTIONALITY DEPENDS ON PAGE TYPE - BLOG POST, NORMAL PAGE, ETC
 */
 
-import { dialog_article, dialog_footer, initDialog, footerHandler, liveRegion } from "deploy_elements";
+import { initDialog, liveRegion } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
@@ -13,17 +13,13 @@ export const init = (element) => {
     callAPI(endpoint, "GET")
     .then((data) => {
         initDialog(data);
-        dialog_footer.addEventListener("click", footerHandler);
-        dialog_article.addEventListener("change", changeHandler);
-        dialog_article.addEventListener("input", inputHandler);
-        dialog_article.addEventListener("click", clickHandler);
     })
     .catch((error) => {
         handleError(error);
     });
 }
 
-const changeHandler = (e) => {
+export const changeHandler = (e) => {
     callAPI(endpoint, "PUT", {name:e.target.getAttribute("name"), value:e.target.value})
         .then((data) => {
             liveRegion(data);
@@ -34,16 +30,9 @@ const changeHandler = (e) => {
 }
 
 /*
-**  DOES NOTHING !
-*/
-const clickHandler = () => {
-    console.log("clickHandler");
-};
-
-/*
 **  INPUT HANDLER SHOWS USER WHAT THEY'VE DONE
 */
-const inputHandler = (e) => {
+export const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
 
     if (id === "max-width") {
