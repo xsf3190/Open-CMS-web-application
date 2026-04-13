@@ -1,4 +1,4 @@
-import { dialog_article, dialog_footer, initDialog, footerHandler, liveRegion } from "deploy_elements";
+import { initDialog, liveRegion } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
@@ -8,10 +8,6 @@ export const init = (element) => {
     callAPI(endpoint,"GET")
         .then((data) => {
             initDialog(data);
-            dialog_article.addEventListener("change", changeHandler);
-            dialog_article.addEventListener("click", clickHandler);
-            dialog_article.addEventListener("input", inputHandler);
-            dialog_footer.addEventListener("click", footerHandler);
             replaceOptions("family",data.options);
         })
         .catch((error) => {
@@ -103,7 +99,7 @@ export const setProperties = (properties,context) => {
 /*
 ** COMMIT ALL CHANGES TO DATABASE AND REFLECT IN UI
 */
-const changeHandler = (e) => {
+export const changeHandler = (e) => {
     if (e.target.value===0) return;
 
     const context = getContext();
@@ -163,7 +159,7 @@ const changeHandler = (e) => {
 /*
 **  BUTTON HANDLER. ALL TOGGLE SWITCHES ARE IMPLEMENTED AS BUTTONS FOR ACCESSIBILITY
 */
-const clickHandler = (e) => {
+export const clickHandler = (e) => {
     if (!e.target.classList.contains("toggle")) return;
 
     const context = getContext();
@@ -216,7 +212,7 @@ const clickHandler = (e) => {
 /*
 ** UPDATE UI ON INPUT EVENTS
 */
-const inputHandler = (e) => {
+export const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
     
     if (id==="family2" && e.target.value.length>1) {
