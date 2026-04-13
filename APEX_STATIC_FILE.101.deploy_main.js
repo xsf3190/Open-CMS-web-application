@@ -1,6 +1,5 @@
 const bodydata = document.body.dataset;
 const dropdown = document.querySelector("#menulist");
-const dialog_close = document.querySelector("dialog.output .close");
 const vitalsQueue = new Set();
 const metrics = [];
 
@@ -26,53 +25,24 @@ if (narrow_viewport.matches) {
     }
 }
 
+let aud = "";
+const jwt = localStorage.getItem("refresh");
+
 if (is_editor) {
     document.getElementById("menulist-btn").style.visibility = "visible";
     set_controls();
 }
 
-let aud = "";
-const jwt = localStorage.getItem("refresh");
-
 async function load_modules() { 
-    let module_name = "deploy_menulist"
-    const menu = await import(module_name)
-    .catch((error) => {
-        console.error(error);
-        console.error("Failed to load " + module_name);
-        return;
-    });
-    new menu.MenuNavigationHandler(dropdown);
-
-    if (jwt) {
-        if (is_editor) {
-            module_name = "deploy_edited-content";
-            const module = await import(module_name)
-            .catch((error) => {
-                console.error(error);
-                console.error("Failed to load " + module_name);
-                return;
-            });
-            module.init();
-
-            module_name = "deploy_fonts";
-            const fonts = await import(module_name)
-            .catch((error) => {
-                console.error(error);
-                console.error("Failed to load " + module_name);
-                return;
-            });
-            const contexts = ["headings","text","logo"];
-            contexts.forEach((context) => {
-                if (localStorage.getItem(`${context}-font-urls`)) {
-                    fonts.loadFont(JSON.parse(localStorage.getItem(`${context}-font-urls`)),context);
-                }
-                if (localStorage.getItem(`${context}-font-properties`)) {
-                    fonts.setProperties(JSON.parse(localStorage.getItem(`${context}-font-properties`)),context);
-                }
-            })
-
-        }
+    let module_name = "deploy_menulist";
+    if (is_editor && jwt) {
+        const menu = await import(module_name)
+        .catch((error) => {
+            console.error(error);
+            console.error("Failed to load " + module_name);
+            return;
+        });
+        new menu.MenuNavigationHandler(dropdown);
     }
 
     module_name = "deploy_web_vitals5";
@@ -88,18 +58,8 @@ async function load_modules() {
     cwv.onCLS(addToVitalsQueue);
     cwv.onINP(addToVitalsQueue);
 }
-load_modules();
 
-/* 
-** DIALOG CLOSE BUTTON
-*/
-const closeHandler = (e) => {
-    if (e.target.classList.contains("reload")) {
-        window.location.reload();
-    }
-    e.target.closest("dialog").close();
-}
-dialog_close.addEventListener("click", closeHandler);
+load_modules();
 
 /*
 ** GET DROPDOWN MENU FROM LOCALSTORAGE IF USER LOGGED IN
