@@ -1,7 +1,7 @@
 /*
 **  WEBSITE LOGO
 */
-import { dialog_article, dialog_footer, initDialog, footerHandler, liveRegion } from "deploy_elements";
+import { initDialog, liveRegion } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
@@ -26,7 +26,7 @@ const loadImg = (src) => {
 /*
 ** UPDATE DATABASE ON ALL CHANGE EVENTS
 */
-const changeHandler = async (e) => {
+export const changeHandler = async (e) => {
     let id, value; 
 
     if (e.target.getAttribute("type")==="radio") {
@@ -62,7 +62,7 @@ const changeHandler = async (e) => {
 /*
 **  BUTTON HANDLER
 */
-const clickHandler = (e) => {
+export const clickHandler = (e) => {
     if (!e.target.id === "apply-svg") return;
 
     const logo_svg = document.getElementById("logo-svg");
@@ -77,7 +77,7 @@ const clickHandler = (e) => {
 /*
 ** UPDATE UI ON INPUT EVENTS
 */
-const inputHandler = (e) => {
+export const inputHandler = (e) => {
     const id = e.target.getAttribute("id");
     
     if (id === "logo-img-corner-shape") {
@@ -100,10 +100,7 @@ export const init = (element) => {
     callAPI(endpoint,"GET")
         .then((data) => {
             initDialog(data);
-            dialog_footer.addEventListener("click", footerHandler);
-            dialog_article.addEventListener("change", changeHandler);
-            dialog_article.addEventListener("input", inputHandler);
-            dialog_article.addEventListener("click", clickHandler);
+            // dialog_footer.addEventListener("click", footerHandler);
         })
         .catch((error) => {
             handleError(error);
