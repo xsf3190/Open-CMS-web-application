@@ -2,7 +2,8 @@
 /* LOGIN HANDLER - AUTHENTICATION BY EMAIL USING LINK OR PASSCODE */
 /* ************************************************************** */
 
-import { login_dialog, dropdown, bodydata, MenuNavigationHandler } from "deploy_elements";
+import { dropdown, bodydata } from "deploy_elements";
+import { callAPI, handleError } from "deploy_callAPI";
 
 const form = login_dialog.querySelector("form");
 const emailInput = form.querySelector("[name='email']");
@@ -21,19 +22,14 @@ let endpoint, intervalId;
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
-    form.reset();
-    emailError.textContent = "";
-    sendmail_msg.textContent = ""; 
-    passcodeError.textContent = ""; 
-    validate_msg.textContent = ""; 
-    login_dialog.showModal();
+    callAPI(endpoint, "GET")
+    .then((data) => {
+        initDialog(data);
+    })
+    .catch((error) => {
+            handleError(error);
+    });
 }
-
-const closeHandler = (e) => {
-    e.target.closest("dialog").close();
-}
-
-dialog_close.addEventListener("click", closeHandler);
 
 /*
 ** CALL authenticate ENDPOINT
