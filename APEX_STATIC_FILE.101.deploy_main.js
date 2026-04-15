@@ -35,7 +35,7 @@ if (is_editor) {
 
 async function load_modules() { 
     let module_name = "deploy_menulist";
-    if (is_editor && jwt) {
+    // if (is_editor && jwt) {
         const menu = await import(module_name)
         .catch((error) => {
             console.error(error);
@@ -43,7 +43,7 @@ async function load_modules() {
             return;
         });
         new menu.MenuNavigationHandler(dropdown);
-    }
+    // }
 
     module_name = "deploy_web_vitals5";
     const cwv = await import("deploy_web_vitals5")
