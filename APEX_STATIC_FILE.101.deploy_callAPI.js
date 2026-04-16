@@ -41,8 +41,8 @@ const handleError = (error) => {
 */
 const expiredToken = (token) => {
     if (!token) {
-        console.log("token missing");
-        return true;
+        console.log("Token missing. Should be a Login request.");
+        return false;
     }
     const now = Math.floor(new Date().getTime() / 1000);
     const arrayToken = token.split(".");
