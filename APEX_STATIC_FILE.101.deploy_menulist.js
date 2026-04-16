@@ -1,3 +1,4 @@
+import { getJWTClaim } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 const form = document.querySelector("dialog.output form");
@@ -49,6 +50,7 @@ const eventHandler = async (e) => {
         return;
     }
 
+    /* Function specific - module name is data property of dialog form */
     const module = await import(e.currentTarget.dataset.module)
     .catch((error) => {
         console.error(error);
@@ -97,7 +99,9 @@ async function load_modules() {
     })
 }
 
-load_modules();
+if (getJWTClaim("aud")==="owner") {
+    load_modules();
+}
 
 /*
  * DROPDOWN MENU ACTIONS
