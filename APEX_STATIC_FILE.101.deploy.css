@@ -440,7 +440,7 @@ small {
     font-weight: var(--headings-font-wght);
     font-stretch: var(--headings-font-wdth);
     font-variation-settings: var(--headings-font-variation-settings);
-    text-box: cap alphabetic;
+    /* text-box: cap alphabetic; */
     strong {
         font-weight: var(--headings-font-wght-bold, 700);
     }
