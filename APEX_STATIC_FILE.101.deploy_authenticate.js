@@ -2,239 +2,215 @@
 /* LOGIN HANDLER - AUTHENTICATION BY EMAIL USING LINK OR PASSCODE */
 /* ************************************************************** */
 
-import { dropdown, bodydata } from "deploy_elements";
+import { dropdown, output_dialog, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-const form = login_dialog.querySelector("form");
-const emailInput = form.querySelector("[name='email']");
-const emailError = form.querySelector("#emailInput + output");
-const sendmail_magic = form.querySelector(".sendmail-magic");
-const sendmail_passcode = form.querySelector(".sendmail-passcode");
-const sendmail_msg = form.querySelector(".sendmail-result");
-const passcodeInput = form.querySelector("[name='passcode']");
-const passcodeError = form.querySelector("#passcodeInput + output");
-const validate_passcode =  form.querySelector(".validate-passcode");
-const validate_msg = form.querySelector(".passcode-result");
-const loader = form.querySelector(".loader");
-const dialog_close = login_dialog.querySelector(".close");
+const form = output_dialog.querySelector("form");
 
-let endpoint, intervalId;
+let endpoint, summary, intervalId, live, loader, userid;
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
     callAPI(endpoint, "GET")
-    .then((data) => {
-        initDialog(data);
-    })
-    .catch((error) => {
-            handleError(error);
-    });
-}
-
-/*
-** CALL authenticate ENDPOINT
-*/
-const callAuthAPI = async (method, data) => {
-    let url = bodydata.resturl + endpoint.replace(":ID",bodydata.websiteid);
-  
-    // Append any query parameters to url for GET requests
-    if (method==="GET" && data) {
-      url+=data;
-    }
-
-    let headers = new Headers();
-    headers.append("Content-Type", "application/json");
-    headers.append("url", window.location.hostname);
-    headers.append("email", emailInput.value);
-    headers.append("timezone",Intl.DateTimeFormat().resolvedOptions().timeZone);
-    
-    let config = {method: method, headers: headers};
-    if (method==="POST" || method==="PUT") {
-        config["body"] = JSON.stringify(data);
-    }
-
-    const response = await fetch(url, config);
-    const result = await response.json();
-  
-    if (response.ok && result.success) {
-        return(result);
-    }
-  
-    // Error handling
-  
-    if (result.cause) {
-      throw new Error(`${response.status} - ${result.cause}`);
-    }
-
-    if (result.sqlcode) {
-      throw new Error(`${response.status} - ${result.sqlerrm}`);
-    } else {
-      throw new Error(`${result.message}`);
-    }
-}
-
-/*
-** VALIDATE EMAIL INPUT BY USER
-*/
-emailInput.addEventListener("input", () => {
-  if (emailInput.validity.valid) {
-    emailError.textContent = "";
-  } else {
-    showError();
-  }
-});
-
-/*
-** VALIDATE PASSCODE INPUT BY USER
-*/
-passcodeInput.addEventListener("input", () => {
-  if (passcodeInput.validity.valid) {
-    passcodeError.textContent = "";
-  } else {
-    showError();
-  }
-});
-
-
-const showError = () => {
-    let errors = false;
-    if (emailInput.validity.valueMissing) {
-        emailError.textContent = "You need to enter an email address.";
-        errors = true;
-    } else if (emailInput.validity.typeMismatch) {
-        emailError.textContent = "Entered value needs to be an email address.";
-        errors = true;
-    }
-
-    emailError.style.color = errors ? "red" : "green";
-  
-    errors = false;
-      
-    if (passcodeInput.validity.patternMismatch) {
-        passcodeError.textContent = "Passcode is 6-digits.";
-        errors = true;
-    }
-    
-    passcodeError.style.color = errors ? "red" : "green";
-}
-
-/*
-** USER REQUESTS MAGIC LINK TO BE EMAILED TO THEIR INBOX.
-** WHEN USER CLICKS MAGIC LINK THEIR USER RECORD IN DATABASE IS UPDATED
-** IF NORMAL LOGIN - POLL DATABASE FOR SUCCESSFUL AUTHENTICATION
-** IF REQUEST FOR WEBSITE
-*/
-sendmail_magic.addEventListener("click", () => {
-    if (!emailInput.validity.valid) {
-        showError();
-        return;
-    }
-    form.querySelector("[name='url']").value = window.location.hostname;
-    form.querySelector("[name='request_type']").value = "magic";
-    const formData = new FormData(form);
-    const formObj = Object.fromEntries(formData);
-    callAuthAPI("POST", formObj)
         .then((data) => {
-            sendmail_msg.textContent = data.message;
-            sendmail_msg.style.color = "green";
-            clearInterval(intervalId);
-            intervalId = setInterval(checkAuthStatus,3000, formObj);
+            initDialog(data);
+            live = dialog_footer.querySelector("[aria-live]");
+            loader = dialog_footer.querySelector(".loader");
+            summary = document.getElementById("error-summary");
         })
         .catch((error) => {
-            sendmail_msg.textContent = error;
-            sendmail_msg.style.color = "red";
+                handleError(error);
         });
-});
+}
+
+/*
+**  USER CLICKS "Send Link" OR "Send Code"
+*/
+let isSending = false;
+
+export const clickHandler = (e) => {
+
+    if (!e.target.classList.contains("sendmail-magic") && 
+        !e.target.classList.contains("sendmail-passcode") &&
+        !e.target.classList.contains("validate-passcode")) {
+        return;
+    }
+    console.log("start form validation")
+
+    const errors = [];
+        
+    /* Email is required */
+    const email = document.getElementById("email");
+
+    /* Reset inline errors */
+    [email].forEach((field) => {
+        field.removeAttribute("aria-invalid");
+        field.removeAttribute("aria-describedby");
+        document.getElementById(`${field.id}-error`).innerHTML = "";
+    });
+
+    /* Validate email */
+    if (!email.value.trim()) {
+        errors.push({
+            field: email,                    // Reference to the input field itself
+            message: "Enter email address",  // The specific error message to display
+            errorId: "email-error"           // The ID of the inline error container
+        });
+    }
+
+    showErrors(errors);
+
+    if (errors.length > 0) return;
+
+    if (isSending) {
+        console.log("Prevent double sends");
+        return;
+    }
+    isSending = true;
+
+    let request_type;
+    if (e.target.classList.contains("sendmail-magic")) {
+        request_type = "magic";
+    } else if (e.target.classList.contains("sendmail-passcode")) {
+        request_type = "passcode";
+    } else if (e.target.classList.contains("validate-passcode")) {
+        request_type = "verify";
+    }
+    console.log("request_type",request_type);
+
+    live.textContent = e.target.dataset.processing;
+    loader.style.opacity=1;
+
+    if (request_type!=="verify") {
+        form.querySelector("[name='url']").value = window.location.hostname;
+        form.querySelector("[name='request_type']").value = request_type;
+        const formData = new FormData(form);
+        const formObj = Object.fromEntries(formData);
+        callAPI(endpoint, "POST", formObj)
+            .then((data) => {
+                isSending = false;
+                userid=data.userid;
+                loader.style.opacity=0;        
+                live.replaceChildren();
+                live.insertAdjacentHTML('beforeend',data.message);
+                live.style.color = "red";
+                if (request_type==="magic") {
+                    clearInterval(intervalId);
+                    intervalId = setInterval(checkAuthStatus,3000, formObj);
+                } else if (request_type==="passcode") {
+                    document.getElementById("passcode").removeAttribute("disabled");
+                }
+            })
+            .catch((error) => {
+                loader.style.opacity=0;
+                handleError(error);
+            });
+    } else if (request_type==="verify") {
+        const query = "?request=passcode&user=" + userid + "&verify=" + document.getElementById("passcode").value
+        callAPI("auth-verify/:ID", "GET", query)
+            .then((data) => {
+                isSending = false;
+                loader.style.opacity=0;
+                setTokens(data);
+                live.textContent = "LOGGED ON SUCCESSFULLY";
+                live.style.color = "green";
+            })
+            .catch((error) => {
+                loader.style.opacity=0;
+                handleError(error);
+            });
+    }
+}
+
+export const inputHandler = (e) => {
+    console.log("inputHandler - do nothing");
+}
+
+export const changeHandler = (e) => {
+    console.log("changeHandler - do nothing");
+}
 
 /* 
 ** USER LOGGED IN. SET NEW TOKENS IN STORAGE AND MEMORY. UPDATE DROPDOWN MENULIST.
 */
-const setTokens = (data) => {
+const setTokens = async (data) => {
     localStorage.setItem("refresh",data.refresh);
     localStorage.setItem("menulist",data.menulist);  
     sessionStorage.setItem("token",data.token);
     dropdown.replaceChildren();
     dropdown.insertAdjacentHTML('afterbegin',data.menulist);
+    
     // Initialize menu dropdown
-    new MenuNavigationHandler(dropdown);
+    const menu = await import("deploy_menulist")
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load deploy_menulist");
+        return;
+    });
+    new menu.MenuNavigationHandler(dropdown);
 }
 
 /* 
 ** WAIT FOR USER TO CLICK MAGIC LINK SENT TO THEIR INBOX
 */
 const checkAuthStatus = (formObj) => {
-    callAuthAPI("PUT", formObj)
+    callAPI(endpoint, "PUT", formObj)
         .then((data) => {
             if (data.token) {
               setTokens(data);
-              sendmail_msg.textContent = "Logged on!";
-              sendmail_msg.style.color = "green";
-              sendmail_magic.classList.add("visually-hidden");
-              sendmail_passcode.classList.add("visually-hidden");
-              sendmail_passcode.previousElementSibling.classList.add("visually-hidden");
+              live.textContent = "LOGGED ON SUCCESSFULLY";
+              live.style.color = "green";
               clearInterval(intervalId);
             } else if (data.expired) {
-              sendmail_msg.textContent = "Expired";
-              sendmail_msg.style.color = "red";
+              live.textContent = "Expired";
+              live.style.color = "red";
               clearInterval(intervalId);
             }
         })
         .catch((error) => {
-            sendmail_msg.textContent = error;
-            sendmail_msg.style.color = "red";
+            live.textContent = error;
+            live.style.color = "red";
             clearInterval(intervalId);
         });
 }
 
-/* 
-**  USER REQUESTS 6-DIGIT PASSCODE TO BE SENT TO THEIR iNBOX
-*/
-sendmail_passcode.addEventListener("click", (e) => {
-    if (!emailInput.validity.valid) {
-        showError();
-        return;
-    }
-    form.querySelector("[name='url']").value = window.location.hostname;
-    form.querySelector("[name='request_type']").value = "passcode";
-    const formData = new FormData(form);
-    callAuthAPI("POST", Object.fromEntries(formData))
-        .then((data) => {
-            sendmail_msg.textContent = data.message;
-            sendmail_msg.style.color = "green";
-            form.querySelector("#passcodeInput").parentElement.classList.remove("visually-hidden");
-            form.querySelector(".validate-passcode").classList.remove("visually-hidden");
-            sendmail_magic.classList.add("visually-hidden");
-            sendmail_passcode.previousElementSibling.classList.add("visually-hidden");
-            sendmail_passcode.classList.add("visually-hidden");
-            validate_passcode.dataset.userid = data.userid;
-        })
-        .catch((error) => {
-            sendmail_msg.textContent = error;
-            sendmail_msg.style.color = "red";
-        });
-});
+const showErrors = (errors) => {
+    const list = summary.querySelector("ul");
+    list.innerHTML = "";
 
-/* 
-**  CHECK PASSCODE ENTERED BY USER MATCHES PASSCODE SENT TO THEIR INBOX
-*/
-validate_passcode.addEventListener("click", (e) => {
-    if (!emailInput.validity.valid) {
-        showError();
-        return;
-    }
-  
-    let query = "?request=passcode&user=" + e.target.dataset.userid 
-            + "&verify=" + form.querySelector("[name='passcode']").value;
-    callAuthAPI("GET", query)
-        .then((data) => {
-            setTokens(data);
-            validate_msg.textContent = "Logged In!";
-            validate_msg.style.color = "green";
-            validate_passcode.classList.add("visually-hidden");
-            validate_passcode.previousElementSibling.classList.add("visually-hidden");
-        })
-        .catch((error) => {
-            validate_msg.textContent = error;
-            validate_msg.style.color = "red";
+    if (errors.length > 0) {
+        errors.forEach((err) => {
+            // Inline error for each field
+            err.field.setAttribute("aria-invalid", "true");
+            err.field.setAttribute("aria-describedby", err.errorId);
+            const inlineError = document.getElementById(err.errorId);
+
+            // Clear old content
+            inlineError.innerHTML = "";
+
+            // Insert icon + message
+            const icon = document.createElement("span");
+            icon.setAttribute("aria-hidden", "true");
+            icon.textContent = "⚠️";
+            icon.style.marginRight = "0.25rem";
+
+            inlineError.appendChild(icon);
+            inlineError.appendChild(document.createTextNode(err.message));
+
+            // Add linked error message to summary list
+            const li = document.createElement("li");
+            const a = document.createElement("a");
+            a.href = `#${err.field.id}`;
+            a.textContent = err.message;
+            a.addEventListener("click", () => err.field.focus());
+            li.appendChild(a);
+            list.appendChild(li);
         });
-});
+
+        summary.hidden = false;
+        summary.focus();
+        summary.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+        summary.hidden = true;
+    }
+}
