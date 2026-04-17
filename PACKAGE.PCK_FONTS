@@ -685,8 +685,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_selected VARCHAR2(9);
         l_styles VARCHAR2(100);
         
-        TYPE t_context IS VARRAY(3) OF VARCHAR2(30);
-        l_contexts t_context:=t_context('headings','text','logo');
+        TYPE t_context IS VARRAY(4) OF VARCHAR2(30);
+        l_contexts t_context:=t_context('headings','text','logo','code');
 
         TYPE t_categories IS VARRAY(5) OF VARCHAR2(11);
         l_categories t_categories:=t_categories('serif','sans-serif','display','handwriting','monospace');
