@@ -26,6 +26,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    PROCEDURE getLoginForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    --
     FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data;
     --
     PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
@@ -201,6 +203,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
         l_bearer_token := SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
+        pck_core.log('l_bearer_token:'||l_bearer_token);
         /*
         **  "sub" in the token is the user's email address which we need to get user_ords_clients.client_secret
         */
@@ -267,6 +270,73 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     END;
 
     /*
+    ** GET USER LOGIN FORM
+    */
+    PROCEDURE getLoginForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
+        l_header LONG;
+        l_article LONG;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_header:=
+        '<input type="hidden" name="url" value="">' ||
+        '<input type="hidden" name="request_type" value="">' ||
+        '<header class="flex-items space-between">' ||
+            '<h2>Log in</h2>' ||
+        '</header>';
+        
+        l_article:=
+        '<article class="flow">' ||
+            '<div id="error-summary" tabindex="-1" class="error-summary" hidden>' ||
+                '<h4 id="error-heading">' ||
+                    '<span aria-hidden="true">⚠️</span> Oops! There is a problem.' ||
+                '</h4>' ||
+                '<ul></ul>' ||
+            '</div>' ||
+            '<p>Required fields are marked with an *</p>' ||
+            '<fieldset>' ||
+                '<legend>Email address *</legend>' ||
+                '<div>' ||
+                    '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on">' ||
+                    '<div id="email-error" class="inline-error"></div>' ||
+                '</div>' ||
+                '<div class="flex-items">' ||
+                    '<button class="button sendmail-magic" type="button" data-processing="Sent a log-in link to your inbox">Send Link</button>' ||
+                    '<div><hr><span>OR</span><hr></div>' ||
+                    '<button class="button sendmail-passcode" type="button" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
+                '</div>' ||
+            '</fieldset>' ||
+            '<p style="margin-block-start:var(--space-l)">If you received a code in your inbox</p>' ||
+            '<fieldset class="flex-items">' ||
+                '<legend>Enter code</legend>' ||
+                '<div>' ||
+                    '<input disabled type="text" id="passcode" name="passcode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
+                    '<div id="passcode-error" class="inline-error"></div>' ||
+                '</div>' ||
+                '<button class="button validate-passcode" type="button" style="align-self:flex-start">Validate</button>' ||
+            '</fieldset>' ||
+        '</article>';
+
+        l_footer:=
+        '<footer class="flex-items">' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>' ||
+        '</footer>';
+        
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+    /*
     ** USER SUBMITS EMAIL ADDRESS TO BE AUTHENTICATED
     ** - CREATE RANDOM PASSCODE OR MAGIC LINK AND SEND TO EMAIL ADDRESS
     */
@@ -326,7 +396,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     UPDATE users SET login_status='AUTH WAITING', token=l_token_hash, updated_date=current_timestamp WHERE id=l_user_id;
                 END IF;
                 
-                l_sendmail_link:=pck_core.getRestUrl || 'authenticate/' || pWebsiteId || '?request=magic&user=' || l_user_id || '&verify=' || l_token;
+                l_sendmail_link:=pck_core.getRestUrl || 'auth-verify/' || pWebsiteId || '?request=magic&user=' || l_user_id || '&verify=' || l_token;
                 l_sendmail_body:=pck_email.emailTemplate(l_request_type, l_url, l_sendmail_link);
 
             WHEN 'passcode' THEN
@@ -614,6 +684,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_url VARCHAR2(1000);
         l_url_base VARCHAR2(100);
         l_sendmail_body LONG;
+        l_json JSON_OBJECT_T;
     BEGIN
         /* 
         ** Check issued and received tokens are the same 
@@ -633,10 +704,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             IF (l_verify_data_hash<>C.original_data_hash) THEN
                 CASE pRequestType
                     WHEN 'passcode' THEN
-                        APEX_JSON.open_object;
-                        APEX_JSON.write ('success', FALSE);
-                        APEX_JSON.write ('message', 'Passcode does not match');
-                        APEX_JSON.close_object;
+                        l_json:= new JSON_OBJECT_T;
+                        l_json.put('success', TRUE);
+                        l_json.put('message', 'Passcode does not match');
+                        apex_util.prn(l_json.to_clob,false);
                     WHEN 'magic' THEN
                         htp.p('<h1>Token expired. Login again.</h1>');
                 END CASE;
@@ -651,8 +722,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             WHEN 'magic' THEN
                 
                 l_token:=apex_jwt.DECODE (
-                    p_value   => pVerifyData,
-                    p_signature_key   => UTL_RAW.cast_to_raw (l_jwt_enc_key)
+                    p_value  => pVerifyData,
+                    p_signature_key => UTL_RAW.cast_to_raw (l_jwt_enc_key)
                 );
 
                 BEGIN
