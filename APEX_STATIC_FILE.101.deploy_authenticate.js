@@ -3,7 +3,7 @@
 /* ************************************************************** */
 
 import { dropdown, output_dialog, dialog_footer, initDialog } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI, handleError, replaceTokens } from "deploy_callAPI";
 
 const form = output_dialog.querySelector("form");
 
@@ -134,9 +134,11 @@ export const changeHandler = (e) => {
 ** USER LOGGED IN. SET NEW TOKENS IN STORAGE AND MEMORY. UPDATE DROPDOWN MENULIST.
 */
 const setTokens = async (data) => {
-    localStorage.setItem("refresh",data.refresh);
+    // localStorage.setItem("refresh",data.refresh);
+    // sessionStorage.setItem("token",data.token);
+    replaceTokens(data);
+
     localStorage.setItem("menulist",data.menulist);  
-    sessionStorage.setItem("token",data.token);
     dropdown.replaceChildren();
     dropdown.insertAdjacentHTML('afterbegin',data.menulist);
     
