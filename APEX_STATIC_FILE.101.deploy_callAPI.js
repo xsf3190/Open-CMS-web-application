@@ -1,18 +1,13 @@
-import { bodydata, output_dialog, dialog_article, dialog_footer } from "deploy_elements";
+// import { bodydata, output_dialog, dialog_article, dialog_footer } from "deploy_elements";
+const bodydata = document.body.dataset;
+const output_dialog = document.querySelector("dialog.output");
+const dialog_article = output_dialog.querySelector("article");
+const dialog_footer = output_dialog.querySelector("footer");
+
+console.log("Starting deploy_callAPI.js");
 
 let access_token = sessionStorage.getItem("token");
 let refresh_token = localStorage.getItem("refresh");
-
-/* 
-** FORCE LOG OUT WHEN REFRESH TOKEN EXPIRED
-*/
-const forceLogout = () => {
-    console.log("force Logout");
-    return;
-    sessionStorage.clear();
-    localStorage.clear();
-    window.location.reload();
-}
 
 /* 
 ** COMMON ERROR HANDLER FOR IMPORTED MODULES
@@ -40,10 +35,6 @@ const handleError = (error) => {
 ** CHECK IF TOKEN EXPIRED 
 */
 const expiredToken = (token) => {
-    if (!token) {
-        console.log("Token missing. Should be a Login request.");
-        return false;
-    }
     const now = Math.floor(new Date().getTime() / 1000);
     const arrayToken = token.split(".");
     const parsedToken = JSON.parse(atob(arrayToken[1]));
@@ -78,41 +69,59 @@ const responseok = (response, result) => {
     }
 }
 
+const rotate_tokens = async () => {
+    const url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
+    let refresh_headers = new Headers();
+    refresh_headers.append("Content-Type", "application/json");
+    refresh_headers.append("url", window.location.hostname);
+    refresh_headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+    refresh_headers.append("Authorization","Bearer " + refresh_token);
+    const refresh_config = {method: "GET", headers: refresh_headers};
+    const refresh_response = await fetch(url, refresh_config);
+    const refresh_result = await refresh_response.json();
+    if (responseok(refresh_response, refresh_result)) {
+        replaceTokens(refresh_result);
+    }
+}
+
+try {
+    console.log("Check if refresh_token expired");
+    if (refresh_token) {
+        if (expiredToken(refresh_token)) {
+            throw new Error("Unauthorized - Refresh token expired");
+        }
+    }
+    console.log("..refresh_token is valid");
+} catch (e) {
+    handleError(e);
+}
+
+if (refresh_token && !access_token) {
+    console.log("refresh_token exists but access_token missing - rotate tokens");
+    rotate_tokens();
+}
+
 /* 
 ** CALL API FOR RESOURCES WITH ACCESS TOKEN
 */
 const callAPI = async (endpoint, method, data) => {
-    let url;
-
     // After logout / login this module will have "lost" its local variables
-    if (!access_token) {
-        access_token = sessionStorage.getItem("token");
-        refresh_token = localStorage.getItem("refresh");
-    }
-
-    if (expiredToken(access_token)) {
-        if (expiredToken(refresh_token)) {
-            forceLogout();
-            return;
-        }
-        url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
-        let refresh_headers = new Headers();
-        refresh_headers.append("Content-Type", "application/json");
-        refresh_headers.append("url", window.location.hostname);
-        refresh_headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
-        refresh_headers.append("Authorization","Bearer " + refresh_token);
-        const refresh_config = {method: "GET", headers: refresh_headers};
-        const refresh_response = await fetch(url, refresh_config);
-        const refresh_result = await refresh_response.json();
-        if (responseok(refresh_response, refresh_result)) {
-            replaceTokens(refresh_result);
+    // if (!access_token) {
+        // access_token = sessionStorage.getItem("token");
+        // refresh_token = localStorage.getItem("refresh");
+    // }
+    
+    /* No tokens involved in Authenticate endpoints. Obviously. */
+    if (!endpoint.includes("authenticate") && !endpoint.includes("auth-verify")) {
+        if (expiredToken(access_token)) {
+            rotate_tokens();
         }
     }
       
     const path = endpoint.replace(":ID",bodydata.websiteid)
                          .replace(":PAGE",bodydata.articleid);
     
-    url = bodydata.resturl + path;
+    let url = bodydata.resturl + path;
   
     // Append any query parameters to url for GET requests
     if (method==="GET" && data) {
@@ -138,4 +147,4 @@ const callAPI = async (endpoint, method, data) => {
     }
 }
 
-export { handleError, callAPI };
+export { handleError, callAPI, replaceTokens };
