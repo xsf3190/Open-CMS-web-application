@@ -20,12 +20,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     
     TYPE fluid_type_t IS TABLE OF fluid_type_rt;
     
-    FUNCTION getFluidTypes(pMinFontSize IN NUMBER, pMinWidthPx IN NUMBER, pMinScale IN NUMBER, pMaxFontSize IN NUMBER, pMaxWidthPx IN NUMBER, pMaxScale IN NUMBER) RETURN fluid_type_t IS
-        l_fluid_type fluid_type_t:=fluid_type_t();
+    FUNCTION getFluidTypes( pMinWidthPx IN NUMBER, pMinFontSizePx IN NUMBER, pMinScale IN NUMBER, pMaxWidthPx IN NUMBER, pMaxFontSizePx IN NUMBER, pMaxScale IN NUMBER) RETURN VARCHAR2 IS
+        l_fluid_types LONG;
         l_min_font NUMBER;
         l_max_font NUMBER;
         l_min_width NUMBER;
         l_max_width NUMBER;
+        l_min_font_size NUMBER;
+        l_max_font_size NUMBER;
         l_slope NUMBER;
         l_intersect NUMBER;
         l_clamp VARCHAR2(200);
@@ -55,39 +57,40 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             END IF;
         END;
 
-        PROCEDURE addFluidType(pProperty IN VARCHAR2) IS 
+        FUNCTION addFluidType(pProperty IN VARCHAR2) RETURN VARCHAR2 IS 
         BEGIN
-            l_fluid_type.EXTEND;
-            l_fluid_type(l_fluid_type.LAST).property:=pProperty;
-            l_clamp:='clamp(' || round4dp(l_min_font) || 'rem,' || round4dp(l_intersect) || 'rem + ' || round4dp(l_slope * 100) || 'cqi,' || round4dp(l_max_font) || 'rem)';
-            l_fluid_type(l_fluid_type.LAST).value:=l_clamp;
+            RETURN(pProperty || ':' || 'clamp(' || round4dp(l_min_font) || 'rem,' || round4dp(l_intersect) || 'rem + ' || round4dp(l_slope * 100) || 'cqi,' || round4dp(l_max_font) || 'rem);');
         END;
 
     BEGIN
+        /* Convert pixels to rem */
         l_min_width:=pMinWidthPx/16; 
         l_max_width:=pMaxWidthPx/16;
+        l_min_font_size:=pMinFontSizePx/16;
+        l_max_font_size:=pMaxFontSizePx/16;
+
         FOR i IN -2 .. 6 LOOP
             IF (i<0) THEN
-                l_min_font:=pMinFontSize/(pMinScale**ABS(i));
-                l_max_font:=pMaxFontSize/(pMaxScale**ABS(i));
+                l_min_font:=l_min_font_size/(pMinScale**ABS(i));
+                l_max_font:=l_max_font_size/(pMaxScale**ABS(i));
             ELSE
-                l_min_font:=pMinFontSize*(pMinScale**i);
-                l_max_font:=pMaxFontSize*(pMaxScale**i);
+                l_min_font:=l_min_font_size*(pMinScale**i);
+                l_max_font:=l_max_font_size*(pMaxScale**i);
             END IF;
             l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
             l_intersect:= -l_min_width * l_slope + l_min_font;
-            addFluidType('--step-' || i);
+            l_fluid_types:=l_fluid_types || addFluidType('--step-' || i);
         END LOOP;
 
         FOR i IN 1..l_spaces.COUNT LOOP
-            l_min_font:=pMinFontSize*l_spaces(i).multiplier;
-            l_max_font:=pMaxFontSize*l_spaces(i).multiplier;
+            l_min_font:=l_min_font_size*l_spaces(i).multiplier;
+            l_max_font:=l_max_font_size*l_spaces(i).multiplier;
             l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
             l_intersect:= -l_min_width * l_slope + l_min_font;
-            addFluidType('--space-' || l_spaces(i).dimension);
+            l_fluid_types:=l_fluid_types || addFluidType('--space-' || l_spaces(i).dimension);
         END LOOP;
 
-        RETURN l_fluid_type;
+        RETURN l_fluid_types;
     END;
 
     /*
@@ -104,12 +107,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             )
         LOOP
             l_tokens:=
-            '--max-width: ' || C.max_width || ';';
-
-            l_fluid_types:=getFluidTypes(C.min_font_size, C.min_width_px, C.min_scale, C.max_font_size, C.max_width_px, C.max_scale);
-            FOR i IN 1..l_fluid_types.COUNT LOOP
-                l_tokens:=l_tokens || l_fluid_types(i).property || ': ' || l_fluid_types(i).value || ';';
-            END LOOP;
+            '--max-width: ' || C.max_width || ';' ||
+            getFluidTypes(C.min_width_px, C.min_font_size, C.min_scale, C.max_width_px, C.max_font_size, C.max_scale);
         END LOOP;
 
         -- BUILD @FONT-FACE RULES AND font-family token FOR EACH CONTEXT/FONT
@@ -261,8 +260,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ':root {' ||
             getColours ||
             getTypography(pWebsiteid) ||
-            '-webkit-text-size-adjust: none;' ||
-            'text-size-adjust: none;' ||
             '--focus-outline: 2px solid var(--color-link);';
 
         -- USERS CHOOSE FROM 3 DIFFERENT LOGO OPTIONS - IMAGE, SVG AND FONT
@@ -328,9 +325,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             l_css:=l_css || C.editor_fontfaces;
         END LOOP;
 
+        -- Font faces for Google fonts
+        FOR C IN (
+            SELECT id, family, menu
+              FROM font
+             ORDER BY id
+        ) LOOP
+            dbms_lob.append(l_css,'@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ') format("woff2");}');
+            -- l_css:=l_css ||
+            -- 'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}';
+        END LOOP;
+
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
 
         INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_TOKENS, l_sha1, l_css);
+
+        dbms_lob.freetemporary(l_css);
+        EXCEPTION WHEN OTHERS THEN dbms_lob.freetemporary(l_css); RAISE;
     END;
 
     /*
@@ -347,20 +358,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         ':root {' ||
             getColours ||
             getTypography(pWebsiteid) ||
-            '-webkit-text-size-adjust: none;' ||
-            'text-size-adjust: none;' ||
             '--focus-outline: 2px solid var(--color-link);';
         
         -- CONFIGURE ANY SELECTED LOGO OPTION
         FOR C IN (
             SELECT w.logo_type,
                     w.logo_img_block_size, w.logo_img_border_radius, w.logo_img_corner_shape,
-                    w.logo_font_size
+                    w.logo_font_size,
+                    w.img_corner_shape, w.img_border_radius
               FROM website w
              WHERE w.id=pWebsiteId
-               AND w.logo_type IS NOT NULL
             )
         LOOP
+            l_root_css:=l_root_css || 
+            '--img-border-radius: ' || NVL(C.img_border_radius,0) || ';' ||
+            '--img-corner-shape: ' || C.img_corner_shape || ';';
+            IF (C.logo_type IS NULL) THEN
+                CONTINUE;
+            END IF;
             CASE C.logo_type
                 WHEN 'img' THEN
                     l_root_css:=l_root_css || 
