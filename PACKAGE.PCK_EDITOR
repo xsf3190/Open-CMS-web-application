@@ -178,13 +178,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article CLOB;
         l_footer LONG;
         l_json JSON_OBJECT_T;
+        TYPE t_scales IS VARRAY(3) OF NUMBER;
+        l_scales t_scales:=t_scales(1.2, 1.25, 1.68);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         /* Form depends on Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.max_width, w.img_border_radius, au.asset_id
+            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.img_border_radius, au.asset_id,
+                    w.max_width, w.min_width_px, w.min_font_size, w.min_scale, w.max_width_px, w.max_font_size, w.max_scale
               FROM website w, website_article wa, article a, asset_used au
              WHERE w.id=pWebsiteId 
                AND wa.website_id=w.id 
@@ -213,6 +216,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '<fieldset>' ||
                     '<legend>Resize width of main content</legend>' ||
                     '<input type="range" id="max-width" name="max-width" min="900" max="1200" value="' || regexp_substr(C.max_width,'\d+') || '" step="10">' ||
+                '</fieldset>' ||
+                '<fieldset class="flex-items">' ||
+                    '<legend>Fluid Types - Minimum Viewport</legend>' ||
+                    '<div>' ||
+                        '<label for="min-width-px">Width (px)</label>' ||
+                        '<input type="number" name="min-width-px" id="min-width-px" min="340" value="' || C.min_width_px || '" max="360" step="10"/>' ||
+                    '</div>' ||
+                    '<div>' ||
+                        '<label for="min-font-size">Font size (px)</label>' ||
+                        '<input type="number" name="min-font-size" id="min-font-size" min="16" value="' || C.min_font_size || '" max="24"/>' ||
+                    '</div>' ||
+                    '<div>' ||
+                        '<label for="min-scale">Scale</label>' ||
+                        '<select name="min-scale" id="min-scale">' ||
+                        '<button>' ||
+                            '<selectedcontent></selectedcontent>' ||
+                            '<span class="arrow"></span>' ||
+                        '</button>';
+                        FOR i IN 1..l_scales.COUNT LOOP
+                            l_article:=l_article ||
+                            '<option value="' || l_scales(i) || '"' || CASE WHEN l_scales(i)=C.min_scale THEN ' selected' END || '>' || l_scales(i) || '</option>';
+                        END LOOP;
+                        l_article:=l_article ||
+                        '</select>' ||
+                    '</div>' ||
+                '</fieldset>' ||
+                '<fieldset class="flex-items">' ||
+                    '<legend>Fluid Types - Maximum Viewport</legend>' ||
+                    '<div>' ||
+                        '<label for="max-width-px">Width (px)</label>' ||
+                        '<input type="number" name="max-width-px" id="max-width-px" min="900" value="' || C.max_width_px || '" max="1500" step="50"/>' ||
+                    '</div>' ||
+                    '<div>' ||
+                        '<label for="max-font-size">Font size (px)</label>' ||
+                        '<input type="number" name="max-font-size" id="max-font-size" min="19" value="' || C.max_font_size || '" max="32"/>' ||
+                    '</div>' ||
+                    '<div>' ||
+                        '<label for="max-scale">Scale</label>' ||
+                        '<select name="max-scale" id="max-scale">' ||
+                        '<button>' ||
+                            '<selectedcontent></selectedcontent>' ||
+                            '<span class="arrow"></span>' ||
+                        '</button>';
+                        FOR i IN 1..l_scales.COUNT LOOP
+                            l_article:=l_article ||
+                            '<option value="' || l_scales(i) || '"' || CASE WHEN l_scales(i)=C.max_scale THEN ' selected' END || '>' || l_scales(i) || '</option>';
+                        END LOOP;
+                        l_article:=l_article ||
+                        '</select>' ||
+                    '</div>' ||
                 '</fieldset>';
                 IF (C.asset_id IS NOT NULL) THEN
                     FOR C1 IN (
@@ -281,6 +334,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
             WHEN 'img-corner-shape' THEN
                 UPDATE website SET img_corner_shape='superellipse(' || l_value || ')', updated_date=current_timestamp WHERE id=pWebsiteid;
+
+            WHEN 'min-width-px' THEN
+                UPDATE website SET min_width_px=l_value, updated_date=current_timestamp WHERE id=pWebsiteid;
+
+            WHEN 'min-font-size' THEN
+                UPDATE website SET min_font_size=l_value, updated_date=current_timestamp WHERE id=pWebsiteid;
+
+            WHEN 'min-scale' THEN
+                UPDATE website SET min_scale=l_value, updated_date=current_timestamp WHERE id=pWebsiteid;
+
+            WHEN 'max-width-px' THEN
+                UPDATE website SET max_width_px=l_value, updated_date=current_timestamp WHERE id=pWebsiteid;
+
+            WHEN 'max-font-size' THEN
+                UPDATE website SET max_font_size=l_value, updated_date=current_timestamp WHERE id=pWebsiteid;
+
+            WHEN 'max-scale' THEN
+                UPDATE website SET max_scale=l_value, updated_date=current_timestamp WHERE id=pWebsiteid;
+
 
             WHEN 'excerpt' THEN
                 UPDATE article SET excerpt=l_value, updated_date=current_timestamp  WHERE id=pArticleid;
