@@ -372,19 +372,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     **  Build Dropdown Component with "Log In" and "Ecology" buttons
     */
     FUNCTION buildDropdown(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
-        l_authenticate VARCHAR2(250);
-        l_html LONG;
-        l_uri_template ords_endpoints.uri_template%type;
     BEGIN
-        FOR C IN (
-            SELECT o.label, o.uri_template, o.method
-              FROM ords_endpoints o
-             WHERE INSTR(o.uri_template,'authenticate')>0
-        ) LOOP
-            l_authenticate:=pck_sec.addMenuButton(C.uri_template, C.method, C.label);
-        END LOOP;
-
-        l_html:=
+        RETURN(
         '<div role="banner" class="controls flex-items space-between">' ||
             '<button type="button" popovertarget="navlist" id="navlist-btn" aria-label="Site menu" class="popover-btn">' ||
                 '<svg height="1rem" viewBox="0 0 32 32" aria-hidden="true" focusable="false">' ||
@@ -406,11 +395,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 '</svg>' ||
             '</button>' ||
             '<div id="menulist" role="menu" aria-labelledby="menulist-btn" popover>' ||
-                l_authenticate ||
+                '<button type="button" role="menuitem" tabindex="-1" data-endpoint="authenticate/:ID" data-method="GET">' ||
+                    '<span aria-hidden="true" style="color:blue">👤</span>' ||
+                    'Log In' ||
+                '</button>' ||
             '</div>' ||
-        '</div>';
-
-        RETURN(l_html);
+        '</div>');
     END;
 
     /*
@@ -756,6 +746,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END LOOP;
             END IF;
 
+            /*
+            ** Build font preloads to minimise CLS
+            */
             FOR C1 IN (
                 SELECT context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic
                   FROM article_chars
@@ -818,7 +811,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<div class="topnav flex-items space-between">' ||
                         l_logo || l_nav || pColorScheme || 
                     '</div>' ||    
-                    l_header || l_main || l_collection || l_article_links || l_footer || buildLoginForm || buildContentDialog ||
+                    l_header || l_main || l_collection || l_article_links || l_footer || buildContentDialog ||
                 '</body>' ||
                 '<form action="https://codepen.io/pen/define" method="POST" target="_blank"><input type="hidden" name="data" value=""></form>' ||
                 '</html>';
