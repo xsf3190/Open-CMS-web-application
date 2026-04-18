@@ -105,16 +105,11 @@ if (refresh_token && !access_token) {
 ** CALL API FOR RESOURCES WITH ACCESS TOKEN
 */
 const callAPI = async (endpoint, method, data) => {
-    // After logout / login this module will have "lost" its local variables
-    // if (!access_token) {
-        // access_token = sessionStorage.getItem("token");
-        // refresh_token = localStorage.getItem("refresh");
-    // }
     
     /* No tokens involved in Authenticate endpoints. Obviously. */
     if (!endpoint.includes("authenticate") && !endpoint.includes("auth-verify")) {
         if (expiredToken(access_token)) {
-            rotate_tokens();
+            await rotate_tokens();
         }
     }
       
