@@ -31,6 +31,11 @@ const jwt = localStorage.getItem("refresh");
 if (is_editor) {
     document.getElementById("menulist-btn").style.visibility = "visible";
     set_controls();
+    console.group("Ignore Font preload errors");
+    console.warn("The Editor site loads fonts directly from Google");
+    console.warn("The Live site loads self-hosted fonts");
+    console.log("We include self-hosted preload directives in the Editor to optimise deployment processing");
+    console.groupEnd();
 }
 
 async function load_modules() { 
