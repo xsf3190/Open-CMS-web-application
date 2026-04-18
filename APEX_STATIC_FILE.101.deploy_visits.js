@@ -13,8 +13,6 @@ export const init = (element) => {
     callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=1&handler=change")
     .then((data) => {
         initDialog(data);
-        dialog_header.addEventListener("change", changeHandler);
-        dialog_footer.addEventListener("click", clickHandler);
     })
     .catch((error) => {
             handleError(error);
@@ -24,7 +22,7 @@ export const init = (element) => {
 /*
 ** NEW REPORT REQUEST
 */
-const changeHandler = (e) => {
+export const changeHandler = (e) => {
     selectedReport = document.getElementById("report").value;
     callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=1&handler=change")
     .then((data) => {
@@ -41,7 +39,7 @@ const changeHandler = (e) => {
 /*
 ** NEW REPORT PAGE REQUEST
 */
-const clickHandler = (e) => {
+export const clickHandler = (e) => {
     console.log(" e.target.dataset.page", e.target.dataset.page);
     callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=" + e.target.dataset.page + "&handler=click")
     .then((data) => {
