@@ -90,6 +90,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_text CLOB:=pContent;
 
+        code pls_integer;
         hd pls_integer;
         it pls_integer;
         bi pls_integer;
@@ -106,6 +107,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_headings LONG;
         l_headings_italic LONG;
+
+        l_code LONG;
+        l_codes LONG;
+        l_codes_italic LONG;
+        
         l_chars_normal LONG;
         l_chars_italic LONG;
         l_chars_bold_normal LONG;
@@ -117,14 +123,45 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
     BEGIN
         /* 
-        ** REMOVE <code></code>  AND <p>&nbsp;</p>
+        ** REMOVE <p>&nbsp;</p>
         ** 1 - start at beginnning
         ** 0 - replace all occurrences
         ** 'n' - ignore line breaks 
         */
-        l_text:=REGEXP_REPLACE(l_text,l_code_regex,null,1,0,'n');
+        -- l_text:=REGEXP_REPLACE(l_text,l_code_regex,null,1,0,'n');
         l_text:=REGEXP_REPLACE(l_text,l_nbsp_regex,null,1,0);
 
+        /* CODE */
+        code:=NVL(REGEXP_COUNT(l_text,l_code_regex),0);
+        FOR i IN 1..code LOOP
+            l_code:=REGEXP_SUBSTR(l_text,l_code_regex,1,i);
+            it:=REGEXP_COUNT(l_code,l_italic_regex);
+            FOR j IN 1..it LOOP
+                l_codes_italic:=l_codes_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_code,l_italic_regex,1,j)));
+            END LOOP;
+            l_code:=REGEXP_REPLACE(l_code,l_italic_regex,null,1,0);
+            l_code:=utl_i18n.unescape_reference(apex_escape.striphtml(l_code));
+
+            l_codes:=l_codes || l_code;
+        END LOOP;
+        l_codes_italic:=distinct_chars(l_codes_italic);
+        l_codes:=distinct_chars(l_codes);
+
+        UPDATE article_chars
+           SET chars_italic=l_codes_italic,
+               chars_normal=l_codes,
+               updated_date=current_timestamp
+         WHERE article_id=pArticleId
+           AND context='code';
+        
+        IF (sql%rowcount=0) THEN
+            INSERT INTO article_chars(article_id, context, chars_italic, chars_normal)
+            VALUES (pArticleId, 'code', l_codes_italic, l_codes);
+        END IF;
+
+        l_text:=REGEXP_REPLACE(l_text,l_code_regex,null,1,0);
+
+        /* HEADINGS */
         hd:=NVL(REGEXP_COUNT(l_text,l_heading_regex),0);
 
         FOR i IN 1..hd LOOP
@@ -284,10 +321,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             q'{LISTAGG(axis||':'||value,',') WITHIN GROUP (ORDER BY CASE WHEN ASCII(axis)>100 THEN 1 ELSE 2 END) AS axes }' ||
         'FROM data ' ||
         'GROUP BY font_id, family';
+        -- pck_core.log(l_sql);
 
-        EXECUTE IMMEDIATE l_sql 
-            INTO l_font_id, l_family, l_nb_axes, l_axes
-            USING pWebsiteid, pContext;
+        BEGIN
+            EXECUTE IMMEDIATE l_sql 
+                INTO l_font_id, l_family, l_nb_axes, l_axes
+                USING pWebsiteid, pContext;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                pck_core.log('pContext:'||pContext);
+                RETURN;
+        END;
         
         
         l_axes:=l_axes||',';
@@ -364,6 +408,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_chars_used t_chars_used:=t_chars_used( 
             'headings' => tt_chars_used(null,null,null,null), 
             'text' => tt_chars_used(null,null,null,null), 
+            'code' => tt_chars_used(null,null,null,null), 
             'logo' => tt_chars_used(null,null,null,null));
 
         l_context VARCHAR2(8);
@@ -539,7 +584,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
              WHERE w.id=pWebsiteid
                AND wf.website_id=w.id
                AND wf.font_id=f.id
-             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
+             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3,'code',4)
         ) LOOP
             CASE C.context
                 WHEN 'logo' THEN
@@ -552,6 +597,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 WHEN 'headings' THEN
                     l_html:=l_html ||
                     '<h2>' || C.family || ' headings</h2>';
+                    IF (C.italic=1) THEN
+                        l_html:=l_html ||
+                        '<h3><i>Also in italics</i></h2>';
+                    END IF;
 
                 WHEN 'text' THEN
                     l_html:=l_html || 
@@ -581,6 +630,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     END IF;
                     l_html:=l_html ||
                     '<p>Nb. To change Logo text just click on it and type</p>';
+
+                WHEN 'code' THEN
+                    l_html:=l_html ||
+                    '<pre><code>' || C.family || ' Code</code></pre>';
             END CASE;
         END LOOP;
         RETURN (l_html);
