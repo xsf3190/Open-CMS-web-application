@@ -804,7 +804,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<link rel="icon" href="/images/favicon.svg">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                 '</head>' ||
-                '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '">' || 
+                '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" class="flow">' || 
                     l_collection_css ||
                     '<a href="#main" class="skip-link">Skip to main content</a>' ||
                     pDropdown || 
