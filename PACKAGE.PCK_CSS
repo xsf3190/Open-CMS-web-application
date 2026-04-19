@@ -294,7 +294,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                AND fav.website_id(+)=wf.website_id
                AND fav.axis(+)=m.axis
                AND fav.context(+)=wf.context
-             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), rn
+             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3,'code',4), rn
         ) LOOP
             l_css:=l_css || 
                 writeToken(C.context, C.axis, C.value);
@@ -320,7 +320,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
               FROM font f, website_font wf
              WHERE f.id=wf.font_id
                AND wf.website_id=pWebsiteId
-             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
+             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3,'code',4)
         ) LOOP
             l_css:=l_css || C.editor_fontfaces;
         END LOOP;
@@ -399,7 +399,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
              WHERE wf.website_id=pWebsiteid
                AND fav.website_id=wf.website_id
                AND fav.context=wf.context
-             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3), axis
+             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3,'code',4), axis
         ) LOOP
             l_root_css:=l_root_css ||
                 writeToken(C.context, C.axis, C.value);
