@@ -203,7 +203,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
         l_bearer_token := SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
-        pck_core.log('l_bearer_token:'||l_bearer_token);
+        
         /*
         **  "sub" in the token is the user's email address which we need to get user_ords_clients.client_secret
         */
@@ -297,7 +297,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             '<fieldset>' ||
                 '<legend>Email address *</legend>' ||
                 '<div>' ||
-                    '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on">' ||
+                    '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
                     '<div id="email-error" class="inline-error"></div>' ||
                 '</div>' ||
                 '<div class="flex-items">' ||
