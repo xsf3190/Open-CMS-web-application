@@ -75,7 +75,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 l_collection_html ||
                 l_collection_css ||
                 '<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>' ||
-                pck_deploy.buildLoginForm || pck_deploy.buildContentDialog ||
+                pck_deploy.buildContentDialog ||
             '</body>';
 
             -- pck_fonts.getFontFiles(pWebsiteid, pArticleid);
