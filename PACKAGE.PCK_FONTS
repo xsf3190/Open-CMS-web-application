@@ -1080,6 +1080,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     l_api_url:='1,' || l_closest_700_i;
                 END IF;
                 updateFontAxisValue(pWebsiteid, pContext, 'wght', NVL(l_closest_700,l_closest_700_i));
+        
+            WHEN 'code' THEN
+                l_closest_400:=closestWght(pFontid,'normal',400);
+                l_closest_400_i:=closestWght(pFontid,'italic',400);
+                IF (l_closest_400 IS NOT NULL) THEN
+                    l_api_url:='0,'|| l_closest_400 || CASE WHEN l_closest_400_i IS NOT NULL THEN ';1,' || l_closest_400_i END;
+                ELSE
+                    l_api_url:='1,' || l_closest_400_i;
+                END IF;
+                updateFontAxisValue(pWebsiteid, pContext, 'wght', NVL(l_closest_400,l_closest_400_i));
         END CASE;
 
         l_api_url:='ital,wght@' || l_api_url;
