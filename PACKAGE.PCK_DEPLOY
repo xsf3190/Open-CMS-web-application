@@ -863,7 +863,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB, pSha1 IN VARCHAR2 DEFAULT NULL) IS
             l_sha1 website_files.sha1%type;
         BEGIN
-            dbms_output.put_line('new version : '||pFilename);
+            -- dbms_output.put_line('new version : '||pFilename);
             l_sha1:=NVL(pSha1,LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1)));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content:=pFileContent;
@@ -914,7 +914,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                   FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) 
                  WHERE sha1 IS NOT NULL
             ) LOOP
-                dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
+                -- dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
                 IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
                     pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
                 ELSIF (l_deploy_files(C.sha1).file_content_b IS NOT NULL) THEN
@@ -1153,7 +1153,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
              WHERE wf.website_id(+)=pWebsiteid
                AND wf.path(+)=s.path
         ) LOOP
-        pck_core.log(c.path || ':' || c.source_sha1  || ':' || c.deployed_sha1);
             IF (C.source_sha1=C.deployed_sha1) THEN
                 l_files.put(C.path, C.deployed_sha1);
             ELSE
