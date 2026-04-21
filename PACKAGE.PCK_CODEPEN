@@ -79,7 +79,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
             '</body>';
 
             -- pck_fonts.getFontFiles(pWebsiteid, pArticleid);
-            pck_css.buildEditorTokens(pWebsiteid);
+            pck_css.buildEditorTokens(pWebsiteid,pCodepen=>TRUE);
             pck_css.buildCSS(pEditor=>TRUE);
 
             FOR C1 IN (
