@@ -5,7 +5,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
     PROCEDURE buildCSS(pEditor IN BOOLEAN);
     --
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type);
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pCodepen IN BOOLEAN DEFAULT FALSE);
     --
     PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type);
     --
@@ -249,7 +249,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     /* 
     ** BUILD FONT-FACE RULES AND DESIGN TOKENS FOR EDITOR SITE
     */
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type) IS
+    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pCodepen IN BOOLEAN) IS
         l_font_variation_settings VARCHAR2(4000);
         l_css CLOB;
         l_sha1 website_cssfiles_temp.sha1%type;
@@ -326,15 +326,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END LOOP;
 
         -- Font faces for Google fonts
-        FOR C IN (
-            SELECT id, family, menu
-              FROM font
-             ORDER BY id
-        ) LOOP
-            dbms_lob.append(l_css,'@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ') format("woff2");}');
-            -- l_css:=l_css ||
-            -- 'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}';
-        END LOOP;
+        IF (NOT pCodepen) THEN
+            FOR C IN (
+                SELECT id, family, menu
+                  FROM font
+                 ORDER BY id
+            ) LOOP
+                dbms_lob.append(l_css,'@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ') format("woff2");}');
+                -- l_css:=l_css ||
+                -- 'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}';
+            END LOOP;
+        END IF;
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
 
@@ -427,7 +429,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     END;
 
     /*
-    ** BUILD CORE CSS STYLES FOR EDITOR SITE
+    ** BUILD OPTIMISED CORE CSS STYLES
+    **  EDITOR SITE => deploy.editor.css || deploy.css
+    **  LIVE SITE => deploy.css
     */
     PROCEDURE buildCSS(pEditor IN BOOLEAN) IS
         l_css CLOB;
@@ -438,6 +442,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             INSERT INTO website_cssfiles_temp(sha1, path, content) VALUES (l_sha1,pPath, pContent);
         END;
     BEGIN
+        l_css:='@layer ckeditor, dogface;';
         FOR C IN (
             SELECT file_name, CAST(last_updated_on AS TIMESTAMP) updated_date, apex_util.blob_to_clob(file_content) file_content
               FROM apex_application_static_files 
