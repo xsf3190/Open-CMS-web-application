@@ -1,0 +1,65 @@
+.table {
+  display: table;
+  margin: 0.9em auto;
+}
+.table table {
+  border: 1px double #b3b3b3;
+  border-collapse: collapse;
+  border-spacing: 0;
+  height: 100%;
+  width: 100%;
+}
+.table table td,
+.table table th {
+  border: 1px solid #bfbfbf;
+  min-width: 2em;
+  padding: 0.4em;
+}
+.table table th {
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 700;
+}
+@media print {
+  .table table {
+    height: auto;
+  }
+}
+.ck-content[dir="rtl"] .table th {
+  text-align: right;
+}
+.ck-content[dir="ltr"] .table th {
+  text-align: left;
+}
+:root {
+  --ck-color-selector-caption-background: #f7f7f7;
+  --ck-color-selector-caption-text: #333;
+}
+.table > figcaption {
+  background-color: var(--ck-color-selector-caption-background);
+  caption-side: top;
+  color: var(--ck-color-selector-caption-text);
+  display: table-caption;
+  font-size: 0.75em;
+  outline-offset: -1px;
+  padding: 0.6em;
+  text-align: center;
+  word-break: break-word;
+}
+@media (forced-colors: active) {
+  .table > figcaption {
+    background-color: unset;
+    color: unset;
+  }
+}
+.table .ck-table-resized {
+  table-layout: fixed;
+}
+.table table {
+  overflow: hidden;
+}
+.table td,
+.table th {
+  overflow-wrap: break-word;
+  position: relative;
+}
+}
