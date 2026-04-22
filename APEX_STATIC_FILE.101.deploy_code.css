@@ -1,0 +1,24 @@
+code {
+  background-color: hsla(0, 0%, 78%, 0.3);
+  border-radius: 2px;
+  padding: 0.15em;
+  font-size-adjust: 0.507;
+}
+pre {
+  background: hsla(0, 0%, 78%, 0.3);
+  border: 1px solid #c4c4c4;
+  border-radius: 2px;
+  color: #353535;
+  direction: ltr;
+  font-style: normal;
+  min-width: 200px;
+  padding: 1em;
+  tab-size: 4;
+  text-align: left;
+  white-space: pre-wrap;
+}
+pre code {
+  background: unset;
+  border-radius: 0;
+  padding: 0;
+}
