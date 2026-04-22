@@ -442,7 +442,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             INSERT INTO website_cssfiles_temp(sha1, path, content) VALUES (l_sha1,pPath, pContent);
         END;
     BEGIN
-        l_css:='@layer ckeditor, dogface;';
         FOR C IN (
             SELECT file_name, CAST(last_updated_on AS TIMESTAMP) updated_date, apex_util.blob_to_clob(file_content) file_content
               FROM apex_application_static_files 
