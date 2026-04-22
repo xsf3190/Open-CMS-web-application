@@ -1,0 +1,123 @@
+:root {
+  --ck-color-image-caption-background: #f7f7f7;
+  --ck-color-image-caption-text: #333;
+}
+.image > figcaption {
+  background-color: var(--ck-color-image-caption-background);
+  caption-side: bottom;
+  color: var(--ck-color-image-caption-text);
+  display: table-caption;
+  font-size: 0.75em;
+  outline-offset: -1px;
+  padding: 0.6em;
+  word-break: break-word;
+}
+@media (forced-colors: active) {
+  .image > figcaption {
+    background-color: unset;
+    color: unset;
+  }
+}
+img.image_resized {
+  height: auto;
+}
+.image.image_resized {
+  box-sizing: border-box;
+  display: block;
+  max-width: 100%;
+}
+.image.image_resized img {
+  width: 100%;
+}
+.image.image_resized > figcaption {
+  display: block;
+}
+:root {
+  --ck-image-style-spacing: 1.5em;
+  --ck-inline-image-style-spacing: calc(var(--ck-image-style-spacing) / 2);
+}
+.image.image-style-block-align-left,
+.image.image-style-block-align-right {
+  max-width: calc(100% - var(--ck-image-style-spacing));
+}
+.image.image-style-align-left,
+.image.image-style-align-right {
+  clear: none;
+}
+.image.image-style-side {
+  float: right;
+  margin-left: var(--ck-image-style-spacing);
+  max-width: 50%;
+}
+.image.image-style-align-left {
+  float: left;
+  margin-right: var(--ck-image-style-spacing);
+}
+.image.image-style-align-right {
+  float: right;
+  margin-left: var(--ck-image-style-spacing);
+}
+.image.image-style-block-align-right {
+  margin-left: auto;
+  margin-right: 0;
+}
+.image.image-style-block-align-left {
+  margin-left: 0;
+  margin-right: auto;
+}
+.image-style-align-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+.image-style-align-left {
+  float: left;
+  margin-right: var(--ck-image-style-spacing);
+}
+.image-style-align-right {
+  float: right;
+  margin-left: var(--ck-image-style-spacing);
+}
+p + .image.image-style-align-left,
+p + .image.image-style-align-right,
+p + .image.image-style-side {
+  margin-top: 0;
+}
+.image-inline.image-style-align-left,
+.image-inline.image-style-align-right {
+  margin-bottom: var(--ck-inline-image-style-spacing);
+  margin-top: var(--ck-inline-image-style-spacing);
+}
+.image-inline.image-style-align-left {
+  margin-right: var(--ck-inline-image-style-spacing);
+}
+.image-inline.image-style-align-right {
+  margin-left: var(--ck-inline-image-style-spacing);
+}
+.image {
+  clear: both;
+  display: table;
+  margin: 0.9em auto;
+  min-width: 50px;
+  text-align: center;
+}
+.image img {
+  display: block;
+  height: auto;
+  margin: 0 auto;
+  max-width: 100%;
+  min-width: 100%;
+}
+.image-inline {
+  align-items: flex-start;
+  display: inline-flex;
+  max-width: 100%;
+}
+.image-inline picture {
+  display: flex;
+}
+.image-inline img,
+.image-inline picture {
+  flex-grow: 1;
+  flex-shrink: 1;
+  max-width: 100%;
+}
