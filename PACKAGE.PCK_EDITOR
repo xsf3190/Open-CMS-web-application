@@ -908,7 +908,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     **  UPDATE ASSET_USED TABLE FOR ALL CLOUDINARY ASSETS INCLUDED IN CONTENT
     */
     PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB) IS
-        l_res_regex VARCHAR2(50):='"https://res.cloudinary.com/(.+?)/(.+?)"';
+        l_res_regex VARCHAR2(50):='src="https://res.cloudinary.com/(.+?)/(.+?)"';
         l_cld_cloud_name asset.cld_cloud_name%type;
         l_public_id asset.public_id%type;
         n PLS_INTEGER;
