@@ -662,7 +662,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
                     w.max_width, 
-                    wa.page_title, wa.page_description, w.domain_name
+                    wa.page_title, wa.page_description, w.domain_name,
+                    INSTR(a.body_html,'<code>') is_code, 
+                    INSTR(a.body_html,'<pre>') is_pre, 
+                    INSTR(a.body_html,'<table>') is_table, 
+                    INSTR(a.body_html,'<ul>') is_ul,
+                    INSTR(a.body_html,'<ol>') is_ol, 
+                    INSTR(body_html,'<blockquote>') is_blockquote,
+                    INSTR(body_html,'<hr>') is_hr
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
