@@ -469,5 +469,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END IF;
     END;
 
+    PROCEDURE buildCSSLinks(pHtml IN OUT NOCOPY CLOB) IS
+        l_links LONG;
+    BEGIN
+        IF (regexp_count(pHtml,'<pre>')>0) THEN
+            l_links:=l_links || '<link rel="stylesheet" href="/css/pre.css" />';
+        END IF;
+    END;
+
 end;
 /
