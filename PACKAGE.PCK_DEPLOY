@@ -6,8 +6,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     FUNCTION buildDropdown(pWebsiteId IN website.id%type) RETURN VARCHAR2;
     --
-    FUNCTION buildLoginForm RETURN VARCHAR2;
-    --
     FUNCTION buildNav(pWebsiteId IN website.id%type, pArticleid IN website_article.article_id%type DEFAULT NULL) RETURN VARCHAR2;
     --
     PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB, pCss IN OUT NOCOPY CLOB);
@@ -259,47 +257,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         UNPIVOT  (updated_date FOR COL IN (nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date, css2_updated_date));
 
         RETURN (l_last_updated_date>l_netlify_last_published);
-    END;
-
-    /*
-     **  Build Login Form
-     */
-    FUNCTION buildLoginForm RETURN VARCHAR2 IS
-    BEGIN
-        RETURN(
-            '<dialog class="login-email" style="--max-width:40rem" closedBy="any">' ||
-                '<form>' ||
-                    '<input type="hidden" name="url" value="">' ||
-                    '<input type="hidden" name="request_type" value="">' ||
-                    '<header class="flex-items space-between">' ||
-                        '<h2>Log in</h2>' ||
-                        '<button type="button" class="button close no-focus" data-button-variant="round-icon">' ||
-                            '<svg viewBox="0 0 18 18" class="icon" aria-hidden="true" focusable="false">' ||
-                                '<line x1="18" y1="0" x2="0" y2="18"/><line x1="0" y1="0" x2="18" y2="18"/>' ||
-                            '</svg>' ||
-                        '</button>' ||
-                    '</header>' ||
-                    '<article class="flow">' ||
-                        '<div>' ||
-                            '<label for="emailInput">Email</label>' ||
-                            '<input type="email" id="emailInput" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on">' ||
-                            '<output for="email" class="sendmail-result"></output>' ||
-                        '</div>' ||
-                        '<div class="visually-hidden">' ||
-                            '<label for="passcodeInput">Enter Passcode</label>' ||
-                            '<input type="text" id="passcodeInput" name="passcode" pattern="\d{6}" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
-                            '<output for="passcode" class="passcode-result"></output>' ||
-                        '</div>' ||
-                        '<div class="loader visually-hidden"></div>' ||
-                    '</article>' ||
-                    '<footer class="flex-items space-apart no-wrap">' ||
-                        '<button class="button sendmail-magic" type="button">Send Link</button>' ||
-                        '<div><hr><span>OR</span><hr></div>' ||
-                        '<button class="button sendmail-passcode" type="button">Send Code</button>' ||
-                        '<button class="button validate-passcode visually-hidden" type="button">Submit Passcode</button>' ||
-                    '</footer>' ||
-                '</form>' ||
-             '</dialog>');
     END;
 
     /*
@@ -654,6 +611,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_article_links LONG;
         l_preload VARCHAR2(200):='<link rel="preload" href="/fonts/#FONT#" as="font" type="font/woff2" crossorigin>';
         l_preload_fonts LONG;
+        l_css LONG;
         -- l_clob CLOB;
         n PLS_INTEGER;
         n1 PLS_INTEGER;
@@ -794,6 +752,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             */
             l_logo:='<span class="logo">' || pLogo || '</span>';
 
+            l_css:=
+            '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
+            '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
+            '<link rel="stylesheet" href="/css/deploy_table.min.css">' ||
+            '<link rel="stylesheet" href="/css/deploy_image.min.css">';
+            IF (C.is_code>0) THEN
+                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_code.min.css">';
+            END IF;
+            IF (C.is_pre>0) THEN
+                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_pre.min.css">';
+            END IF;
+            IF (C.is_ul>0) THEN
+                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_ul.min.css">';
+            END IF;
+            IF (C.is_ol>0) THEN
+                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_ol.min.css">';
+            END IF;
+
             pBody:=
             '<!DOCTYPE HTML>' ||
             '<html lang="en">' ||
@@ -805,13 +781,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<meta name="author" content="performance toolkit">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
                     l_preload_fonts ||
-                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
-                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
-                    '<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
+                    --'<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
+                    --'<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
+                    --'<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
                     '<link rel="icon" href="/images/favicon.svg">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                 '</head>' ||
                 '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" class="flow">' || 
+                    l_css ||
                     l_collection_css ||
                     '<a href="#main" class="skip-link">Skip to main content</a>' ||
                     pDropdown || 
@@ -939,6 +916,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             FOR i in 1..l_keys.COUNT LOOP
                 l_filename:=l_keys(i);
                 l_sha1:=l_files.get_string(l_keys(i));
+                -- pck_core.log('l_filename:'||l_filename);
                 INSERT INTO website_files(website_id, site_id, path, sha1, mime_type)
                 VALUES (pWebsiteId, pSiteId, l_filename, l_sha1, SUBSTR(l_filename,INSTR(l_filename,'.',-1)+1));
             END LOOP;
@@ -1164,6 +1142,37 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_files.put(C.path, C.deployed_sha1);
             ELSE
                 addDeploy(pFilename=>C.path, pFileContent=>C.content, pSha1=>C.source_sha1);
+            END IF;
+        END LOOP;
+
+        /*
+        **  CSS
+        */
+        FOR C IN (
+            WITH source AS
+            (
+                SELECT '/css/' || s.file_name AS path, apex_util.blob_to_clob(s.file_content) file_content, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+                  FROM apex_application_static_files s
+                 WHERE s.file_name IN (
+                    'deploy_blockquote.min.css',
+                    'deploy_code.min.css',
+                    'deploy_hr.min.css',
+                    'deploy_image.min.css',
+                    'deploy_ol.min.css',
+                    'deploy_pre.min.css',
+                    'deploy_table.min.css',
+                    'deploy_ul.min.css')
+            )
+            SELECT s.path, s.file_content, wf.sha1, CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=s.path
+        ) LOOP
+            IF (C.build=0) THEN
+                l_files.put(C.path, C.sha1);
+            ELSE
+                l_sha1:=LOWER(dbms_crypto.hash(src => C.file_content, typ => dbms_crypto.hash_sh1));
+                addDeploy(pFilename=>C.path, pFileContent=>C.file_content, pSha1=>l_sha1);
             END IF;
         END LOOP;
 
