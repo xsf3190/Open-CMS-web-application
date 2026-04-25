@@ -524,22 +524,6 @@ small {
   color: var(--color-primary);
 }
 
-
-/* 
-** STYLES FOR PREFORMATTED CODE BLOCKS 
-*/
-pre {
-    text-wrap: auto;
-    overflow-x: auto;
-    color: var(--color-text-code);
-    background-color: var(--color-bg-code);
-    font-family: var(--code-font-family);
-    font-weight: var(--code-font-wght);
-    font-stretch: var(--code-font-wdth);
-    font-variation-settings: var(--code-font-variation-settings);
-    font-size:var(--step--2);
-  }
-
 /* EDITOR STYLES */
 
 /* ALERT STYLES - CHANGE SAVE BUTTON TEXT AND BACKGROUND COLOR WHEN CLICKED */
