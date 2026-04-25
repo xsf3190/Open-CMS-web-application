@@ -5,6 +5,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     --
     PROCEDURE buildCSS(pEditor IN BOOLEAN);
     --
+    PROCEDURE buildCSSTable;
+    --
     PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pCodepen IN BOOLEAN DEFAULT FALSE);
     --
     PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type);
@@ -446,7 +448,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             SELECT file_name, CAST(last_updated_on AS TIMESTAMP) updated_date, apex_util.blob_to_clob(file_content) file_content
               FROM apex_application_static_files 
              WHERE application_id=101
-               AND file_name IN ('deploy.min.css','deploy.editor.min.css','ckeditor.min.css')
+            --    AND file_name IN ('deploy.min.css','deploy.editor.min.css','ckeditor.min.css')
+               AND file_name IN ('deploy.min.css','deploy.editor.min.css')
              ORDER BY DECODE(file_name,'deploy.min.css',1,'deploy.editor.min.css',2)
         ) LOOP
             IF (C.file_name='ckeditor.min.css') THEN
@@ -469,12 +472,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         END IF;
     END;
 
-    PROCEDURE buildCSSLinks(pHtml IN OUT NOCOPY CLOB) IS
-        l_links LONG;
+    /*
+    ** INITIAL POPULATE OF CSS CONTROL TABLE
+    */
+    PROCEDURE buildCSSTable IS
+        l_sha1 css.sha1%type;
     BEGIN
-        IF (regexp_count(pHtml,'<pre>')>0) THEN
-            l_links:=l_links || '<link rel="stylesheet" href="/css/pre.css" />';
-        END IF;
+        FOR C IN (
+            SELECT file_name, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+            FROM apex_application_static_files
+             WHERE application_id=101 
+             AND mime_type='text/css'
+             AND file_name like 'deploy%.min.css'
+        ) 
+        LOOP
+            l_sha1:=LOWER(dbms_crypto.hash(src=>C.file_content, typ=>dbms_crypto.hash_sh1));
+            INSERT INTO css (filename, sha1, updated_date)
+            VALUES (C.file_name, l_sha1, C.updated_date);
+        END LOOP;
     END;
 
 end;
