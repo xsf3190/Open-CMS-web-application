@@ -1,7 +1,7 @@
 /*
 ** VISIT REPORTS
 */
-import { dialog_header, dialog_article, dialog_footer, initDialog } from "deploy_elements";
+import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
@@ -40,24 +40,30 @@ export const changeHandler = (e) => {
 ** NEW REPORT PAGE REQUEST
 */
 export const clickHandler = (e) => {
-    console.log(" e.target.dataset.page", e.target.dataset.page);
-    callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=" + e.target.dataset.page + "&handler=click")
-    .then((data) => {
-        const tbody = dialog_article.querySelector("tbody");
-        tbody.replaceChildren();
-        tbody.insertAdjacentHTML('afterbegin',data.article);
-        dialog_footer.replaceChildren();
-        dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
-        const liveRegion = document.getElementById("notification");
-        /* Remove any existing child nodes */
-        while (liveRegion.firstChild) {
-            liveRegion.removeChild(liveRegion.firstChild);
-        }
-        const message = document.createTextNode(data.notification);
-        liveRegion.appendChild(message);
-    })
-    .catch((error) => {
-        // handleError(error);
-        console.error(error);
-    });
+    const page = e.target.dataset.page;
+    if (page) {
+        callAPI(endpoint, "GET", "?report=" + selectedReport + "&page=" + page + "&handler=click")
+        .then((data) => {
+            const tbody = dialog_article.querySelector("tbody");
+            tbody.replaceChildren();
+            tbody.insertAdjacentHTML('afterbegin',data.article);
+            dialog_footer.replaceChildren();
+            dialog_footer.insertAdjacentHTML('afterbegin',data.footer);
+            const liveRegion = document.getElementById("notification");
+            /* Remove any existing child nodes */
+            while (liveRegion.firstChild) {
+                liveRegion.removeChild(liveRegion.firstChild);
+            }
+            const message = document.createTextNode(data.notification);
+            liveRegion.appendChild(message);
+        })
+        .catch((error) => {
+            // handleError(error);
+            console.error(error);
+        });
+    }
+}
+
+export const inputHandler = (e) => {
+    console.log("Do nothing");
 }
