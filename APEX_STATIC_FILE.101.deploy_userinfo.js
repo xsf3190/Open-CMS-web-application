@@ -1,13 +1,13 @@
 /*
 **  USER INFO MODULE - REVIEW LOGGED ON USER DETAILS, LOGOUT BUTTON HANDLER
 */
-import { dialog_article, dialog_footer, initDialog, dropdown } from "deploy_elements";
+import { dialog_footer, initDialog, dropdown } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 /*
-**  CLICK LOGOUT BUTTON
+**  CLICK HANDLER
 */
-const footerHandler = async (e) => {
+export const clickHandler = async (e) => {
     /* click on <button class="logout"> */
     const live=dialog_footer.querySelector("[aria-live]");
     if (e.target.classList.contains("logout")) {
@@ -25,6 +25,9 @@ const footerHandler = async (e) => {
             .catch((error) => {
                 handleError(error);
             });
+    }
+    if (e.target.classList.contains("delete")) {
+        deleteWebsite(e.target.dataset.websiteid, e.target.closest("tr"));
     }
 };
 
@@ -60,18 +63,10 @@ const deleteWebsite = (websiteid, tablerow) => {
         });
 }
 
-const actionHandler = (e) => {
-    if (e.target.classList.contains("delete")) {
-        deleteWebsite(e.target.dataset.websiteid, e.target.closest("tr"));
-    }
-}
-
 export const init = () => {
     callAPI("userinfo/:ID","GET")
         .then((data) => {
             initDialog(data);
-            dialog_footer.addEventListener("click", footerHandler);
-            dialog_article.addEventListener("click", actionHandler);
         })
         .catch((error) => {
             handleError(error);
