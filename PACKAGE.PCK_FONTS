@@ -1179,6 +1179,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     WHEN 'logo' THEN 
                         l_closest_400:=getClosest(400,C.min_wght,C.max_wght);
                         updateFontAxisValue(pWebsiteid, pContext, 'wght', l_closest_400);
+                    WHEN 'code' THEN 
+                        l_closest_400:=getClosest(400,C.min_wght,C.max_wght);
+                        updateFontAxisValue(pWebsiteid, pContext, 'wght', l_closest_400);
                 END CASE;
             END LOOP;
         ELSE
