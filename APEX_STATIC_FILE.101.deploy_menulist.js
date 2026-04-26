@@ -88,7 +88,7 @@ async function load_modules() {
         console.error("Failed to load " + module_name);
         return;
     });
-    const contexts = ["headings","text","logo"];
+    const contexts = ["headings","text","logo","code"];
     contexts.forEach((context) => {
         if (localStorage.getItem(`${context}-font-urls`)) {
             fonts.loadFont(JSON.parse(localStorage.getItem(`${context}-font-urls`)),context);
@@ -99,7 +99,8 @@ async function load_modules() {
     })
 }
 
-if (getJWTClaim("aud")==="owner") {
+const role = getJWTClaim("aud");
+if (role==="owner" || role==="admin") {
     load_modules();
 }
 
@@ -145,8 +146,6 @@ class MenuNavigationHandler {
   }
   
   onMenuClick = async (event) => {
-    if (event.target.tagName==="A") return;
-    
     let module_name = event.target.dataset.endpoint;
     if (!module_name) return;
 
