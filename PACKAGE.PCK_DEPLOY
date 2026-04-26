@@ -626,8 +626,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     INSTR(a.body_html,'<table>') is_table, 
                     INSTR(a.body_html,'<ul>') is_ul,
                     INSTR(a.body_html,'<ol>') is_ol, 
-                    INSTR(body_html,'<blockquote>') is_blockquote,
-                    INSTR(body_html,'<hr>') is_hr
+                    INSTR(a.body_html,'<blockquote>') is_blockquote,
+                    INSTR(a.body_html,'<hr>') is_hr
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -757,8 +757,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
             '<link rel="stylesheet" href="/css/deploy_table.min.css">' ||
             '<link rel="stylesheet" href="/css/deploy_image.min.css">';
+            IF (C.is_blockquote>0) THEN
+                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_blockquote.min.css">';
+            END IF;
             IF (C.is_code>0) THEN
                 l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_code.min.css">';
+            END IF;
+            IF (C.is_hr>0) THEN
+                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_hr.min.css">';
+            END IF;
+            IF (C.is_ol>0) THEN
+                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_ol.min.css">';
             END IF;
             IF (C.is_pre>0) THEN
                 l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_pre.min.css">';
@@ -766,9 +775,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (C.is_ul>0) THEN
                 l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_ul.min.css">';
             END IF;
-            IF (C.is_ol>0) THEN
-                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_ol.min.css">';
-            END IF;
+            
 
             pBody:=
             '<!DOCTYPE HTML>' ||
