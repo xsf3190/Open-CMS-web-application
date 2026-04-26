@@ -8,11 +8,12 @@ let endpoint;
 let words;
 
 export const init = async (element) => {
-    let CK_CSS, CK_JS;
+    const CK_CSS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.css";
+    const CK_JS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.js";
 
-    const data = await callAPI('ckeditor/:ID',"GET");
-    CK_CSS  = data.ckeditor_css;
-    CK_JS  = data.ckeditor_js;
+    // const data = await callAPI('ckeditor/:ID',"GET");
+    // CK_CSS  = data.ckeditor_css;
+    // CK_JS  = data.ckeditor_js;
 
     /* Close menulist popup */
     document.getElementById("menulist").hidePopover();
@@ -43,6 +44,7 @@ export const init = async (element) => {
             Heading,
             HorizontalLine,
             Image, ImageCaption, ImageResize, ImageStyle, ImageToolbar, ImageInsert, ImageInsertViaUrl,
+            Indent, IndentBlock,
             Italic, 
             Link, 
             LinkImage,
@@ -238,12 +240,14 @@ export const init = async (element) => {
                     FontSize, FontColor, FontBackgroundColor,
                     Heading, HorizontalLine, 
                     Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, ImageInsertViaUrl, 
+                    Indent, IndentBlock,
                     Italic, Link, LinkImage, List, ListImages, Paragraph, 
                     SelectAll, ShowBlocks, 
                     Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar,
                     TextPartLanguage,
                     Underline, UploadImage, UploadImages, UploadPdf, UploadZip, WordCount ],
         toolbar: [ 'heading', '|', 'undo', 'redo',  '|',  'bold', 'italic', 'textPartLanguage', 'fontSize', 'fontColor', 'fontBackgroundColor',
+                    '|', 'outdent', 'indent',
                     '|', 'link', 
                     '|', 'uploadImage', 
                     {
@@ -299,6 +303,13 @@ export const init = async (element) => {
                 'linkImage'
             ]
         },
+        indentBlock: {
+			classes: [
+				'custom-block-indent-a', // First step - smallest indentation.
+				'custom-block-indent-b',
+				'custom-block-indent-c'  // Last step - biggest indentation.
+			]
+		},
         language: {
 			textPartLanguage: [
                 { title: 'Dutch', languageCode: 'nl' },
