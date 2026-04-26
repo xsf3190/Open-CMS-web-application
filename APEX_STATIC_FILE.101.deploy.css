@@ -30,6 +30,17 @@ ul:not([class]),
 ol:not([class]) {
     padding-inline-start: var(--space-s);
 }
+.custom-block-indent-a {
+	margin-left: calc(1 * var(--space-m));
+}
+
+.custom-block-indent-b {
+	margin-left: calc(2 * var(--space-m));
+}
+
+.custom-block-indent-c {
+	margin-left: calc(3 * var(--space-m));
+}
 
 body {
     font-family: var(--text-font-family);
