@@ -31,22 +31,19 @@ const jwt = localStorage.getItem("refresh");
 if (is_editor) {
     document.getElementById("menulist-btn").style.visibility = "visible";
     set_controls();
-    console.warn("IGNORE FONT LOADING ERRORS AND WARNINGS");
+    console.warn("IGNORE FONT LOADING ERRORS AND WARNINGS ON EDITOR WEBSITE");
 }
 
-async function load_modules() { 
-    let module_name = "deploy_menulist";
-    // if (is_editor && jwt) {
-        const menu = await import(module_name)
+async function load_modules() {
+    if (is_editor) {
+        const menu = await import("deploy_menulist")
         .catch((error) => {
             console.error(error);
-            console.error("Failed to load " + module_name);
+            console.error("Failed to load deploy_menulist");
             return;
         });
         new menu.MenuNavigationHandler(dropdown);
-    // }
-
-    module_name = "deploy_web_vitals5";
+    }
     const cwv = await import("deploy_web_vitals5")
     .catch((error) => {
         console.error(error);
