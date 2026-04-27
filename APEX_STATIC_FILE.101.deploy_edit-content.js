@@ -8,7 +8,7 @@ let endpoint;
 let words;
 
 export const init = async (element) => {
-    const CK_CSS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.css";
+    const CK_CSS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5-editor.css";
     const CK_JS = "https://cdn.ckeditor.com/ckeditor5/43.2.0/ckeditor5.js";
 
     // const data = await callAPI('ckeditor/:ID',"GET");
