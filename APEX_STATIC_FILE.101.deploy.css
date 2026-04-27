@@ -24,8 +24,8 @@ html {
 body, h1, h2, h3, h4, p, figure, blockquote, dl, dd, address, ul, ol {
     margin: 0;
     padding: 0;
-    font-style: normal;
 }
+
 ul:not([class]),
 ol:not([class]) {
     padding-inline-start: var(--space-s);
