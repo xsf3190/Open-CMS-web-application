@@ -100,7 +100,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_heading LONG;
         l_heading_regex varchar2(30):='<h[1-4](.+?)</h[1-4]>';
         l_italic_regex varchar2(15):='<i>(.+?)</i>';
-        l_code_regex varchar2(30):='<code(.+?)</code>';
+        l_code_regex varchar2(30):='<code>(.+?)</code>';
+        l_pre_regex varchar2(30):='<pre>(.+?)</pre>';
         l_nbsp_regex varchar2(30):='<p>&nbsp;</p>';
         l_bold_italic_regex varchar2(30):='<i><strong>(.+?)</strong></i>';
         l_bold_regex varchar2(30):='<strong>(.+?)</strong>';
@@ -110,7 +111,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_code LONG;
         l_codes LONG;
-        l_codes_italic LONG;
         
         l_chars_normal LONG;
         l_chars_italic LONG;
@@ -134,29 +134,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         /* CODE */
         code:=NVL(REGEXP_COUNT(l_text,l_code_regex),0);
         FOR i IN 1..code LOOP
-            l_code:=REGEXP_SUBSTR(l_text,l_code_regex,1,i);
-            it:=REGEXP_COUNT(l_code,l_italic_regex);
-            FOR j IN 1..it LOOP
-                l_codes_italic:=l_codes_italic || utl_i18n.unescape_reference(apex_escape.striphtml(REGEXP_SUBSTR(l_code,l_italic_regex,1,j)));
-            END LOOP;
-            l_code:=REGEXP_REPLACE(l_code,l_italic_regex,null,1,0);
-            l_code:=utl_i18n.unescape_reference(apex_escape.striphtml(l_code));
-
-            l_codes:=l_codes || l_code;
+            l_codes:=l_codes || REGEXP_SUBSTR(l_text,l_code_regex,1,i);
         END LOOP;
-        l_codes_italic:=distinct_chars(l_codes_italic);
         l_codes:=distinct_chars(l_codes);
 
         UPDATE article_chars
-           SET chars_italic=l_codes_italic,
-               chars_normal=l_codes,
+           SET chars_normal=l_codes,
                updated_date=current_timestamp
          WHERE article_id=pArticleId
            AND context='code';
         
         IF (sql%rowcount=0) THEN
-            INSERT INTO article_chars(article_id, context, chars_italic, chars_normal)
-            VALUES (pArticleId, 'code', l_codes_italic, l_codes);
+            INSERT INTO article_chars(article_id, context, chars_normal)
+            VALUES (pArticleId, 'code', l_codes);
         END IF;
 
         l_text:=REGEXP_REPLACE(l_text,l_code_regex,null,1,0);
