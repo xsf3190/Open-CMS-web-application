@@ -1,16 +1,8 @@
-pre {
-  font-family: var(--code-font-family);
-  font-weight: var(--code-font-wght);
-  font-stretch: var(--code-font-wdth);
-  font-variation-settings: var(--code-font-variation-settings);
-  font-size:var(--step--2);
-  font-size-adjust: 0.507;
-
- background-color: var(--color-bg-code);
- color: var(--color-text-code);
-
+ pre {
+  background: hsla(0, 0%, 78%, 0.3);
   border: 1px solid #c4c4c4;
   border-radius: 2px;
+  color: #353535;
   direction: ltr;
   font-style: normal;
   min-width: 200px;
@@ -18,7 +10,6 @@ pre {
   tab-size: 4;
   text-align: left;
   white-space: pre-wrap;
-  overflow-x: auto;
 }
 pre code {
   background: unset;
