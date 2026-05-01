@@ -147,8 +147,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
               FROM website
              WHERE id=pWebsiteid
         ) LOOP
-            pck_css.buildEditorTokens(pWebsiteid);
-            pck_css.buildCSS(pEditor=>TRUE);
+            pck_css.buildEditorCSS(pWebsiteid);
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
         END LOOP;
@@ -168,8 +167,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ** All other files are "copied" from editor site
         */
         pck_fonts.getFontFiles(pWebsiteid);
-        pck_css.buildLiveTokens(pWebsiteid);
-        pck_css.buildCSS(pEditor=>FALSE);
+        pck_css.buildLiveCSS(pWebsiteid);
 
         -- Temporary table website_fontfiles_temp populated by pck_fonts procedure
 
@@ -611,8 +609,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_article_links LONG;
         l_preload VARCHAR2(200):='<link rel="preload" href="/fonts/#FONT#" as="font" type="font/woff2" crossorigin>';
         l_preload_fonts LONG;
-        l_css LONG;
-        -- l_clob CLOB;
         n PLS_INTEGER;
         n1 PLS_INTEGER;
     BEGIN
@@ -620,14 +616,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
                     w.max_width, 
-                    wa.page_title, wa.page_description, w.domain_name,
-                    INSTR(a.body_html,'<code>') is_code, 
-                    INSTR(a.body_html,'<pre>') is_pre, 
-                    INSTR(a.body_html,'<table>') is_table, 
-                    INSTR(a.body_html,'<ul>') is_ul,
-                    INSTR(a.body_html,'<ol>') is_ol, 
-                    INSTR(a.body_html,'<blockquote>') is_blockquote,
-                    INSTR(a.body_html,'<hr>') is_hr
+                    wa.page_title, wa.page_description, w.domain_name
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -752,31 +741,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             */
             l_logo:='<span class="logo">' || pLogo || '</span>';
 
-            l_css:=
-            '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
-            '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
-            '<link rel="stylesheet" href="/css/deploy_table.min.css">' ||
-            '<link rel="stylesheet" href="/css/deploy_image.min.css">';
-            IF (C.is_blockquote>0) THEN
-                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_blockquote.min.css">';
-            END IF;
-            IF (C.is_code>0) THEN
-                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_code.min.css">';
-            END IF;
-            IF (C.is_hr>0) THEN
-                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_hr.min.css">';
-            END IF;
-            IF (C.is_ol>0) THEN
-                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_ol.min.css">';
-            END IF;
-            IF (C.is_pre>0) THEN
-                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_pre.min.css">';
-            END IF;
-            IF (C.is_ul>0) THEN
-                l_css:=l_css || '<link rel="stylesheet" href="/css/deploy_ul.min.css">';
-            END IF;
-            
-
             pBody:=
             '<!DOCTYPE HTML>' ||
             '<html lang="en">' ||
@@ -788,14 +752,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<meta name="author" content="performance toolkit">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
                     l_preload_fonts ||
-                    --'<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
-                    --'<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
+                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
+                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
                     --'<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
                     '<link rel="icon" href="/images/favicon.svg">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                 '</head>' ||
                 '<body data-websiteid="' || pWebsiteId || '" data-articleid="' || pArticleid || '" class="flow">' || 
-                    l_css ||
                     l_collection_css ||
                     '<a href="#main" class="skip-link">Skip to main content</a>' ||
                     pDropdown || 
