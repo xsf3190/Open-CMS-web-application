@@ -3,13 +3,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CSS" is
     PATH_NAME_TOKENS CONSTANT website_cssfiles_temp.path%type:='/css/website-styles.min.css';
     PATH_NAME_CORE CONSTANT website_cssfiles_temp.path%type:='/css/core-styles.min.css';
     --
-    PROCEDURE buildCSS(pEditor IN BOOLEAN);
+    PROCEDURE buildEditorCSS(pWebsiteId IN website.id%type);
     --
-    PROCEDURE buildCSSTable;
-    --
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pCodepen IN BOOLEAN DEFAULT FALSE);
-    --
-    PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type);
+    PROCEDURE buildLiveCSS(pWebsiteId IN website.id%type);
     --
 end;
 /
@@ -251,13 +247,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     /* 
     ** BUILD FONT-FACE RULES AND DESIGN TOKENS FOR EDITOR SITE
     */
-    PROCEDURE buildEditorTokens(pWebsiteId IN website.id%type, pCodepen IN BOOLEAN) IS
+    PROCEDURE buildEditorCSS(pWebsiteId IN website.id%type) IS
         l_font_variation_settings VARCHAR2(4000);
         l_css CLOB;
         l_sha1 website_cssfiles_temp.sha1%type;
     BEGIN
-        dbms_lob.createtemporary(l_css, TRUE);
-
         l_css:=
         ':root {' ||
             getColours ||
@@ -327,36 +321,49 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             l_css:=l_css || C.editor_fontfaces;
         END LOOP;
 
-        -- Font faces for Google fonts
-        IF (NOT pCodepen) THEN
-            FOR C IN (
-                SELECT id, family, menu
-                  FROM font
-                 ORDER BY id
-            ) LOOP
-                dbms_lob.append(l_css,'@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ') format("woff2");}');
-                -- l_css:=l_css ||
-                -- 'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}';
-            END LOOP;
-        END IF;
-
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
-
         INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_TOKENS, l_sha1, l_css);
 
-        dbms_lob.freetemporary(l_css);
-        EXCEPTION WHEN OTHERS THEN dbms_lob.freetemporary(l_css); RAISE;
+        /* 
+        **  Build core CSS file with deploy.css, deploy.editor.css plus all ckEditor content rules
+        */
+        l_css:=null;
+        FOR C IN (
+            SELECT file_name, CAST(last_updated_on AS TIMESTAMP) updated_date, apex_util.blob_to_clob(file_content) file_content
+              FROM apex_application_static_files 
+             WHERE application_id=101
+               AND file_name LIKE 'deploy%min.css'
+             ORDER BY DECODE(file_name,'deploy.min.css',1,'deploy.editor.min.css',2,3), file_name
+        ) LOOP
+            l_css:=l_css || C.file_content;
+        END LOOP;
+        l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
+
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_CORE, l_sha1, l_css);
+
     END;
 
     /*
     ** FONT-FACE RULES AND TOKENS FOR LIVE SITE
     ** FONTS ARE DEFINED IN TEMPORARY TABLE
     */
-    PROCEDURE buildLiveTokens(pWebsiteId IN website.id%type) IS
+    PROCEDURE buildLiveCSS(pWebsiteId IN website.id%type) IS
         l_root_css CLOB;
         l_css CLOB;
         l_font_variation_settings VARCHAR2(4000);
         l_sha1 website_cssfiles_temp.sha1%type;
+
+        FUNCTION getContent(pFilename IN VARCHAR2) RETURN CLOB IS
+        BEGIN
+            FOR C IN (
+                SELECT apex_util.blob_to_clob(file_content) file_content
+                  FROM apex_application_static_files 
+                 WHERE application_id=101
+                   AND file_name=pFilename || '.min.css'
+            ) LOOP
+                RETURN(C.file_content);
+            END LOOP;
+        END;
     BEGIN
         l_root_css:=
         ':root {' ||
@@ -426,70 +433,57 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         l_css:=getLiveFontfaces || l_root_css;
 
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
-
         INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_TOKENS, l_sha1, l_css);
-    END;
 
-    /*
-    ** BUILD OPTIMISED CORE CSS STYLES
-    **  EDITOR SITE => deploy.editor.css || deploy.css
-    **  LIVE SITE => deploy.css
-    */
-    PROCEDURE buildCSS(pEditor IN BOOLEAN) IS
-        l_css CLOB;
-        PROCEDURE insertRow(pPath IN VARCHAR2, pContent IN OUT NOCOPY CLOB) IS
-            l_sha1 website_files.sha1%type;
-        BEGIN
-            l_sha1:=LOWER(dbms_crypto.hash(src=>pContent, typ=>dbms_crypto.hash_sh1));
-            INSERT INTO website_cssfiles_temp(sha1, path, content) VALUES (l_sha1,pPath, pContent);
-        END;
-    BEGIN
+        /*
+        ** Build list of CSS files to be included based on elements_used in all ARTICLE comprising website
+        ** If article_used=32 then include deploy_table.min.css
+        ** If article_used=16 then include deploy_image.min.css
+        ** etc.
+        */
+        
         FOR C IN (
-            SELECT file_name, CAST(last_updated_on AS TIMESTAMP) updated_date, apex_util.blob_to_clob(file_content) file_content
-              FROM apex_application_static_files 
-             WHERE application_id=101
-            --    AND file_name IN ('deploy.min.css','deploy.editor.min.css','ckeditor.min.css')
-               AND file_name IN ('deploy.min.css','deploy.editor.min.css')
-             ORDER BY DECODE(file_name,'deploy.min.css',1,'deploy.editor.min.css',2)
+            SELECT SUM(BITAND(a.elements_used,1))   uses_blockquote,
+                   SUM(BITAND(a.elements_used,2))   uses_code,
+                   SUM(BITAND(a.elements_used,4))   uses_image,
+                   SUM(BITAND(a.elements_used,8))   uses_hr,
+                   SUM(BITAND(a.elements_used,16))  uses_ol,
+                   SUM(BITAND(a.elements_used,32))  uses_pre,
+                   SUM(BITAND(a.elements_used,64))  uses_table,
+                   SUM(BITAND(a.elements_used,128)) uses_ul
+              FROM website_article wa, article a
+             WHERE wa.website_id=pWebsiteId
+               AND wa.article_id=NVL(a.parent_id,a.id)
         ) LOOP
-            IF (C.file_name='ckeditor.min.css') THEN
-                insertRow('/css/' || C.file_name, C.file_content);
-            ELSE
-                CASE pEditor
-                    WHEN TRUE THEN
-                        IF (INSTR(C.file_name,'deploy')>0) THEN
-                            l_css:=l_css || C.file_content;
-                        END IF;
-                    WHEN FALSE THEN
-                        IF (C.file_name='deploy.min.css') THEN
-                            insertRow(PATH_NAME_CORE, C.file_content);
-                        END IF;
-                END CASE;
+            l_css:=getContent('deploy');
+            IF (C.uses_blockquote>0) THEN
+                l_css:=l_css || getContent('deploy_blockquote');
+            END IF;
+            IF (C.uses_code>0) THEN
+                l_css:=l_css || getContent('deploy_code');
+            END IF;
+            IF (C.uses_image>0) THEN
+                l_css:=l_css || getContent('deploy_image');
+            END IF;
+            IF (C.uses_hr>0) THEN
+                l_css:=l_css || getContent('deploy_hr');
+            END IF;
+            IF (C.uses_ol>0) THEN
+                l_css:=l_css || getContent('deploy_ol');
+            END IF;
+            IF (C.uses_pre>0) THEN
+                l_css:=l_css || getContent('deploy_pre');
+            END IF;
+            IF (C.uses_table>0) THEN
+                l_css:=l_css || getContent('deploy_table');
+            END IF;
+            IF (C.uses_ul>0) THEN
+                l_css:=l_css || getContent('deploy_ul');
             END IF;
         END LOOP;
-        IF (l_css IS NOT NULL) THEN
-            insertRow(PATH_NAME_CORE, l_css);
-        END IF;
-    END;
 
-    /*
-    ** INITIAL POPULATE OF CSS CONTROL TABLE
-    */
-    PROCEDURE buildCSSTable IS
-        l_sha1 css.sha1%type;
-    BEGIN
-        FOR C IN (
-            SELECT file_name, apex_util.blob_to_clob(file_content) file_content, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
-            FROM apex_application_static_files
-             WHERE application_id=101 
-             AND mime_type='text/css'
-             AND file_name like 'deploy%.min.css'
-        ) 
-        LOOP
-            l_sha1:=LOWER(dbms_crypto.hash(src=>C.file_content, typ=>dbms_crypto.hash_sh1));
-            INSERT INTO css (filename, sha1, updated_date)
-            VALUES (C.file_name, l_sha1, C.updated_date);
-        END LOOP;
+        l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
+        INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_CORE, l_sha1, l_css);
     END;
 
 end;
