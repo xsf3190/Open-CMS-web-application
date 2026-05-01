@@ -947,16 +947,30 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_word_count NUMBER;
         l_html CLOB;
         l_id VARCHAR2(6);
+        l_elements_used article.elements_used%type;
         l_parent_id article.parent_id%type;
         l_json JSON_OBJECT_T;
 
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT words, body_html, id
-          INTO l_word_count, l_html, l_id
+        /* 
+        ** Calculated elements_used based on HTML tags used in the content 
+        **  KEEP ALIGNED WITH CODE IN pck_deploy.deployLivesite
+        */
+        SELECT words, body_html, id,
+                CASE WHEN INSTR(body_html,'<blockquote>')>0 THEN 1 ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<code')>0 THEN 2 ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<img')>0 THEN 4 ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<hr>')>0 THEN 8 ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<ol>')>0 THEN 16 ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<pre>')>0 THEN 32 ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<table>')>0 THEN 64 ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<ul>')>0 THEN 128 ELSE 0 END
+          INTO l_word_count, l_html, l_id, l_elements_used
           FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (body_html CLOB, id, words));
 
+        
         CASE l_id
             WHEN 'header' THEN
                 UPDATE website_article 
@@ -971,6 +985,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        title=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1))),1,100),
                        excerpt=NVL(excerpt, SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<p>(.+?)<\/p>',1,1))),1,160)), 
                        body_html=l_html,
+                       elements_used=NVL(l_elements_used,0),
                        updated_date = current_timestamp
                  WHERE id=pArticleId
                  RETURNING parent_id INTO l_parent_id;
