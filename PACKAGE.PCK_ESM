@@ -5,23 +5,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_ESM" as
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
-
-    /*
-    ** Build @font-face rules for all Google Fonts using the font menu url
-    ** The deployed css file is linked when user opens "Fonts" application menu item
-    */ 
-    PROCEDURE buildGoogleFontfaces IS
-        l_css CLOB;
-    BEGIN
-        FOR C IN (
-            SELECT id, family, menu
-              FROM font
-             ORDER BY id
-        ) LOOP
-            dbms_lob.append(l_css,'@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ') format("woff2");}');
-        END LOOP;
-    END;
-
     /*
     ** TO CREATE NEW ES MODULE -
     **
