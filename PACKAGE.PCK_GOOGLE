@@ -1,5 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_GOOGLE" as
---
+    --
+    PROCEDURE buildGoogleFontfaces;
+    --
     PROCEDURE loadGoogleFonts;
     --
     PROCEDURE loadGoogleFontMetadata;
@@ -9,6 +11,24 @@ end pck_google;
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
 
     /*
+    ** REBUILD THE GOOGLE FONT-FACE CSS AND DEPLOY TO ES-MODULES
+    */
+    PROCEDURE buildGoogleFontfaces IS
+        l_fontfaces CLOB;
+    BEGIN
+        dbms_lob.createtemporary(l_fontfaces,true);
+        FOR C IN (
+            SELECT id, menu
+              FROM font
+             ORDER BY id
+        ) LOOP
+            dbms_lob.append(l_fontfaces,'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
+        END LOOP;
+        INSERT INTO website_cssfiles_temp(content) VALUES (l_fontfaces);
+        dbms_lob.freetemporary(l_fontfaces);
+    END;
+
+    /*
     **  Load Google font details into FONT, FONT_AXES AND FONT_STATIC_WGHT tables. 
     **  WOFF2 only. 
     **  STATIC and VARIABLE. 
@@ -16,37 +36,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
     PROCEDURE loadGoogleFonts IS 
         l_clob CLOB;
         l_nb_fonts PLS_INTEGER;
-        l_es_modules website.id%type;
-        l_lastModified DATE;
-        l_build PLS_INTEGER;
-        l_path website_files.path%type;
+        l_days_diff PLS_INTEGER;
         l_sha1 website_files.sha1%type;
         l_capabilities VARCHAR2(200);
-        l_fontfaces CLOB;
+        
     BEGIN
         pck_api.callGoogleAPI('https://www.googleapis.com/webfonts/v1/webfonts?capability=WOFF2&capability=VF',pData=>l_clob);
 
         /*
         ** ONLY PROCEED IF ANY CHANGE SINCE LAST UPLOAD
         */
-        SELECT id INTO l_es_modules FROM website WHERE domain_name='es-modules';
-
-        WITH source AS
-        (
-            SELECT 'test/css/google_fontfaces.min.css' AS path,
-                    MAX(TO_DATE(lastModified,'YYYY-MM-DD')) AS lastModified 
-              FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(lastModified))
-        )
-        SELECT MAX(s.path), 
-               MAX(s.lastModified), 
-               NVL(MAX(CASE WHEN f.deployed_date IS NULL OR s.lastModified>f.deployed_date THEN 1 ELSE 0 END),1)
-          INTO l_path, l_lastModified, l_build
-          FROM source s, website_files f
-         WHERE f.website_id=l_es_modules
-           AND f.path=s.path;
-
-        IF (l_build=0) THEN
-            pck_core.log('No change to Google Fonts since ' || TO_CHAR(l_lastModified, 'dd.mm.yyyy'));
+        SELECT MAX(TO_DATE(g.lastModified,'YYYY-MM-DD'))-MAX(f.last_modified)
+          INTO l_days_diff
+          FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(lastModified)) g, font f;
+        
+        IF (l_days_diff=0) THEN
+            pck_core.log('No new Google Fonts since last upload');
             RETURN;
         END IF;
 
@@ -265,21 +270,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
 
         EXECUTE IMMEDIATE 'UPDATE font SET capabilities=BIN_TO_NUM(' || l_capabilities || ')';
         
-        /*
-        ** REBUILD THE GOOGLE FONT-FACE CSS AND DEPLOY TO ES-MODULES
-        */
-        dbms_lob.createtemporary(l_fontfaces,true);
-        FOR C IN (
-            SELECT id, menu
-              FROM font
-             ORDER BY id
-        ) LOOP
-            dbms_lob.append(l_fontfaces,'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
-        END LOOP;
-        -- l_sha1:=LOWER(dbms_crypto.hash(src => l_fontfaces, typ => dbms_crypto.hash_sh1));
-        INSERT INTO website_cssfiles_temp(path, content) VALUES (l_path, l_fontfaces);
-        
-        dbms_lob.freetemporary(l_fontfaces);
+        buildGoogleFontfaces;
     END;
 
     /*
