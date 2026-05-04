@@ -21,10 +21,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         );
         TYPE t_files IS TABLE OF tt_files INDEX BY VARCHAR2(40);
         l_deploy_files t_files;
-
-        -- l_headers CLOB;
-        
-        l_sha1_test es_modules.sha1_test%type;
         
         l_clob CLOB;
         l_website_id website.id%type;
@@ -33,7 +29,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         l_ssl_url VARCHAR2(50);
         l_netlify_deploy_id website.netlify_deploy_id%type;
 
-        l_file_content CLOB;
         l_filename VARCHAR2(250);
         l_sha1 VARCHAR2(40);
         l_rebuild_importmaps NUMBER:=0;
@@ -42,7 +37,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB) IS
             l_sha1 website_files.sha1%type;
         BEGIN
-            dbms_output.put_line('Adding new or changed file to deployment - '|| pFilename);
             l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content:=pFileContent;
@@ -109,10 +103,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
 
             pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || l_netlify_site_id || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
 
-            /* NEED THIS FOR ASYNC DEPLOYMENT STATUS MONITORING */
-            UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=l_website_id;
-            COMMIT;
-
             FOR C IN (SELECT id, sha1 FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) WHERE sha1 IS NOT NULL) LOOP
                 dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
                 IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
@@ -136,8 +126,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         END;
 
     BEGIN
-        IF (pEsmLibrary NOT IN ('test','live')) THEN
-            RAISE_APPLICATION_ERROR(-20100,'Environment must be "live" or "test"');
+        IF (pEsmLibrary NOT IN ('test','prod')) THEN
+            RAISE_APPLICATION_ERROR(-20100,'Library must be "live" or "test"');
             RETURN;
         END IF;
 
@@ -149,96 +139,45 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
 
         l_files:= new JSON_OBJECT_T;
 
+        SELECT COUNT(*) INTO n FROM website_cssfiles_temp;
+        IF (n=0) THEN
+            pck_google.buildGoogleFontfaces;
+        END IF;
+
         FOR C IN (
             WITH source AS
             (
-                SELECT e.module_name, 'test/javascript/' || e.module_name AS deploy_filename, e.sha1_test, e.sha1_live, e.deploy_envs, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
+                SELECT '_headers' AS file_name, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) AS updated_date, apex_util.blob_to_clob(file_content) AS file_content
+                  FROM apex_application_static_files
+                 WHERE application_id=101
+                   AND file_name='_headers.es-modules.txt'
+                 UNION ALL
+                SELECT e.module_name, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE), apex_util.blob_to_clob(s.file_content) 
                   FROM es_modules e, apex_application_static_files s
                  WHERE s.file_name=e.module_name
                    AND s.application_id=101
+                 UNION ALL
+                SELECT 'google_fontfaces.min.css', current_date, content
+                  FROM website_cssfiles_temp
             )
-            SELECT s.deploy_filename, s.module_name, s.sha1_test, s.sha1_live, s.updated_date, s.deploy_envs,
-                    CASE WHEN f.deployed_date IS NULL OR s.updated_date>f.deployed_date THEN 1 ELSE 0 END build
-              FROM source s, website_files f
-             WHERE f.website_id(+)=l_website_id
-               AND f.path(+)=s.deploy_filename
+            SELECT 'test/javascript/' || s.file_name AS file_name, s.updated_date, s.file_content, wf.deployed_date, wf.sha1
+              FROM source s, website_files wf
+             WHERE wf.path(+)='test/javascript/' || s.file_name
+               AND wf.website_id(+)=l_website_id
+             UNION ALL
+             SELECT 'prod/javascript/' || s.file_name, s.updated_date, s.file_content, wf.deployed_date, wf.sha1
+              FROM source s, website_files wf
+             WHERE wf.path(+)='prod/javascript/' || s.file_name
+               AND wf.website_id(+)=l_website_id
         ) LOOP
-            IF (pEsmLibrary='live') THEN
-                UPDATE es_modules
-                   SET sha1_live=C.sha1_test,
-                       updated_live=current_timestamp
-                 WHERE module_name=C.module_name;
-                l_files.put(C.deploy_filename, C.sha1_test);
-                l_files.put(REPLACE(C.deploy_filename,'test','live'), C.sha1_test);
-                CONTINUE;
+            IF (C.deployed_date IS NULL OR C.updated_date>C.deployed_date) THEN
+                addDeploy(C.file_name, C.file_content);
+            ELSE
+                l_files.put(C.file_name, C.sha1);
             END IF;
-
-            /*
-            ** UPDATING "test" LIBRARY. 
-            ** ALWAYS RE-DEPLOY THE CURRENT "live" MODULE IF PREVIOUSLY DEPLOYED
-            */
-            IF (C.sha1_live IS NOT NULL) THEN
-                l_files.put('live/javascript/' || C.module_name, C.sha1_live);
-            END IF;
-
-            IF (C.build=0) THEN
-                dbms_output.put_line('No change - ' || C.module_name);
-                l_files.put(C.deploy_filename, C.sha1_test);
-                CONTINUE;
-            END IF;
-
-            /*
-            **  SOURCE TIMESTAMP CHANGE IS MORE RECENT THAN LAST DEPLOYMENT
-            */
-            SELECT apex_util.blob_to_clob(file_content) 
-              INTO l_file_content 
-              FROM apex_application_static_files 
-             WHERE application_id=101 
-               AND file_name=C.module_name;
-            
-            l_sha1_test:=LOWER(dbms_crypto.hash(src=>l_file_content, typ=>dbms_crypto.hash_sh1));
-
-            /* CHECK THERE ACTUALLY WAS A CONTENT CHANGE */
-            IF (l_sha1_test=C.sha1_test) THEN
-                l_files.put(C.deploy_filename, C.sha1_test);
-                CONTINUE;
-            END IF;
-            
-            UPDATE es_modules
-               SET updated_source=C.updated_date,
-                   sha1_test=l_sha1_test,
-                   updated_test=current_timestamp
-             WHERE module_name=C.module_name;
-             
-            addDeploy(C.deploy_filename, l_file_content);
         END LOOP;
         
         buildImportmaps;
-
-        FOR C IN (
-            WITH source AS
-            (
-                SELECT '_headers' AS deploy_filename, 
-                        '/*' || chr(10) || 
-                        'Access-Control-Allow-Origin: *' || chr(10) || 
-                        'Timing-Allow-Origin: *' AS content
-                  FROM dual
-            )
-            SELECT s.deploy_filename, s.content, f.sha1
-              FROM source s, website_files f
-             WHERE f.website_id(+)=l_website_id
-               AND f.path(+)=s.deploy_filename
-        ) LOOP
-            l_sha1:=LOWER(dbms_crypto.hash(src => TO_CLOB(C.content), typ => dbms_crypto.hash_sh1));
-            IF (C.sha1 IS NULL OR l_sha1<>C.sha1) THEN
-                addDeploy(C.deploy_filename, C.content);
-            ELSE
-                l_files.put(C.deploy_filename, C.sha1);
-            END IF;
-        END LOOP;
-
-        -- pck_core.log(l_files.to_string);
-        -- RETURN;
 
         sendNetlifyDeploy;
 
