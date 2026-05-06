@@ -14,6 +14,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
 
     PROCEDURE buildESModules(pEsmLibrary IN VARCHAR2) IS 
         l_files JSON_OBJECT_T;
+        l_keys JSON_KEY_LIST;
 
         TYPE tt_files IS RECORD (
             file_name apex_application_static_files.file_name%type,
@@ -25,68 +26,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         l_clob CLOB;
         l_website_id website.id%type;
         l_netlify_site_id website.netlify_site_id%type;
-        l_user_id website.user_id%type;
-        l_ssl_url VARCHAR2(50);
-        l_netlify_deploy_id website.netlify_deploy_id%type;
+        
 
         l_filename VARCHAR2(250);
         l_sha1 VARCHAR2(40);
-        l_rebuild_importmaps NUMBER:=0;
         n PLS_INTEGER:=0;
-
-        PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB) IS
-            l_sha1 website_files.sha1%type;
-        BEGIN
-            l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
-            l_deploy_files(l_sha1).file_name:=pFilename;
-            l_deploy_files(l_sha1).file_content:=pFileContent;
-            l_files.put(pFilename, l_sha1);
-        END;
-
-        /*
-        **  BUILD "test" LIBRARY IMPORTMAPS WHEN NEW MODULE ADDED OR MODULE NAME CHANGED
-        */
-        PROCEDURE buildImportmaps IS
-            l_importmap CLOB;
-            l_sha1 VARCHAR2(40);
-            l_filename VARCHAR2(100);
-        BEGIN
-            FOR C IN (
-                WITH data AS
-                (
-                    SELECT SUBSTR(module_name,1,INSTR(module_name,'.')-1) AS module_name, 
-                            l_ssl_url || '/test/javascript/' || module_name AS host_name
-                      FROM es_modules
-                ),
-                json AS
-                (
-                    SELECT json_object(
-                             'imports' VALUE json_objectagg(module_name VALUE host_name)
-                             returning clob) AS content
-                      FROM data
-                ),
-                source AS
-                (
-                    SELECT 'test/importmap.json' AS deploy_filename, sha1_live
-                      FROM es_modules_importmap
-                )
-                SELECT s.deploy_filename, s.sha1_live, j.content, f.sha1
-                  FROM source s, json j, website_files f
-                 WHERE f.website_id(+)=l_website_id
-                   AND f.path(+)=s.deploy_filename
-            ) LOOP
-                l_sha1:=LOWER(dbms_crypto.hash(src => C.content, typ => dbms_crypto.hash_sh1));
-                IF (C.sha1 IS NULL OR C.sha1<>l_sha1) THEN
-                    UPDATE es_modules_importmap SET sha1_test=l_sha1;
-                    addDeploy(C.deploy_filename, C.content);
-                ELSE
-                    l_files.put(C.deploy_filename, C.sha1);
-                END IF;
-                IF (C.sha1_live IS NOT NULL) THEN
-                    l_files.put(REPLACE(C.deploy_filename,'test','live'), C.sha1_live);
-                END IF;
-            END LOOP;
-        END;
 
         /* 
         ** SEND TO NETLIFY LIST OF SHA1 OF EACH FILE IN THE DEPLOYMENT 
@@ -126,70 +70,80 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         END;
 
     BEGIN
-        IF (pEsmLibrary NOT IN ('test','prod')) THEN
+        IF (pEsmLibrary NOT IN ('test','live')) THEN
             RAISE_APPLICATION_ERROR(-20100,'Library must be "live" or "test"');
             RETURN;
         END IF;
 
-        SELECT id, netlify_site_id, user_id INTO l_website_id, l_netlify_site_id, l_user_id 
+        SELECT id, netlify_site_id INTO l_website_id, l_netlify_site_id
           FROM website
          WHERE domain_name='es-modules';
 
-        l_ssl_url:='https://es-modules.netlify.app';
-
         l_files:= new JSON_OBJECT_T;
 
-        SELECT COUNT(*) INTO n FROM website_cssfiles_temp;
-        IF (n=0) THEN
-            pck_google.buildGoogleFontfaces;
-        END IF;
+        -- SELECT COUNT(*) INTO n FROM website_cssfiles_temp;
+        -- IF (n=0) THEN
+        --     pck_google.buildGoogleFontfaces;
+        -- END IF;
 
         FOR C IN (
             WITH source AS
             (
-                SELECT '_headers' AS file_name, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) AS updated_date, apex_util.blob_to_clob(file_content) AS file_content
+                SELECT file_name, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) AS updated_date, apex_util.blob_to_clob(file_content) AS file_content
                   FROM apex_application_static_files
                  WHERE application_id=101
-                   AND file_name='_headers.es-modules.txt'
+                   AND file_name LIKE '%.min.js'
+                   AND file_name <> 'deploy_start.min.js'
                  UNION ALL
-                SELECT e.module_name, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE), apex_util.blob_to_clob(s.file_content) 
-                  FROM es_modules e, apex_application_static_files s
-                 WHERE s.file_name=e.module_name
-                   AND s.application_id=101
+                 SELECT 'importmap.json', current_timestamp, json_object('imports' VALUE json_objectagg(SUBSTR(file_name,1,INSTR(file_name,'.')-1) VALUE 'https://es-modules.netlify.app/test/javascript/' || file_name) returning clob)
+                  FROM apex_application_static_files
+                 WHERE application_id=101
+                   AND file_name LIKE '%.min.js'
+                   AND file_name <> 'deploy_start.min.js'
                  UNION ALL
-                SELECT 'google_fontfaces.min.css', current_date, content
-                  FROM website_cssfiles_temp
+                 SELECT '_headers', CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE), apex_util.blob_to_clob(file_content)
+                  FROM apex_application_static_files
+                 WHERE application_id=101
+                   AND file_name='_headers.esm.txt'
             )
-            SELECT 'test/javascript/' || s.file_name AS file_name, s.updated_date, s.file_content, wf.deployed_date, wf.sha1
+            SELECT s.file_name, s.updated_date, s.file_content, wf.deployed_date, wf.sha1, wf.path
               FROM source s, website_files wf
-             WHERE wf.path(+)='test/javascript/' || s.file_name
-               AND wf.website_id(+)=l_website_id
-             UNION ALL
-             SELECT 'prod/javascript/' || s.file_name, s.updated_date, s.file_content, wf.deployed_date, wf.sha1
-              FROM source s, website_files wf
-             WHERE wf.path(+)='prod/javascript/' || s.file_name
+             WHERE (wf.path(+)='test/javascript/' || s.file_name OR wf.path(+)=s.file_name)
                AND wf.website_id(+)=l_website_id
         ) LOOP
             IF (C.deployed_date IS NULL OR C.updated_date>C.deployed_date) THEN
-                addDeploy(C.file_name, C.file_content);
+                l_sha1:=LOWER(dbms_crypto.hash(src => C.file_content, typ => dbms_crypto.hash_sh1));
+                l_deploy_files(l_sha1).file_name:='test/javascript/' || C.file_name;
+                l_deploy_files(l_sha1).file_content:=C.file_content;
+                l_files.put(C.file_name, l_sha1);
             ELSE
-                l_files.put(C.file_name, C.sha1);
+                l_files.put(C.path,C.sha1);
+            END IF;
+
+            /* Add existing "live" modules to deployment */
+            IF (pEsmLibrary='test') THEN
+                FOR C IN (
+                    SELECT path, sha1 FROM website_files WHERE website_id=l_website_id AND path LiKE 'live%'
+                ) LOOP
+                    l_files.put(C.path,C.sha1);
+                END LOOP;
+            /* Align "test" and "live" modules in  deployment */
+            ELSE
+                l_keys:=l_files.get_keys;
+                FOR i in 1..l_keys.COUNT LOOP
+                    IF (l_keys(i)<>'_headers') THEN
+                        l_files.put(REPLACE(l_keys(i),'test','live'),l_files.get_string(l_keys(i)));
+                    END IF;
+                END LOOP;
             END IF;
         END LOOP;
-        
-        buildImportmaps;
 
         sendNetlifyDeploy;
 
         /*
-        ** WAIT FOR DEPLOYMENT OF ES-MODULES TO COMPLETE
-        */
-        pck_hosting.waitDeployment(pWebsiteid=>l_website_id, pUserid=>l_user_id, pWaitSeconds=>100);
-
-        /*
         ** DELETE OLD DEPLOYMENTS OF ES-MODULES.NETLIFY.APP
         */
-        pck_deploy.runDelete(pUserId=>l_user_id, pWebsiteId=>l_website_id, pSiteId=>l_netlify_site_id);
+        pck_deploy.runDelete(pUserId=>null, pWebsiteId=>l_website_id, pSiteId=>l_netlify_site_id);
 
         EXCEPTION
             WHEN OTHERS THEN
