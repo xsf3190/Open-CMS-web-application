@@ -461,9 +461,6 @@ small {
 }
 
 /* MORE UtILITES - NEED TO STRUCTURE THIS */
-.round-border {
-  border-radius: 50%;
-}
 .icon-with-text {
   display: flex;
   align-items: center;
@@ -505,37 +502,9 @@ small {
 .space-between {
   --flex-horizontal-alignment: space-between;
 }
-.space-around {
-  --flex-horizontal-alignment: space-around;
-}
-.justify-end {
-  --flex-horizontal-alignment: flex-end;
-}
-.no-gap {
-  --flex-gap: 0;
-}
 .no-wrap {
     flex-wrap: nowrap;
 }
-
-[data-variant-flex="column"] {
-  --flex-direction: column;
-  --flex-vertical-alignment: flex-start;
-}
-
-/* Use aria property for current page navigation label */
-.like-a-link {
-  text-decoration: underline;
-  text-decoration-thickness: 0.5ex;
-  text-decoration-skip-ink: none;
-  text-underline-offset: 0.8ex;
-}
-
-.like-a-link {
-  color: var(--color-primary);
-}
-
-/* EDITOR STYLES */
 
 /* ALERT STYLES - CHANGE SAVE BUTTON TEXT AND BACKGROUND COLOR WHEN CLICKED */
 
