@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', async()=>{
     document.body.dataset.jslib = "#JSLIB#";
     document.body.dataset.resturl = "#RESTURL#";
     
-    const importmap = document.body.dataset.jslib + "importmap.json";
+    const importmap = document.body.dataset.jslib + "json/importmap.json";
     console.log("Create importmap " + importmap);
     const response = await fetch(importmap);
     const data = await response.json();
