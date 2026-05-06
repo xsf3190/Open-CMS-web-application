@@ -5,6 +5,13 @@ let endpoint;
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
+    
+    /* Add GOOGLE FONTFACES CSS to document <head> */
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', 'https://es-modules.netlify.app/css/google-fontfaces.min.css');
+    document.head.appendChild(link);
+
     callAPI(endpoint,"GET")
         .then((data) => {
             initDialog(data);
