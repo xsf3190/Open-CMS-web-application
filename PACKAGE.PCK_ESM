@@ -48,7 +48,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
             pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || l_netlify_site_id || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
 
             FOR C IN (SELECT id, sha1 FROM JSON_TABLE(l_clob, '$' COLUMNS (id, NESTED '$.required[*]' COLUMNS (sha1 PATH '$'))) WHERE sha1 IS NOT NULL) LOOP
-                dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
+                dbms_output.put_line('Uploading new content for ' || l_deploy_files(C.sha1).file_name);
                 IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
                     pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
                 ELSE
@@ -81,21 +81,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
 
         l_files:= new JSON_OBJECT_T;
 
-        -- SELECT COUNT(*) INTO n FROM website_cssfiles_temp;
-        -- IF (n=0) THEN
-        --     pck_google.buildGoogleFontfaces;
-        -- END IF;
+        SELECT COUNT(*) INTO n FROM website_cssfiles_temp;
+        IF (n=0) THEN
+            INSERT INTO website_cssfiles_temp(path, updated_date)
+            SELECT path, deployed_date
+              FROM website_files 
+             WHERE website_id=l_website_id
+               AND path='css/google-fontfaces.min.css';
+        END IF;
 
         FOR C IN (
             WITH source AS
             (
-                SELECT file_name, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) AS updated_date, apex_util.blob_to_clob(file_content) AS file_content
+                SELECT 'test/javascript/' || file_name AS file_name, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) AS updated_date, apex_util.blob_to_clob(file_content) AS file_content
                   FROM apex_application_static_files
                  WHERE application_id=101
                    AND file_name LIKE '%.min.js'
                    AND file_name <> 'deploy_start.min.js'
                  UNION ALL
-                 SELECT 'importmap.json', current_timestamp, json_object('imports' VALUE json_objectagg(SUBSTR(file_name,1,INSTR(file_name,'.')-1) VALUE 'https://es-modules.netlify.app/test/javascript/' || file_name) returning clob)
+                 SELECT 'test/json/importmap.json', current_timestamp, json_object('imports' VALUE json_objectagg(SUBSTR(file_name,1,INSTR(file_name,'.')-1) VALUE 'https://es-modules.netlify.app/test/javascript/' || file_name) returning clob)
                   FROM apex_application_static_files
                  WHERE application_id=101
                    AND file_name LIKE '%.min.js'
@@ -105,15 +109,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
                   FROM apex_application_static_files
                  WHERE application_id=101
                    AND file_name='_headers.esm.txt'
+                 UNION ALL
+                 SELECT path, updated_date, content
+                  FROM website_cssfiles_temp
             )
             SELECT s.file_name, s.updated_date, s.file_content, wf.deployed_date, wf.sha1, wf.path
               FROM source s, website_files wf
-             WHERE (wf.path(+)='test/javascript/' || s.file_name OR wf.path(+)=s.file_name)
-               AND wf.website_id(+)=l_website_id
+             WHERE wf.website_id(+)=l_website_id
+               AND wf.path(+)=s.file_name
         ) LOOP
             IF (C.deployed_date IS NULL OR C.updated_date>C.deployed_date) THEN
                 l_sha1:=LOWER(dbms_crypto.hash(src => C.file_content, typ => dbms_crypto.hash_sh1));
-                l_deploy_files(l_sha1).file_name:='test/javascript/' || C.file_name;
+                l_deploy_files(l_sha1).file_name:=C.file_name;
                 l_deploy_files(l_sha1).file_content:=C.file_content;
                 l_files.put(C.file_name, l_sha1);
             ELSE
