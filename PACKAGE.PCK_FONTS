@@ -100,8 +100,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_heading LONG;
         l_heading_regex varchar2(30):='<h[1-4](.+?)</h[1-4]>';
         l_italic_regex varchar2(15):='<i>(.+?)</i>';
-        l_code_regex varchar2(30):='<code>(.+?)</code>';
-        l_pre_regex varchar2(30):='<pre>(.+?)</pre>';
+        l_code_regex varchar2(30):='<code[^>]*(.*?)</code>';
         l_nbsp_regex varchar2(30):='<p>&nbsp;</p>';
         l_bold_italic_regex varchar2(30):='<i><strong>(.+?)</strong></i>';
         l_bold_regex varchar2(30):='<strong>(.+?)</strong>';
@@ -132,9 +131,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_text:=REGEXP_REPLACE(l_text,l_nbsp_regex,null,1,0);
 
         /* CODE */
-        code:=NVL(REGEXP_COUNT(l_text,l_code_regex),0);
+        code:=NVL(REGEXP_COUNT(l_text,l_code_regex,1,'n'),0);
         FOR i IN 1..code LOOP
-            l_codes:=l_codes || REGEXP_SUBSTR(l_text,l_code_regex,1,i);
+            l_codes:=l_codes || REGEXP_SUBSTR(l_text,l_code_regex,1,i, 'n', 1);
         END LOOP;
         l_codes:=distinct_chars(l_codes);
 
