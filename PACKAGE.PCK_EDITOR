@@ -959,14 +959,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         **  KEEP ALIGNED WITH CODE IN pck_deploy.deployLivesite
         */
         SELECT words, body_html, id,
-                CASE WHEN INSTR(body_html,'<blockquote>')>0 THEN 1 ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<code')>0 THEN 2 ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<img')>0 THEN 4 ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<hr>')>0 THEN 8 ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<ol>')>0 THEN 16 ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<pre>')>0 THEN 32 ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<table>')>0 THEN 64 ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<ul>')>0 THEN 128 ELSE 0 END
+                CASE WHEN INSTR(body_html,'<blockquote>')>0 THEN 1   ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<code')>0        THEN 2   ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<img')>0         THEN 4   ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<hr>')>0         THEN 8   ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<ol>')>0         THEN 16  ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<pre>')>0        THEN 32  ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<table')>0       THEN 64  ELSE 0 END + 
+                CASE WHEN INSTR(body_html,'<ul>')>0         THEN 128 ELSE 0 END
           INTO l_word_count, l_html, l_id, l_elements_used
           FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (body_html CLOB, id, words));
 
@@ -975,6 +975,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             WHEN 'header' THEN
                 UPDATE website_article 
                    SET header_html=l_html,
+                       elements_used_header=NVL(l_elements_used,0),
                        header_html_updated = current_timestamp
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
@@ -1001,6 +1002,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             WHEN 'footer' THEN
                 UPDATE website_article 
                    SET footer_html=l_html,
+                       elements_used_footer=NVL(l_elements_used,0),
                        footer_html_updated = current_timestamp
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
