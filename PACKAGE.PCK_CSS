@@ -450,7 +450,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                    SUM(BITAND(a.elements_used,16))  uses_ol,
                    SUM(BITAND(a.elements_used,32))  uses_pre,
                    SUM(BITAND(a.elements_used,64))  uses_table,
-                   SUM(BITAND(a.elements_used,128)) uses_ul
+                   SUM(BITAND(a.elements_used,128)) uses_ul,
+                   SUM(BITAND(wa.elements_used_header,64))  uses_table_header,
+                   SUM(BITAND(wa.elements_used_footer,64))  uses_table_footer
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteId
                AND wa.article_id=NVL(a.parent_id,a.id)
@@ -474,7 +476,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             IF (C.uses_pre>0) THEN
                 l_css:=l_css || getContent('deploy_pre');
             END IF;
-            IF (C.uses_table>0) THEN
+            IF (C.uses_table+C.uses_table_header+C.uses_table_footer>0) THEN
                 l_css:=l_css || getContent('deploy_table');
             END IF;
             IF (C.uses_ul>0) THEN
