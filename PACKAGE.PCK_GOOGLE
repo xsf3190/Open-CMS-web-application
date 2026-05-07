@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_GOOGLE" as
     --
-    PROCEDURE buildGoogleFontfaces;
+    PROCEDURE buildGoogleFontfaces(pLastModified IN DATE);
     --
     PROCEDURE loadGoogleFonts;
     --
@@ -13,7 +13,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
     /*
     ** REBUILD THE GOOGLE FONT-FACE CSS AND DEPLOY TO ES-MODULES
     */
-    PROCEDURE buildGoogleFontfaces IS
+    PROCEDURE buildGoogleFontfaces(pLastModified IN DATE) IS
         l_fontfaces CLOB;
     BEGIN
         dbms_lob.createtemporary(l_fontfaces,true);
@@ -22,9 +22,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
               FROM font
              ORDER BY id
         ) LOOP
-            dbms_lob.append(l_fontfaces,'font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
+            dbms_lob.append(l_fontfaces,'@font-face{font-family:f' || C.id || ';src:url(' || C.menu || ')format("woff2");}');
         END LOOP;
-        INSERT INTO website_cssfiles_temp(content) VALUES (l_fontfaces);
+        INSERT INTO website_cssfiles_temp(path, updated_date, content) VALUES ('css/google-fontfaces.min.css', pLastModified, l_fontfaces);
         dbms_lob.freetemporary(l_fontfaces);
     END;
 
@@ -38,6 +38,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
         l_nb_fonts PLS_INTEGER;
         l_days_diff PLS_INTEGER;
         l_sha1 website_files.sha1%type;
+        l_last_modified DATE;
         l_capabilities VARCHAR2(200);
         
     BEGIN
@@ -46,8 +47,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
         /*
         ** ONLY PROCEED IF ANY CHANGE SINCE LAST UPLOAD
         */
-        SELECT MAX(TO_DATE(g.lastModified,'YYYY-MM-DD'))-MAX(f.last_modified)
-          INTO l_days_diff
+        SELECT MAX(f.last_modified), MAX(TO_DATE(g.lastModified,'YYYY-MM-DD'))-MAX(f.last_modified)
+          INTO l_last_modified, l_days_diff
           FROM JSON_TABLE(l_clob, '$.items[*]' COLUMNS(lastModified)) g, font f;
         
         IF (l_days_diff=0) THEN
@@ -270,7 +271,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
 
         EXECUTE IMMEDIATE 'UPDATE font SET capabilities=BIN_TO_NUM(' || l_capabilities || ')';
         
-        buildGoogleFontfaces;
+        buildGoogleFontfaces(l_last_modified);
     END;
 
     /*
