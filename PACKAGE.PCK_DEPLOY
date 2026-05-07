@@ -633,8 +633,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END IF;
             END IF;
 
-            l_header:='<header id="header" class="ck-content"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
-            l_footer:='<footer id="footer" class="ck-content"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
+            l_header:='<header id="header"' || CASE WHEN C.header_html IS NULL THEN ' nocontent' END || '>' || C.header_html || '</header>';
+            l_footer:='<footer id="footer"' || CASE WHEN C.footer_html IS NULL THEN ' nocontent' END || '>' || C.footer_html || '</footer>';
 
             IF (C.parent_id IS NOT NULL) THEN
                 n:=0;
@@ -667,7 +667,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 END IF;
             END IF;
             
-            l_main:='<main id="main" class="ck-content flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
+            l_main:='<main id="main" class="flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
             setImgSrcset(pArticleId, regexp_substr(C.max_width,'\d+'), l_main);
 
@@ -752,8 +752,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<meta name="author" content="performance toolkit">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
                     l_preload_fonts ||
-                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '">' ||
-                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '">' ||
+                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '" media="all">' ||
+                    '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '" media="all">' ||
                     --'<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
                     '<link rel="icon" href="/images/favicon.svg">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
@@ -1112,37 +1112,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_files.put(C.path, C.deployed_sha1);
             ELSE
                 addDeploy(pFilename=>C.path, pFileContent=>C.content, pSha1=>C.source_sha1);
-            END IF;
-        END LOOP;
-
-        /*
-        **  CSS
-        */
-        FOR C IN (
-            WITH source AS
-            (
-                SELECT '/css/' || s.file_name AS path, apex_util.blob_to_clob(s.file_content) file_content, CAST(s.last_updated_on AS TIMESTAMP WITH TIME ZONE) updated_date
-                  FROM apex_application_static_files s
-                 WHERE s.file_name IN (
-                    'deploy_blockquote.min.css',
-                    'deploy_code.min.css',
-                    'deploy_hr.min.css',
-                    'deploy_image.min.css',
-                    'deploy_ol.min.css',
-                    'deploy_pre.min.css',
-                    'deploy_table.min.css',
-                    'deploy_ul.min.css')
-            )
-            SELECT s.path, s.file_content, wf.sha1, CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
-              FROM source s, website_files wf
-             WHERE wf.website_id(+)=pWebsiteid
-               AND wf.path(+)=s.path
-        ) LOOP
-            IF (C.build=0) THEN
-                l_files.put(C.path, C.sha1);
-            ELSE
-                l_sha1:=LOWER(dbms_crypto.hash(src => C.file_content, typ => dbms_crypto.hash_sh1));
-                addDeploy(pFilename=>C.path, pFileContent=>C.file_content, pSha1=>l_sha1);
             END IF;
         END LOOP;
 
