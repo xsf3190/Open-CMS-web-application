@@ -111,9 +111,15 @@ export const clickHandler = (e) => {
             .then((data) => {
                 isSending = false;
                 loader.style.opacity=0;
-                setTokens(data);
-                live.textContent = "LOGGED ON SUCCESSFULLY";
-                live.style.color = "green";
+                if (data.refresh) {
+                    setTokens(data);
+                    live.textContent = "LOGGED ON SUCCESSFULLY";
+                    live.style.color = "green";
+                } else {
+                    live.textContent = data.message;
+                    live.style.color = "red";
+                }
+                
             })
             .catch((error) => {
                 loader.style.opacity=0;
