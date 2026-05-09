@@ -76,7 +76,6 @@ export const clickHandler = (e) => {
     } else if (e.target.classList.contains("validate-passcode")) {
         request_type = "verify";
     }
-    console.log("request_type",request_type);
 
     live.textContent = e.target.dataset.processing;
     loader.style.opacity=1;
@@ -98,7 +97,8 @@ export const clickHandler = (e) => {
                     clearInterval(intervalId);
                     intervalId = setInterval(checkAuthStatus,3000, formObj);
                 } else if (request_type==="passcode") {
-                    document.getElementById("passcode").removeAttribute("disabled");
+                    /* Reveal passcode submit controls */
+                    e.target.setAttribute("aria-expanded",true);
                 }
             })
             .catch((error) => {
