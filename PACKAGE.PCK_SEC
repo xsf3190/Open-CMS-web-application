@@ -289,12 +289,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         '<article class="flow">' ||
             '<div id="error-summary" tabindex="-1" class="error-summary" hidden>' ||
                 '<h4 id="error-heading">' ||
-                    '<span aria-hidden="true">⚠️</span> Oops! There is a problem.' ||
+                    '<span aria-hidden="true">⚠️</span>Errors in Form' ||
                 '</h4>' ||
                 '<ul></ul>' ||
             '</div>' ||
             '<p>Required fields are marked with an *</p>' ||
-            '<fieldset>' ||
+            '<fieldset class="flow">' ||
                 '<legend>Email address *</legend>' ||
                 '<div>' ||
                     '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
@@ -305,15 +305,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<div><hr><span>OR</span><hr></div>' ||
                     '<button class="button sendmail-passcode" type="button" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
                 '</div>' ||
-            '</fieldset>' ||
-            '<p style="margin-block-start:var(--space-l)">If you received a code in your inbox</p>' ||
-            '<fieldset class="flex-items">' ||
-                '<legend>Enter code</legend>' ||
-                '<div>' ||
-                    '<input disabled type="text" id="passcode" name="passcode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
+                '<div id="passcode-submit" style="vissibility:hidden;overflow:hidden;max-height:0px;transition: all .2s ease-in-out;">' ||
+                    '<label>Enter the code sent to your inbox</label>' ||
+                    '<input type="text" id="passcode" name="passcode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
                     '<div id="passcode-error" class="inline-error"></div>' ||
+                    '<button class="button validate-passcode" type="button" style="margin-block-start:var(--space-m)">Submit</button>' ||
                 '</div>' ||
-                '<button class="button validate-passcode" type="button" style="align-self:flex-start">Validate</button>' ||
             '</fieldset>' ||
         '</article>';
 
