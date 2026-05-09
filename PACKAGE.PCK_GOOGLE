@@ -272,6 +272,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
         EXECUTE IMMEDIATE 'UPDATE font SET capabilities=BIN_TO_NUM(' || l_capabilities || ')';
         
         buildGoogleFontfaces(l_last_modified);
+
+        pck_esm.buildESModules;
     END;
 
     /*
