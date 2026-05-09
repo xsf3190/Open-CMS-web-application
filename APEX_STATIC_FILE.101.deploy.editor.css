@@ -334,6 +334,20 @@ dialog hr+span {
     --button-padding: 0.2em 0.3em;
 }
 
+/* CONTENT REVEALED ON BUTTON CLICK */
+
+.to-be-revealed {
+  visibility: hidden;
+  overflow: hidden;
+  max-height: 0px;
+  transition: all .3s ease-in-out;
+}
+
+[aria-expanded="true"] + .to-be-revealed {
+  visibility: visible;
+  max-height: 500px;
+}
+
 
 /* SELECT ELEMENT */
 
