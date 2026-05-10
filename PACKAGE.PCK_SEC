@@ -281,12 +281,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_header:=
         '<input type="hidden" name="url" value="">' ||
         '<input type="hidden" name="request_type" value="">' ||
-        '<header class="flex-items space-between">' ||
-            '<h2>Log in</h2>' ||
-        '</header>';
+        '<h2>Log in</h2>';
         
         l_article:=
-        '<article class="flow">' ||
             '<div id="error-summary" tabindex="-1" class="error-summary" hidden>' ||
                 '<h4 id="error-heading">' ||
                     '<span aria-hidden="true">⚠️</span>Errors in Form' ||
@@ -303,22 +300,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 '<div class="flex-items">' ||
                     '<button class="button sendmail-magic" type="button" data-processing="Sent a log-in link to your inbox">Send Link</button>' ||
                     '<div><hr><span>OR</span><hr></div>' ||
-                    '<button class="button sendmail-passcode" type="button" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
+                    '<button class="button sendmail-passcode" type="button" aria-expanded="false" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
+                    '<div id="passcode-submit" class="to-be-revealed">' ||
+                        '<label>Submit the code sent to your inbox</label>' ||
+                        '<input type="text" id="passcode" name="passcode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
+                        '<div id="passcode-error" class="inline-error"></div>' ||
+                        '<button class="button validate-passcode" type="button" style="margin-block-start:var(--space-m)">Submit</button>' ||
+                    '</div>' ||
                 '</div>' ||
-                '<div id="passcode-submit" style="vissibility:hidden;overflow:hidden;max-height:0px;transition: all .2s ease-in-out;">' ||
-                    '<label>Enter the code sent to your inbox</label>' ||
-                    '<input type="text" id="passcode" name="passcode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
-                    '<div id="passcode-error" class="inline-error"></div>' ||
-                    '<button class="button validate-passcode" type="button" style="margin-block-start:var(--space-m)">Submit</button>' ||
-                '</div>' ||
-            '</fieldset>' ||
-        '</article>';
+            '</fieldset>';
 
         l_footer:=
-        '<footer class="flex-items">' ||
-            '<span aria-live="polite"></span>' ||
-            '<span class="loader icon"></span>' ||
-        '</footer>';
+        '<span aria-live="polite"></span>' ||
+        '<span class="loader icon"></span>';
         
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
