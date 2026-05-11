@@ -665,7 +665,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     */
     PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER) IS
         l_email users.email%type;
-        l_domain users.domain%type;
         l_cld_cloud_name users.cld_cloud_name%type;
         l_cld_upload_preset users.cld_upload_preset%type;
         l_jwt_enc_key user_ords_clients.client_secret%type;
