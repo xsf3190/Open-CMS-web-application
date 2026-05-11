@@ -2,15 +2,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_API" IS
     --
     PROCEDURE callDogfaceAPI(pUserid IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pBodyBlob IN OUT NOCOPY BLOB, pData IN OUT NOCOPY CLOB);
     --
-    FUNCTION getGithubReposOwner(pUserId IN users.id%type) RETURN VARCHAR2;
-    --
-    --FUNCTION getNetlifyIntallationId(pUserId IN users.id%type) RETURN VARCHAR2;
-    --
     FUNCTION getCloudinaryAPISecret(pUserId IN users.id%type) RETURN users.cld_api_secret%type;
-    --
-    PROCEDURE resetGithubCurrentBuild(pUserId IN users.id%type);
-    --
-    FUNCTION setGithubCurrentBuild(pUserId IN users.id%type, pSessionId IN users.current_build_session%type) RETURN NUMBER;
     --
     PROCEDURE getCloudinaryData(pUserId IN users.id%type, pCloudName IN OUT users.cld_cloud_name%type, pCldApiKey IN OUT users.cld_api_key%type, pCldImageMaxSize IN OUT INTEGER, pCldVideoMaxSize IN OUT INTEGER, pGoogleApiKey IN OUT VARCHAR2);
     --
@@ -21,10 +13,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_API" IS
     PROCEDURE callCKEditor(pData IN OUT NOCOPY CLOB);
     --
     PROCEDURE callCloudinaryAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
-    --
-    PROCEDURE callGithubAPI(pUserId IN users.id%type, pRepository IN VARCHAR2 DEFAULT 'DEPLOY', pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
-    --
-    PROCEDURE callGithubAPI(pUserId IN users.id%type, pRepository IN VARCHAR2 DEFAULT 'DEPLOY', pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
     --
     PROCEDURE callGodaddyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB);
     --
@@ -262,86 +250,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
         END LOOP;
     END;
 
-
-    FUNCTION getGithubReposOwner(pUserId IN users.id%type) RETURN VARCHAR2 IS
-        l_github_repos_owner users.github_repos_owner%type;
-    BEGIN
-        /* Get user's account name (repository owner) */
-        FOR C IN (SELECT github_repos_owner FROM users WHERE id=pUserId) LOOP 
-            l_github_repos_owner:=C.github_repos_owner;
-        END LOOP;
-
-        /* Get Administrator value if user has not registered github repository */
-        IF (l_github_repos_owner IS NULL) THEN
-            SELECT u.github_repos_owner
-              INTO l_github_repos_owner
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
-        END IF;
-
-        RETURN (l_github_repos_owner);
-    END;
-
-    FUNCTION setGithubCurrentBuild(pUserId IN users.id%type, pSessionId IN users.current_build_session%type) RETURN NUMBER IS
-        l_github_repos_owner users.github_repos_owner%type;
-        l_user_id users.id%type;
-        l_current_build_session users.current_build_session%type;
-    BEGIN
-        /* Get user that manages the Github repository */
-        FOR C IN (SELECT github_repos_owner, id FROM users WHERE id=pUserId) LOOP 
-            l_github_repos_owner:=C.github_repos_owner;
-            l_user_id:=C.id;
-        END LOOP;
-
-        /* Use Administrator repository if user is not registered with github  */
-        IF (l_github_repos_owner IS NULL) THEN
-            SELECT u.github_repos_owner, u.id
-              INTO l_github_repos_owner, l_user_id
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
-        END IF;
-
-        /* Get value of current_build_session for user whose Github repository manages deployments */
-        SELECT current_build_session INTO l_current_build_session FROM users WHERE id=l_user_id FOR UPDATE;
-
-        /* Claim repository if available */
-        IF (l_current_build_session IS NULL) THEN
-            UPDATE users SET current_build_session=pSessionId, updated_date=current_timestamp WHERE id=l_user_id;
-            COMMIT;
-        END IF;
-
-        RETURN (l_current_build_session);
-    END;
-
-    PROCEDURE resetGithubCurrentBuild(pUserId IN users.id%type) IS
-        l_github_repos_owner users.github_repos_owner%type;
-        l_user_id users.id%type;
-        l_current_build_session users.current_build_session%type;
-    BEGIN
-        /* Get user that manages the Github repository */
-        FOR C IN (SELECT github_repos_owner, id FROM users WHERE id=pUserId) LOOP 
-            l_github_repos_owner:=C.github_repos_owner;
-            l_user_id:=C.id;
-        END LOOP;
-
-        /* Use Administrator repository if user is not registered with github  */
-        IF (l_github_repos_owner IS NULL) THEN
-            SELECT u.github_repos_owner, u.id
-              INTO l_github_repos_owner, l_user_id
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
-        END IF;
-
-        UPDATE users SET current_build_session=NULL, updated_date=current_timestamp  WHERE id=l_user_id;
-        COMMIT;
-    END;
-
     PROCEDURE getCloudinaryData(pUserId IN users.id%type, pCloudName IN OUT users.cld_cloud_name%type, pCldApiKey IN OUT users.cld_api_key%type, pCldImageMaxSize IN OUT INTEGER, pCldVideoMaxSize IN OUT INTEGER, pGoogleApiKey IN OUT VARCHAR2) IS
         l_cld_cloud_name users.cld_cloud_name%type;
         l_cld_api_key users.cld_api_key%type;
@@ -395,72 +303,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
         END IF;
 
         RETURN (l_cld_api_secret);
-    END;
-
-    /*
-    **  GITHUB API
-    */
-    PROCEDURE callGithubAPI(pUserId IN users.id%type, pRepository IN VARCHAR2 DEFAULT 'DEPLOY', pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB) IS
-        l_github_repos_owner users.github_repos_owner%type;
-        l_github_token users.github_token%type;
-        l_github_url VARCHAR2(200):='https://api.github.com/repos/';
-        l_error_message LONG;
-    BEGIN
-        /* Get user's github token and account name (repository owner) */
-        FOR C IN (SELECT github_repos_owner, github_token FROM users WHERE id=pUserId) LOOP 
-            l_github_repos_owner:=C.github_repos_owner;
-            l_github_token:=C.github_token;
-        END LOOP;
-
-        /* Use Administrator's token if user does not have token */
-        IF (l_github_token IS NULL) THEN
-            SELECT u.github_repos_owner, u.github_token
-              INTO l_github_repos_owner, l_github_token
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
-        END IF;
-
-        apex_web_service.g_request_headers(1).name := 'Accept';
-        apex_web_service.g_request_headers(1).value := 'application/vnd.github+json';
-        apex_web_service.g_request_headers(2).name := 'Authorization';
-        apex_web_service.g_request_headers(2).value := 'Bearer ' || l_github_token;
-        apex_web_service.g_request_headers(3).name := 'User-Agent';
-        apex_web_service.g_request_headers(3).value := l_github_repos_owner;
-
-        l_github_url:=l_github_url || l_github_repos_owner || '/' || pRepository;
-
-        IF (pEndpoint IS NOT NULL) THEN 
-            l_github_url:=l_github_url || '/' || pEndpoint;
-        END IF;
-
-        IF (pBody IS NULL) THEN
-            pData := apex_web_service.make_rest_request(p_url=>l_github_url, p_http_method=>pMethod);
-        ELSE
-            pData := apex_web_service.make_rest_request(p_url=>l_github_url, p_http_method=>pMethod, p_body=>pBody);
-        END IF;
-
-        pck_core.log(apex_web_service.g_status_code || ' : ' || pMethod || ' - ' || l_github_url);
-
-        IF (apex_web_service.g_status_code BETWEEN 200 AND 299) OR (apex_web_service.g_status_code=pStatusAllowed) THEN
-            RETURN;
-        END IF;
-
-        l_error_message:=pMethod || ' ' || l_github_url || ' https status:' || apex_web_service.g_status_code;
-        FOR C IN (SELECT message FROM JSON_TABLE(pData,'$' COLUMNS (message)) WHERE message IS NOT NULL) LOOP
-            l_error_message:=l_error_message || chr(10) || 'API message: ' || C.message;
-        END LOOP;
-        RAISE_APPLICATION_ERROR(-20020,l_error_message);
-    END;
-
-    /*
-    ** When Github API called without the pBody IN OUT CLOB  parameter - so use this signature and provide dummy refereenc
-    */
-    PROCEDURE callGithubAPI(pUserId IN users.id%type, pRepository IN VARCHAR2 DEFAULT 'DEPLOY', pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB) IS
-        l_clob CLOB; -- dummy variable
-    BEGIN
-        callGithubAPI(pUserId=>pUserId,pRepository=>pRepository,pEndpoint=>pEndpoint,pMethod=>pMethod,pBody=>l_clob,pStatusAllowed=>pStatusAllowed,pData=>pData);
     END;
 
     /*
