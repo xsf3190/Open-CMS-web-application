@@ -35,6 +35,7 @@ const handleError = (error) => {
 ** CHECK IF TOKEN EXPIRED 
 */
 const expiredToken = (token) => {
+    if (!token) return true;
     const now = Math.floor(new Date().getTime() / 1000);
     const arrayToken = token.split(".");
     const parsedToken = JSON.parse(atob(arrayToken[1]));
@@ -96,10 +97,10 @@ try {
     handleError(e);
 }
 
-if (refresh_token && !access_token) {
-    console.log("refresh_token exists but access_token missing - rotate tokens");
-    rotate_tokens();
-}
+// if (refresh_token && !access_token) {
+//     console.log("refresh_token exists but access_token missing - rotate tokens");
+//     await rotate_tokens();
+// }
 
 /* 
 ** CALL API FOR RESOURCES WITH ACCESS TOKEN
