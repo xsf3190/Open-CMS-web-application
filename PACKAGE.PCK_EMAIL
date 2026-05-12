@@ -167,167 +167,65 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
     **     for "passcode" authentication this is the 6-digit passcode randomly generated on the server
     */
     FUNCTION emailTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
-        l_html LONG;
+        l_mjml_request LONG;
+        l_mjml_response CLOB;
+        l_json JSON_OBJECT_T;
+        l_errors LONG;
+        l_html CLOB;
     BEGIN
+        l_mjml_request:=
+        '<mjml>' ||
+            '<mj-body>' ||
+                '<mj-section>' ||
+                    '<mj-column>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 Login to your editor Website</mj-text>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-spacer height="50px" />' ||
+                        CASE pAuthMethod
+                            WHEN 'magic' THEN
+                            '<mj-button href="#URL#" font-family="system-ui" font-size="40px" background-color="#f45e43" color="white" inner-padding="20px" font-weight="750"  border-radius="10px" letter-spacing="5px">LOGIN</mj-button>'
+                            WHEN 'passcode' THEN
+                            '<mj-text font-size="40px" color="#020617" align="center" font-family="system-ui" font-weight="700" letter-spacing="10px">#PASSCODE#</mj-text>'
+                        END ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-text font-size="14px" color="#020617" align="center" font-family="system-ui" font-weight="300">Engineered by Florent Meijer & Mark Brown</mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+            '</mj-body>' ||
+        '</mjml>';
+
+        l_json:= new JSON_OBJECT_T;
+        CASE pAuthMethod
+            WHEN 'magic' THEN
+            l_json.put('mjml',REPLACE(l_mjml_request,'#URL#',pAuthData));
+            WHEN 'passcode' THEN
+            l_json.put('mjml',REPLACE(l_mjml_request,'#PASSCODE#',pAuthData));
+        END CASE;
         
-        l_html:=
-'<!doctype html>' ||
-'<html lang="en">' ||
-  '<head>' ||
-    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' ||
-    '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' ||
-    '<title>Simple Transactional Email</title>' ||
-    '<style media="all" type="text/css">' ||
-'@media all {' ||
-  '.btn-primary table td:hover {' ||
-    'background-color: #ec0867 !important;' ||
-  '}' ||
-  '.btn-primary a:hover {' ||
-    'background-color: #ec0867 !important;' ||
-    'border-color: #ec0867 !important;' ||
-  '}' ||
-'}' ||
-'@media only screen and (max-width: 640px) {' ||
-  '.main p,' ||
-'.main td,' ||
-'.main span {' ||
-    'font-size: 16px !important;' ||
-  '}' ||
-  '.wrapper {' ||
-    'padding: 8px !important;' ||
-  '}' ||
-  '.content {' ||
-    'padding: 0 !important;' ||
-  '}' ||
-  '.container {' ||
-    'padding: 0 !important;' ||
-    'padding-top: 8px !important;' ||
-    'width: 100% !important;' ||
-  '}' ||
-  '.main {' ||
-    'border-left-width: 0 !important;' ||
-    'border-radius: 0 !important;' ||
-    'border-right-width: 0 !important;' ||
-  '}' ||
-  '.btn table {' ||
-    'max-width: 100% !important;' ||
-    'width: 100% !important;' ||
-  '}' ||
-  '.btn a {' ||
-    'font-size: 16px !important;' ||
-    'max-width: 100% !important;' ||
-    'width: 100% !important;' ||
-  '}' ||
-'}' ||
-'@media all {' ||
-  '.ExternalClass {' ||
-    'width: 100%;' ||
-  '}' ||
-  '.ExternalClass,' ||
-'.ExternalClass p,' ||
-'.ExternalClass span,' ||
-'.ExternalClass font,' ||
-'.ExternalClass td,' ||
-'.ExternalClass div {' ||
-    'line-height: 100%;' ||
-  '}' ||
-  '.apple-link a {' ||
-    'color: inherit !important;' ||
-    'font-family: inherit !important;' ||
-    'font-size: inherit !important;' ||
-    'font-weight: inherit !important;' ||
-    'line-height: inherit !important;' ||
-    'text-decoration: none !important;' ||
-  '}' ||
-  '#MessageViewBody a {' ||
-    'color: inherit;' ||
-    'text-decoration: none;' ||
-    'font-size: inherit;' ||
-    'font-family: inherit;' ||
-    'font-weight: inherit;' ||
-    'line-height: inherit;' ||
-  '}' ||
-'}' ||
-'</style>' ||
-  '</head>' ||
-  '<body style="font-family: Helvetica, sans-serif; -webkit-font-smoothing: antialiased; font-size: 16px; line-height: 1.3; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; background-color: #f4f5f6; margin: 0; padding: 0;">' ||
-    '<table role="presentation" border="0" cellpadding="0" cellspacing="0" class="body" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background-color: #f4f5f6; width: 100%;" width="100%" bgcolor="#f4f5f6">' ||
-      '<tr>' ||
-        '<td style="font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top;" valign="top">&nbsp;</td>' ||
-        '<td class="container" style="font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top; max-width: 600px; padding: 0; padding-top: 24px; width: 600px; margin: 0 auto;" width="600" valign="top">' ||
-          '<div class="content" style="box-sizing: border-box; display: block; margin: 0 auto; max-width: 600px; padding: 0;">' ||
-            '<!-- START CENTERED WHITE CONTAINER -->' ||
-            '<span class="preheader" style="color: transparent; display: none; height: 0; max-height: 0; max-width: 0; opacity: 0; overflow: hidden; mso-hide: all; visibility: hidden; width: 0;">Your Login request to ' || pWebsite || '</span>' ||
-            '<table role="presentation" border="0" cellpadding="0" cellspacing="0" class="main" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background: #ffffff; border: 1px solid #eaebed; border-radius: 16px; width: 100%;" width="100%">' ||
-              '<!-- START MAIN CONTENT AREA -->' ||
-              '<tr>' ||
-                '<td class="wrapper" style="font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top; box-sizing: border-box; padding: 24px;" valign="top">' ||
-                  '<p style="font-family: Helvetica, sans-serif; font-size: 16px; font-weight: bold; margin: 0; margin-bottom: 16px;">' ||
-                  CASE pAuthMethod
-                    WHEN 'website' THEN 'Your Editor website is created at ' || pWebsite ELSE 'Your Login request to ' || pWebsite
-                  END ||
-                  '</p>' ||
-                  '<p style="font-family: Helvetica, sans-serif; font-size: 16px; font-weight: normal; margin: 0; margin-bottom: 16px;">' ||
-                  CASE pAuthMethod
-                    WHEN 'magic' THEN 'Click the button below to log in. Your link expires in 5 minutes.'
-                    WHEN 'passcode' THEN 'Enter this passcode to log in. Expires in 5 minutes.'
-                    WHEN 'website' THEN 'Add following DNS records to your domain:'
-                  END ||
-                  '</p>' ||
-                  CASE WHEN pAuthMethod='website' THEN
-                  '<p style="font-family: Helvetica, sans-serif; font-size: 24px; font-weight: normal; margin: 0; margin-bottom: 24px;">Type:A Name:@ Data:75.2.60.5</p>' ||
-                  '<p style="font-family: Helvetica, sans-serif; font-size: 24px; font-weight: normal; margin: 0; margin-bottom: 24px;">Type:CNAME Name:editor Data:' || SUBSTR(pWebsite,9) || '</p>' ||
-                  '<p style="font-family: Helvetica, sans-serif; font-size: 24px; font-weight: normal; margin: 0; margin-bottom: 24px;">Type:CNAME Name:www Data:' || REPLACE(SUBSTR(pWebsite,9),'editor','custom') || '</p>'
-                  END ||
-                  '<table role="presentation" border="0" cellpadding="0" cellspacing="0" class="btn btn-primary" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; box-sizing: border-box; width: 100%; min-width: 100%;" width="100%">' ||
-                    '<tbody>' ||
-                      '<tr>' ||
-                        '<td align="left" style="font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top; padding-bottom: 16px;" valign="top">' ||
-                          '<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: auto;">' ||
-                            '<tbody>' ||
-                              '<tr>' ||
-                                '<td style="font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top; border-radius: 4px; text-align: center; background-color: #0867ec;" valign="top" align="center" bgcolor="#0867ec">' ||
-                                CASE pAuthMethod
-                                    WHEN 'magic' THEN '<a href="' || pAuthData || '" target="_blank" style="border: solid 2px #0867ec; border-radius: 4px; box-sizing: border-box; cursor: pointer; display: inline-block; font-size: 16px; font-weight: bold; margin: 0; padding: 12px 24px; text-decoration: none; text-transform: capitalize; background-color: #0867ec; border-color: #0867ec; color: #ffffff;">Login</a>'
-                                    WHEN 'passcode' THEN '<span style="border: solid 2px #0867ec; border-radius: 4px; box-sizing: border-box; display: inline-block; font-size: 24px; letter-spacing: 8px; font-weight: bold; margin: 0; padding: 12px 24px; text-transform: capitalize; background-color: #0867ec; border-color: #0867ec; color: #ffffff;">' || pAuthData || '</span>'
-                                    WHEN 'website' THEN '<span style="border: solid 2px #0867ec; border-radius: 4px; box-sizing: border-box; display: inline-block; font-size: 24px; letter-spacing: 8px; font-weight: bold; margin: 0; padding: 12px 24px; text-transform: capitalize; background-color: #0867ec; border-color: #0867ec; color: #ffffff;">Like this you can also access the editor site at https://editor.' || SUBSTR(apex_string_util.get_domain(pWebsite),1,INSTR(pWebsite,'-')-1) || '</span>'
-                                END ||
-                                '</td>' ||
-                              '</tr>' ||
-                            '</tbody>' ||
-                          '</table>' ||
-                        '</td>' ||
-                      '</tr>' ||
-                    '</tbody>' ||
-                  '</table>' ||
-                  '<p style="font-family: Helvetica, sans-serif; font-size: 16px; font-weight: normal; margin: 0; margin-bottom: 16px;">Thank you.</p>' ||
-                '</td>' ||
-              '</tr>' ||
-              '<!-- END MAIN CONTENT AREA -->' ||
-              '</table>' ||
-            '<!-- START FOOTER -->' ||
-            '<div class="footer" style="clear: both; padding-top: 24px; text-align: center; width: 100%;">' ||
-              '<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%;" width="100%">' ||
-                '<tr>' ||
-                  '<td class="content-block" style="font-family: Helvetica, sans-serif; vertical-align: top; color: #9a9ea6; font-size: 16px; text-align: center;" valign="top" align="center">' ||
-                    '<span class="apple-link" style="color: #9a9ea6; font-size: 16px; text-align: center;">Email signed by adfreesites.com</span>' ||
-                  '</td>' ||
-                '</tr>' ||
-                '<tr>' ||
-                  '<td class="content-block powered-by" style="font-family: Helvetica, sans-serif; vertical-align: top; color: #9a9ea6; font-size: 16px; text-align: center;" valign="top" align="center">' ||
-                    'Engineered by Florent Meijer and Mark Brown using <a href="https://docs.aws.amazon.com/ses/latest/dg/Welcome.html" style="color: #9a9ea6; font-size: 16px; text-align: center; text-decoration: none;">Amazon Simple Email Service</a>' ||
-                  '</td>' ||
-                '</tr>' ||
-              '</table>' ||
-            '</div>' ||
-            '<!-- END FOOTER -->' ||
-'<!-- END CENTERED WHITE CONTAINER --></div>' ||
-        '</td>' ||
-        '<td style="font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top;" valign="top">&nbsp;</td>' ||
-      '</tr>' ||
-    '</table>' ||
-  '</body>' ||
-'</html>';
+        apex_web_service.clear_request_headers;
+        apex_web_service.g_request_headers(1).name := 'Content-Type';
+        apex_web_service.g_request_headers(1).value := 'application/json';
+
+        FOR C IN (
+            SELECT url,key,secret FROM api_credential WHERE name='MJML'
+        ) LOOP
+            l_mjml_response:=apex_web_service.make_rest_request(
+                p_url=>C.url||'/render', 
+                p_http_method=>'POST', 
+                p_username=>C.key, 
+                p_password=>C.secret,
+                p_body=>l_json.stringify);
+
+            pck_core.log('HTTPS status from ' || C.url || ':' || apex_web_service.g_status_code);
+
+            IF (apex_web_service.g_status_code=200) THEN
+                SELECT errors, html 
+                  INTO l_errors, l_html
+                  FROM JSON_TABLE(l_mjml_response,'$' COLUMNS (errors,html CLOB)); 
+            END IF;
+
+        END LOOP;
 
         RETURN (l_html);
     END;
