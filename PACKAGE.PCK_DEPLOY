@@ -132,19 +132,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
     END;
 
+    FUNCTION getLockHandle RETURN VARCHAR2 IS
+        l_lock_handle VARCHAR2(128);
+    BEGIN
+        DBMS_LOCK.ALLOCATE_UNIQUE_AUTONOMOUS (
+            lockname => 'DEPLOY',
+            lockhandle => l_lock_handle,
+            expiration_secs => DBMS_LOCK.MAXWAIT
+        );
+        RETURN (l_lock_handle);
+    END;
+
+
+    PROCEDURE lockDeployment IS     
+        l_lock_status NUMBER;
+    BEGIN
+        l_lock_status := DBMS_LOCK.REQUEST(
+            lockhandle => getLockHandle(),
+            lockmode => DBMS_LOCK.X_MODE, -- eXclusive
+            timeout => DBMS_LOCK.MAXWAIT, -- wait forever
+            release_on_commit => FALSE
+        );
+        pck_core.log('lockDeployment status:'||l_lock_status);
+    END;
+
+    PROCEDURE releaseDeployment IS     
+        l_lock_status NUMBER;
+    BEGIN
+        l_lock_status := DBMS_LOCK.RELEASE(
+            lockhandle => getLockHandle()
+        );
+        pck_core.log('releaseDeployment status:'||l_lock_status);
+    END;
+
     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type) IS
     BEGIN        
         UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId;
-        
+        lockDeployment;
+
         FOR C IN (
             SELECT netlify_site_id
               FROM website
              WHERE id=pWebsiteid
         ) LOOP
+            
             pck_css.buildEditorCSS(pWebsiteid);
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
         END LOOP;
+
+        releaseDeployment;
     END;
 
     
@@ -160,6 +197,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         ** Optimised Font files and CSS files are deployed to live site
         ** All other files are "copied" from editor site
         */
+        lockDeployment;
         pck_fonts.getFontFiles(pWebsiteid);
         pck_css.buildLiveCSS(pWebsiteid);
 
@@ -216,6 +254,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id_custom);
         END LOOP;
+        releaseDeployment;
     END;
 
     FUNCTION getSha256(pContent IN CLOB) RETURN VARCHAR2 IS
