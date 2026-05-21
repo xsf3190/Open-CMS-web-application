@@ -265,7 +265,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
-    **  Determine whether editor (TEST) website can be deployed based on different source data last update dates
+    **  Determine whether the editor website can be deployed based on relevant source data last update dates
     */  
     FUNCTION canDeploy(pWebsiteid IN website.id%type) RETURN BOOLEAN IS
         l_netlify_last_published TIMESTAMP WITH LOCAL TIME ZONE;
@@ -273,19 +273,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         WITH data AS
         (
-            SELECT w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published, CAST(x.last_updated_on AS TIMESTAMP WITH TIME ZONE) css2_updated_date
-            FROM website w, website_article wa, article a, website_font wf, apex_application_static_files x
+            SELECT w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, a.updated_date as article_updated_date, wf.updated_date as font_updated_date, w.netlify_last_published
+            FROM website w, website_article wa, article a, website_font wf
             WHERE w.id=pWebsiteid
             AND wa.website_id=w.id
             AND wa.article_id=NVL(a.parent_id,a.id)
             AND wf.website_id=w.id
-            AND x.application_id=101
-            AND x.file_name IN ('deploy.min.css','ckeditor.min.css')
         )
         SELECT MAX(netlify_last_published),MAX(updated_date)
         INTO l_netlify_last_published, l_last_updated_date
         FROM data
-        UNPIVOT  (updated_date FOR COL IN (nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date, css2_updated_date));
+        UNPIVOT  (updated_date FOR COL IN (nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date));
 
         RETURN (l_last_updated_date>l_netlify_last_published);
     END;
