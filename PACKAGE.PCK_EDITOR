@@ -541,23 +541,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        /* 
-        ** Check no other session currently deploying - simultaneous deployments not allowed on Netlify free plan 
-        */
-        FOR C IN (SELECT job_name FROM user_scheduler_running_jobs WHERE job_name LIKE 'DEPLOY_%') LOOP
-            l_json:= new JSON_OBJECT_T;
-            l_json.put('success',true);
-            l_json.put('header', '<small>Problem publishing website</small>');
-            l_json.put('article', '<p>Someone else is currently deploying on this shared platform</p>');
-            l_json.put('footer', '<small>Try again later</small>');
-            apex_util.prn(l_json.to_clob,false);
-            RETURN;
-        END LOOP;
-
         /*
         ** CHECK WHICH DEPLOY REQUEST IS VALID
         */
-       
         FOR C IN (
                 SELECT netlify_last_published, netlify_last_published_custom, netlify_site_id, netlify_site_id_custom
                   FROM website
