@@ -20,8 +20,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     g_session_user_id NUMBER;
     g_website_id NUMBER;
     --
-    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pData IN VARCHAR2 DEFAULT null) RETURN VARCHAR2;
-    --
     PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
@@ -458,43 +456,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         RETURN (NVL(l_scope,'visitor'));
     END;
 
-    FUNCTION addMenuButton(pUriTemplate IN VARCHAR2, pMethod IN VARCHAR2, pLabel IN VARCHAR2, pData IN VARCHAR2 DEFAULT null) RETURN VARCHAR2 IS
-        TYPE tt_editor_symbols IS RECORD(
-            symbol VARCHAR2(10),
-            color  VARCHAR2(20)
-        );
-        /*
-        ** Table of REST endpoints and corresponding icons / colors
-        */
-
-        TYPE t_editor_symbols IS TABLE OF tt_editor_symbols INDEX BY VARCHAR2(30);
-        l_editor_symbols t_editor_symbols:=t_editor_symbols(
-            'authenticate'=>tt_editor_symbols('&#x1F464;','blue'),
-            'change-url'=>tt_editor_symbols('&#9883;','brown'),
-            'create-website'=>tt_editor_symbols('&#43;','brown'),
-            'ecology'=>tt_editor_symbols('&#127807;',''),
-            'edit-codepen'=>tt_editor_symbols('&#9917;','crimson'),
-            'edit-content'=>tt_editor_symbols('&#9998;','crimson'),
-            'edit-pages'=>tt_editor_symbols('&#128214;','brown'),
-            'link-domain'=>tt_editor_symbols('&#9884;','brown'),
-            'message'=>tt_editor_symbols('&#9993;','brown'),
-            'publish-website'=>tt_editor_symbols('&#127760;','darkgreen'), 
-            'userinfo'=>tt_editor_symbols('&#x1F464;','blue'),
-            'visits'=>tt_editor_symbols('&#128202;','rebeccapurple'),
-            'page-options'=>tt_editor_symbols('&#x2637;','rebeccapurple')
-        );
-        l_route VARCHAR2(30):=SUBSTR(pUriTemplate,1,INSTR(pUriTemplate,'/')-1);
-    BEGIN
-        RETURN ('<button type="button" role="menuitem" tabindex="-1"' ||
-                ' data-endpoint="' || pUriTemplate || '"' ||
-                ' data-method="' ||pMethod || '"' ||
-                CASE WHEN pData IS NOT NULL THEN pData END ||
-                '>' || 
-                '<span aria-hidden="true" style="color:' || l_editor_symbols(l_route).color || '">' || l_editor_symbols(l_route).symbol || '</span>' ||
-                pLabel || 
-                '</button>');
-    END;
-
     FUNCTION buildMenulist(pWebsiteid IN NUMBER, pScope IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2 IS
         l_html CLOB;
         
@@ -505,21 +466,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             RETURN(l_html);
         END IF;
 
-        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'red', '✎', 'Editor');
+        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'red', '🖍', 'Editor');
         l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'orange', '🌅', 'Upload');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish');
         l_html:=l_html || addMenuitem('fonts/:ID', 'green', '📝', 'Fonts');
         l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo');
         l_html:=l_html || addMenuitem('favicon/:ID', '', '🍀', 'Favicon');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Pages');
-        l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '☷', 'Page Options');
+        l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '🈸', 'Options');
         
         FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
             l_html:=l_html || addMenuitem('new-collection-item/:ID', 'cyan', 'B', 'New ' || C.navigation_label, 'data-parent-id="' || C.article_id || '"');
         END LOOP;
 
-        l_html:=l_html || addMenuitem('create-website/:ID/:PAGE', 'red', '🌐', 'New Website');
+        -- l_html:=l_html || addMenuitem('create-website/:ID/:PAGE', 'red', '🌐', 'New Website');
         l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', 'cyan', '⚽', 'Codepen');
+
+        FOR C IN (SELECT null FROM website WHERE id=pWebsiteid AND netlify_site_id_custom IS NOT NULL) LOOP
+            l_html:=l_html || addMenuitem('go-live/:ID', '', '🆕', 'GO LIVE');
+        END LOOP;
 
         RETURN (l_html);
     END;
@@ -587,11 +552,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
-    for i in 1..nvl(owa.num_cgi_vars, 0) loop
-        if (instr(owa.cgi_var_name(i),'sec-ch-ua')>0) then
-            pck_core.log(owa.cgi_var_name(i) || ': ' || owa.cgi_var_val(i));
-        end if;
-    end loop;
         l_fingerprint:=getFingerprint(l_remote_addr, l_user_agent, l_timezone);
 
         UPDATE fingerprint 
