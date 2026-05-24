@@ -16,6 +16,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
      --
     PROCEDURE deployLiveSite(pWebsiteid IN website.id%type);
     --
+    PROCEDURE lockDeployment;
+    --
+    PROCEDURE releaseDeployment;
+    --
     PROCEDURE runDelete(pUserId IN users.id%type, pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type);
     --
     PROCEDURE runDeployment(pWebsiteId IN website.id%type, pSiteId IN website.netlify_site_id%type, pRestUrl IN VARCHAR2);
