@@ -75,6 +75,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
             RETURN;
         END IF;
 
+        pck_deploy.lockDeployment;
+
         SELECT id, netlify_site_id INTO l_website_id, l_netlify_site_id
           FROM website
          WHERE domain_name='es-modules';
@@ -151,6 +153,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         ** DELETE OLD DEPLOYMENTS OF ES-MODULES.NETLIFY.APP
         */
         pck_deploy.runDelete(pUserId=>null, pWebsiteId=>l_website_id, pSiteId=>l_netlify_site_id);
+
+        pck_deploy.releaseDeployment;
 
         EXCEPTION
             WHEN OTHERS THEN
