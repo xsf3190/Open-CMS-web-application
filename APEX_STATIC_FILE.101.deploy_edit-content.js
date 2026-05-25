@@ -206,13 +206,13 @@ export const init = async (element) => {
     }
 
     const headerConfig = {
-        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Heading, Italic, Paragraph, Underline, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
-        toolbar: [ 'heading', 'paragraph', '|', 'undo', 'redo',  '|', 'italic', 'bold', 'underline','|', 'fontSize', 'fontColor', '|', 'alignment', '|', 'insertTable'],
+        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Heading, Italic, Underline, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
+        toolbar: [ 'heading', '|', 'undo', 'redo',  '|', 'italic', 'bold', 'underline','|', 'fontSize', 'fontColor', '|', 'alignment', '|', 'insertTable'],
         // licenseKey: "GPL",
         heading: {
             options: [
                 { model: 'heading1', view: 'h1', title: 'Title', class: 'ck-heading_heading1' },
-                { model: 'paragraph', title: 'Subtitle', class: 'ck-heading_paragraph' },
+                { model: 'heading2', view: 'h2', title: 'Subtitle', class: 'ck-heading_heading2' },
             ]
         },
         table: {
