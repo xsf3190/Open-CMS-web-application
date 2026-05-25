@@ -533,6 +533,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     */
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_netlify_last_published website.netlify_last_published%type;
         l_header LONG;
         l_article LONG;
         l_footer LONG;
@@ -542,71 +543,60 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         /*
-        ** CHECK WHICH DEPLOY REQUEST IS VALID
+        ** LIST PAGES THAT HAVE CHANGED CONTENT SINCE PREVIOUS DEPLOYMENT
         */
-        FOR C IN (
-                SELECT netlify_last_published, netlify_last_published_custom, netlify_site_id, netlify_site_id_custom
-                  FROM website
-                 WHERE id=pWebsiteid
-        ) LOOP
-            IF (pck_deploy.canDeploy(pWebsiteid)) THEN
-                l_header:='<h4>PUBLISH EDITOR SITE</h4>';
-                n:=0;
-                FOR C1 IN (
-                    SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) item
-                      FROM website w, website_article wa, article a
-                     WHERE w.id=pWebsiteid
-                       AND wa.website_id=w.id
-                       AND wa.article_id=NVL(a.parent_id,a.id)
-                       AND (w.nav_updated_date>w.netlify_last_published OR a.updated_date>w.netlify_last_published OR wa.header_html_updated>w.netlify_last_published OR wa.footer_html_updated>w.netlify_last_published)
-                    ORDER BY wa.display_order, a.title nulls FIRST
-                ) LOOP
-                    n:=n+1;
-                    IF (n=1) THEN
-                        l_article:=
-                        '<p>Content changes since last published on ' || TO_CHAR(C.netlify_last_published,'fmdd Mon yyyy, hh24:mi') || '</p>' ||
-                         '<ul>';
-                    END IF;
-                    l_article:=l_article || '<li>' || NVL(C1.item,'CSS') || '</li>';
-                END LOOP;
-                IF (n>0) THEN
-                    l_article:=l_article || '</ul>';
-                END IF;
+        SELECT netlify_last_published
+          INTO l_netlify_last_published
+          FROM website
+         WHERE id=pWebsiteid;
 
-                l_footer:=
-                '<div class="flex-items space-apart">' ||
-                    '<button type="button" class="button publish" data-env="TEST">PUBLISH</button>' ||
-                    '<span aria-live="polite"></span>' ||
-                    '<span class="loader icon"></span>' ||
-                '</div>';
-            ELSIF (C.netlify_last_published>NVL(C.netlify_last_published_custom, C.netlify_last_published)) THEN
-                l_header:='<h4>PUBLISH LIVE SITE</h4>';
-                l_article:=
-                '<p>Editor site is published with all content up to date.</p>' ||
-                '<p>Click GO LIVE button</p>';
-                l_footer:=
-                '<div class="flex-items space-apart">' ||
-                    '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>' ||
-                    '<span aria-live="polite"></span>' ||
-                    '<span class="loader icon"></span>' ||
-                '</div>';
-            ELSIF (C.netlify_last_published_custom IS NULL) THEN
-                l_header:='<h4>PUBLISH LIVE SITE</h4>';
-                l_article:=
-                '<p>Editor site is published with all content up to date.</p>' ||
-                '<p>Click GO LIVE button</p>';
-                l_footer:=
-                '<div class="flex-items space-apart">' ||
-                    '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>' ||
-                    '<span aria-live="polite"></span>' ||
-                    '<span class="loader icon"></span>' ||
-                '</div>';
-            ELSE
-                l_header:='ALL CONTENT PUBLISHED';
-                l_article:='<p>NOTHING NEW TO PUBLISH</p>';
-                l_footer:='';
-            END IF;
+        l_header:='<h4>PUBLISH EDITOR SITE</h4>';
+
+        l_article:=
+        '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+        '<table>' ||
+            '<caption id="table-caption">' || 'Content changes since last published on ' || TO_CHAR(l_netlify_last_published at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</caption>' ||
+            '<thead>' ||
+                '<tr>' ||
+                    '<th>Page</th>' ||
+                    '<th>Last Update</th>' ||
+                '</tr>' ||
+            '</thead>' ||
+            '<tbody>';
+
+        n:=0;
+        FOR C IN (
+            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, a.updated_date
+              FROM website_article wa, article a
+             WHERE wa.website_id=pWebsiteid
+               AND wa.article_id=NVL(a.parent_id,a.id)
+               AND a.updated_date>l_netlify_last_published 
+            ORDER BY wa.display_order, a.title nulls FIRST
+        ) LOOP
+            n:=n+1;
+            l_article:=l_article || 
+            '<tr><td>' || C.page || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, 'dd-mm-yy fmhh24:fmmipm') || '</td></tr>';
         END LOOP;
+
+        IF (n=0) THEN
+            l_article:=l_article || 
+            '<tr><td>ALL PAGES</td><td>PUBLISHED</td></tr>';
+        END IF;
+
+        l_article:=l_article || 
+        '</tbody></table></div>';
+
+        IF (n>0) THEN    
+            l_footer:=
+            '<div class="flex-items space-apart">' ||
+                '<button type="button" class="button publish" data-env="TEST">PUBLISH</button>' ||
+                '<span aria-live="polite"></span>' ||
+                '<span class="loader icon"></span>' ||
+            '</div>';
+        ELSE
+            l_footer:=
+            '<span>NOTHING TO DO</span>';
+        END IF;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
