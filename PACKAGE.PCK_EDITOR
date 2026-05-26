@@ -566,11 +566,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         n:=0;
         FOR C IN (
-            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, a.updated_date
+            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, GREATEST(a.updated_date,wa.header_html_updated,wa.footer_html_updated) updated_date
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteid
                AND wa.article_id=NVL(a.parent_id,a.id)
-               AND a.updated_date>l_netlify_last_published 
+               AND GREATEST(a.updated_date,wa.header_html_updated,wa.footer_html_updated)>l_netlify_last_published 
             ORDER BY wa.display_order, a.title nulls FIRST
         ) LOOP
             n:=n+1;
