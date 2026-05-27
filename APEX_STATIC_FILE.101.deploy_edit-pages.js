@@ -4,9 +4,7 @@
 import { dialog_article, initDialog, dropdown } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-let nav_items, edit, collection, errors;
-
-const endpoint = "edit-pages/:ID/:PAGE";
+let nav_items, edit, collection;
 
 /*
 ** USER CLICKS NAVIGATION LABEL IN EDITOR MAKING IT "current"
@@ -23,16 +21,14 @@ const navHandler = (e) => {
 }
 
 /*
-** USER CHANGES NAVIGATION LABEL OR PAGE COLLECTTION TYPE
+** USER CHANGES NAVIGATION LABEL OR PAGE COLLECTION TYPE
 */
 const inputHandler = (e) => {
     if (e.target.matches("[name='navigation_label']")) {
-        errors.textContent = "";
         nav_items.querySelector("[aria-current='page']").textContent = e.target.value;
     }
 
     if (e.target.matches("[name='collection_type']")) {
-        errors.textContent = "";
         nav_items.querySelector("[aria-current='page']").dataset.collection = e.target.value;
     }
 }
@@ -43,7 +39,6 @@ export const init = () => {
             initDialog(data);
 
             nav_items = dialog_article.querySelector("ul");
-            errors = dialog_article.querySelector(".errors");
 
             edit = dialog_article.querySelector("input[name='navigation_label']");
             edit.value = nav_items.querySelector("[aria-current='page']").textContent;
@@ -105,21 +100,6 @@ const buttonHandler = async (e) => {
         return;
     }
 
-    if (e.target.matches(".delete-site")) {
-        console.log("User wants to delete site!!");
-        return;
-        /*
-        callAPI(endpoint,'DELETE',{})
-            .then(() => {
-                window.location.reload();
-                return;
-            })
-            .catch((error) => {
-                handleError(error);
-            });
-        */
-    }
-
     if (e.target.matches(".delete-page")) {
         if (nav_items.childElementCount === 1) {
             e.target.classList.add("delete-site");
@@ -136,20 +116,13 @@ const buttonHandler = async (e) => {
 
     if (e.target.matches(".deploy")) {
         const arr = [];
-        errors.textContent = "";
         nav_items.querySelectorAll("a").forEach ((item) => {
             const obj = {};
             obj.article_id = item.dataset.id;
             obj.collection_type = item.dataset.collection;
-            if (item.textContent === '' || item.textContent===newLabel) {
-                errors.textContent += "Navigation Labels not complete";
-            }
             obj.navigation_label = item.textContent;
             arr.push(obj);
         })
-        if (errors.textContent) {
-            return;
-        }
 
         await callAPI(endpoint,'POST', arr)
             .then((data) => {
