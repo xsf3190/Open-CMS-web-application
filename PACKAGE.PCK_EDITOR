@@ -14,7 +14,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
-    PROCEDURE getPages(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
+    PROCEDURE getPagesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE publishPageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -657,7 +657,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /* 
     **  BUILD FORM CONTROLS TO EDIT WEBSITE PAGES
     */
-    PROCEDURE getPages(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
+    PROCEDURE getPagesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
         l_article CLOB;
@@ -706,11 +706,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '</fieldset>' ||
                 '<button type="button" class="button add-page">Add Page</button>' ||
                 '<button type="button" class="button delete-page">Delete Page</button>' ||
-                '<button type="button" class="button deploy">Save Changes</button>' ||
                 '<span class="errors" style="color:red"></span>' ||
             '</fieldset>';
 
-        l_footer:='<small>TAKE CARE when migrating an existing website to keep the same label names</small>';
+        l_footer:=
+            '<div class="flex-items">' ||
+                '<button type="button" class="button deploy">Save Changes</button>' ||
+                -- '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">PUBLISH</button>' ||
+                '<span aria-live="polite"></span>' ||
+                '<span class="loader icon"></span>' ||
+            '</div>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
