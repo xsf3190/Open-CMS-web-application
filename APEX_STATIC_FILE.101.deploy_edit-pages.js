@@ -4,26 +4,33 @@
 import { dialog_article, initDialog, dropdown } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-let nav_items, edit, collection;
+let endpoint, nav_items, edit, collection;
 
-/*
-** USER CLICKS NAVIGATION LABEL IN EDITOR MAKING IT "current"
-*/
-const navHandler = (e) => {
-    e.preventDefault();
-                
-    for(let li of nav_items.children){
-        li.querySelector("[aria-current='page']")?.removeAttribute("aria-current");
-    }
-    e.target.setAttribute("aria-current","page");
-    edit.value = e.target.textContent;
-    setCollectionType(e.target.dataset.collection);
+export const init = (e) => {
+    endpoint = e.dataset.endpoint;
+
+    callAPI(endpoint,'GET')
+        .then((data) => {
+            console.log(data);
+            initDialog(data);
+
+            nav_items = dialog_article.querySelector("fieldset:has([name='nav'])");
+
+            edit = dialog_article.querySelector("input[name='navigation_label']");
+            edit.value = nav_items.querySelector("input:checked ~ label").textContent;
+
+            collection = dialog_article.querySelectorAll("[name='collection_type']");
+            setCollectionType(dialog_article.querySelector("[aria-current='page']").dataset.collection);
+        })
+        .catch((error) => {
+            handleError(error);
+        });
 }
 
 /*
 ** USER CHANGES NAVIGATION LABEL OR PAGE COLLECTION TYPE
 */
-const inputHandler = (e) => {
+export const inputHandler = (e) => {
     if (e.target.matches("[name='navigation_label']")) {
         nav_items.querySelector("[aria-current='page']").textContent = e.target.value;
     }
@@ -33,27 +40,21 @@ const inputHandler = (e) => {
     }
 }
 
-export const init = () => {
-    callAPI(endpoint,'GET')
-        .then((data) => {
-            initDialog(data);
-
-            nav_items = dialog_article.querySelector("ul");
-
-            edit = dialog_article.querySelector("input[name='navigation_label']");
-            edit.value = nav_items.querySelector("[aria-current='page']").textContent;
-
-            collection = dialog_article.querySelectorAll("[name='collection_type']");
-            setCollectionType(dialog_article.querySelector("[aria-current='page']").dataset.collection);
-
-            nav_items.addEventListener("click", navHandler);
-            dialog_article.addEventListener("input", inputHandler);
-            dialog_article.addEventListener("click", buttonHandler);
-
-        })
-        .catch((error) => {
-            handleError(error);
-        });
+/*
+**  IGNORE CHANGE EVENTS
+*/
+export const changeHandler = (e) => {
+    console.log("e",e);
+    if (e.target.tagName==="A") {
+        e.target.preventDefault();
+                    
+        for(let li of nav_items.children){
+            li.querySelector("[aria-current='page']")?.removeAttribute("aria-current");
+        }
+        e.target.setAttribute("aria-current","page");
+        edit.value = e.target.textContent;
+        setCollectionType(e.target.dataset.collection);
+    }
 }
 
 const setCollectionType = (data) => {
@@ -82,7 +83,7 @@ const unsetCollection = () => {
 let tmp = 0;
 const newLabel = "[NEW PAGE]";
 
-const buttonHandler = async (e) => {
+export const clickHandler = async (e) => {
     if (e.target.matches(".add-page")) {
         const target = nav_items.querySelector("[aria-current='page']").parentElement;
 
@@ -101,10 +102,8 @@ const buttonHandler = async (e) => {
     }
 
     if (e.target.matches(".delete-page")) {
+        /* Valid Website has at least one page */
         if (nav_items.childElementCount === 1) {
-            e.target.classList.add("delete-site");
-            e.target.style.backgroundColor = "red";
-            e.target.textContent = "Delete Site";
             return;
         }
         nav_items.querySelector("[aria-current='page']").parentElement.remove();
@@ -114,7 +113,8 @@ const buttonHandler = async (e) => {
         return;
     }
 
-    if (e.target.matches(".deploy")) {
+    if (e.target.matches(".save")) {
+        /* SAVE CHANGES AND PROMPT USER TO PUBLISH */
         const arr = [];
         nav_items.querySelectorAll("a").forEach ((item) => {
             const obj = {};
@@ -126,10 +126,7 @@ const buttonHandler = async (e) => {
 
         await callAPI(endpoint,'POST', arr)
             .then((data) => {
-                console.log("data",data);
-                if (data.deploy) {
-                    dropdown.querySelector("[data-endpoint^=publish-website]").click();
-                }
+                dropdown.querySelector("[data-endpoint^=publish-website]").click();
             })
             .catch((error) => {
                 handleError(error);
