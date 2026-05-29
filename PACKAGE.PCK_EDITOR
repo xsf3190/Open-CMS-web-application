@@ -655,67 +655,67 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  BUILD FORM CONTROLS TO EDIT WEBSITE PAGES
+    **  BUILD FORM CONTROLS TO ADD/DELETE WEBSITE PAGES AND CHANGE NAVIGATION LABELS
     */
     PROCEDURE getPagesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
-        l_nav LONG;
-        n PLS_INTEGER;
-        n1 PLS_INTEGER;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
-        l_header:='<small>Add / Delete pages, change navigation labels.</small>';
-
-        FOR C IN (
-            SELECT wa.article_id current_page, wa.collection_type, wa.navigation_label
-              FROM website_article wa, article a
-             WHERE wa.website_id=pWebsiteId
-               AND wa.article_id=NVL(a.parent_id,a.id)
-               AND a.id=pArticleId
-        ) LOOP
-            l_nav:=pck_deploy.buildNav(pWebsiteId, C.current_page);
-            IF (l_nav IS NULL) THEN
-                l_nav:='<nav><ul><li><a href="/" aria-current="page" data-id="' || pArticleId || '" data-collection="' || C.collection_type || '">' || C.navigation_label || '</a></li></ul></nav>';
-            ELSE
-                n:=INSTR(l_nav,C.current_page);
-                n1:=INSTR(l_nav,'>',n);
-                l_nav:=SUBSTR(l_nav,1,n1-1) || ' aria-current="page"' || SUBSTR(l_nav,n1);
-            END IF;
-        END LOOP;
+        l_header:='<h4>Add / Delete pages, change navigation labels.</h4>';
 
         l_article:=
-            l_nav ||
+        '<fieldset class="flex-items">' ||
+            '<legend>Select page</legend>';
+
+        FOR C IN (
+            SELECT wa.article_id, wa.collection_type, wa.navigation_label
+              FROM website_article wa
+             WHERE wa.website_id=pWebsiteId
+             ORDER BY wa.display_order
+        ) LOOP
+            l_article:=l_article ||
+            '<div>' ||
+                '<label for="nav-' || C.article_id || '">' || C.navigation_label || '</label>' ||
+                '<input id="nav-' || C.article_id || '" type="radio" name="nav" class="visually-hidden"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
+            '</div>';
+        END LOOP;
+        l_article:=l_article ||
+        '</fieldset>';
+
+        l_article:=l_article ||
+        '<fieldset class="flex-items">' ||
+            '<div>' ||
+                '<label for="navigation-label">Navigation Label</label>' ||
+                '<input type="text" id="navigation-label" name="navigation_label" maxlength="30" value="">' ||
+            '</div>' ||
             '<fieldset class="flex-items">' ||
-                '<div>' ||
-                    '<label for="navigation-label">Navigation Label</label>' ||
-                    '<input type="text" id="navigation-label" name="navigation_label" maxlength="30" value="">' ||
-                '</div>' ||
-                '<fieldset class="flex-items">' ||
-                    '<legend>Page Type</legend>' ||
-                    '<label for="collection_type-normal">Normal' ||
-                    '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"></label>' ||
-                    '<label for="collection_type-blog">Blog' ||
-                    '<input type="radio" id="collection_type-blog" name="collection_type" value="BLOG"></label>' ||
-                    '<label for="collection_type-portfolio">Portfolio' ||
-                    '<input type="radio" id="collection_type-portfolio" name="collection_type" value="PORTFOLIO"></label>' ||
-                '</fieldset>' ||
-                '<button type="button" class="button add-page">Add Page</button>' ||
-                '<button type="button" class="button delete-page">Delete Page</button>' ||
-                '<span class="errors" style="color:red"></span>' ||
-            '</fieldset>';
+                '<legend>Page Type</legend>' ||
+                '<label for="collection_type-normal">Normal' ||
+                '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"></label>' ||
+                '<label for="collection_type-blog">Blog' ||
+                '<input type="radio" id="collection_type-blog" name="collection_type" value="BLOG"></label>' ||
+                '<label for="collection_type-portfolio">Portfolio' ||
+                '<input type="radio" id="collection_type-portfolio" name="collection_type" value="PORTFOLIO"></label>' ||
+            '</fieldset>' ||
+            '<button type="button" class="button add-page">Add Page</button>' ||
+            '<button type="button" class="button delete-page">Delete Page</button>' ||
+            '<span class="errors" style="color:red"></span>' ||
+        '</fieldset>';
+
+        pck_core.log(l_article);
 
         l_footer:=
-            '<div class="flex-items">' ||
-                '<button type="button" class="button deploy">Save Changes</button>' ||
-                -- '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">PUBLISH</button>' ||
-                '<span aria-live="polite"></span>' ||
-                '<span class="loader icon"></span>' ||
-            '</div>';
+        '<div class="flex-items">' ||
+            '<button type="button" class="button save">Save Changes</button>' ||
+            -- '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">PUBLISH</button>' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>' ||
+        '</div>';
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
