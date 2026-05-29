@@ -586,8 +586,7 @@ input:focus-visible {
 */
 dialog fieldset {
     inline-size: fit-content;
-    border-radius: 80px;
-    corner-shape: superellipse(2.8);
+    border-radius: 12px;
 }
 
 /* GROUP OF CHECKBOXES IN FIELDSET */
@@ -604,14 +603,15 @@ dialog fieldset:has(input[type="checkbox"]) {
     }
 }
 
-/* GROUP OF RADIO BUTTONS */
-dialog fieldset:has(input[type="radio"]) {
-    display: flex;
+/* WE STYLE RADIO BUTTONS */
+input[type="radio"] {
+    -webkit-appearance: none;
+	appearance: none;
+    line-height: 1;
 }
 
-/* RADIO BUTTONS */
-dialog input[type="radio"] {
-	appearance: none;
+/* RADIO BUTTONS - VISIBLE */
+.show-controls input[type="radio"] {
 	background: #fff; /* this is needed for iOS. Otherwise the background just becomes black. */
 	border: 1px solid #333;
 	height: var(--space-s);
@@ -620,18 +620,6 @@ dialog input[type="radio"] {
 	border-radius: 100%;
 	vertical-align: text-bottom;
 	position: relative;
-
-    /*
-	&[disabled],
-	&[aria-disabled="true"] {
-		opacity: 0.4;
-	}
-    */
-
-    &+label {
-        display: initial;
-        margin-inline-start: 0.5em;
-    }
 
 	&::before {
 		content: "";
@@ -644,15 +632,28 @@ dialog input[type="radio"] {
 		top: 0;
 	}
 
-    &:checked::before {
-        border: 5px solid transparent;
-        border-radius: 100%;
-        outline-offset: -6px;
-        background: #000;
-    }
-
     &:focus {
 		outline: 2px solid;
 		outline-offset: 2px;
 	}
+}
+
+input[type=radio]::before {
+	height: 0;
+    width: 0;
+}
+	
+input[type=radio]:checked::before {
+	border: 5px solid transparent;
+	border-radius: 100%;
+	outline-offset: -6px;	
+	background: #000;
+}
+
+/* HIDE RADIO BUTTONS AND STYLE CHECKED LABEL */
+.hide-controls input[type="radio"]:checked + label  {
+    text-decoration:underline;
+	text-decoration-thickness: 0.5ex;
+    text-decoration-skip-ink: none;
+    text-underline-offset: 0.8ex;
 }
