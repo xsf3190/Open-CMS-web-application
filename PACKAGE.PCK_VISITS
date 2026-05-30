@@ -638,6 +638,66 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         pHtml:=l_content;
     END;
 
+    PROCEDURE getVisitsByReferrer(pWebsiteId IN website.id%type, pPage IN NUMBER, pHandler IN VARCHAR2, pTotalPages IN OUT NUMBER, pRowCount IN OUT NUMBER, pHtml IN OUT NOCOPY CLOB)  IS
+        l_content CLOB;
+        l_offset NUMBER;
+        l_count NUMBER;
+    BEGIN
+        l_offset:=(pPage-1)*ROWS_PER_PAGE;
+
+        SELECT COUNT(DISTINCT referrer) INTO l_count FROM page_hit WHERE website_id=pWebsiteId AND referrer IS NOT NULL;
+        pTotalPages:=CEIL(l_count/ROWS_PER_PAGE);
+        
+        IF (pPage=1 AND pHandler='change') THEN
+            l_content:=
+            '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+            '<table>' ||
+                '<caption id="table-caption">Site visited through ' || l_count|| ' distinct referrers</caption>' ||
+                '<thead>' ||
+                    '<tr>' ||
+                        '<th>Referrer</th>' ||
+                        '<th>Visits</th>' ||
+                        '<th>Pct</th>' ||
+                        '<th>First Visit</th>' ||
+                        '<th>Last Visit</th>' ||
+                    '</tr>' ||
+                '</thead>' ||
+                '<tbody>';
+        END IF;
+
+        FOR C IN (
+                   SELECT referrer, first_visit_date, last_visit_date, nb_visits, RATIO_TO_REPORT(nb_visits) OVER() pct, COUNT(*) OVER() total
+                    FROM
+                        (
+                        SELECT referrer, MIN(visit_date) first_visit_date, MAX(visit_date) last_visit_date, COUNT(*) nb_visits, COUNT(*) OVER() total_visits
+                          FROM page_hit 
+                         WHERE website_id=pWebsiteId
+                           AND referrer IS NOT NULL
+                         GROUP BY referrer
+                        )
+                    ORDER BY nb_visits DESC, referrer
+                    OFFSET l_offset ROWS
+                    FETCH FIRST ROWS_PER_PAGE ROWS ONLY
+            ) LOOP
+                l_content:=l_content || 
+                '<tr>' ||
+                    '<td>' || C.referrer || '</td>' || 
+                    '<td>' || C.nb_visits || '</td>' || 
+                    '<td>' || TO_CHAR(C.pct*100,'fm990D00') || '%</td>' ||
+                    '<td>' || TO_CHAR(C.first_visit_date,'dd Mon yyyy') || '</td>' ||
+                    '<td>' || CASE WHEN C.nb_visits>1 THEN TO_CHAR(C.last_visit_date,'dd Mon yyyy') END || '</td>' ||
+                '</tr>';
+            END LOOP;
+
+        IF (pPage=1 AND pHandler='change') THEN
+            l_content:=l_content || 
+            '</tbody></table></div>';
+        END IF;
+
+        pRowCount:=l_count;
+        pHtml:=l_content;
+    END;
+
     /* 
     **  ENTRY POINT FOR ALL VISIT REPORTS
     */
@@ -690,6 +750,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                             '<div class="detail">Visit counts by browser including date of first and last visit</div>' ||
                         '</div>' ||
                     '</option>' ||
+                    '<option value="5">' ||
+                        '<div class="chip" aria-hidden="true">Referrers</div>' ||
+                        '<div>' ||    
+                            '<div class="heading">Visits from Referrer sites</div>' ||
+                            '<div class="detail">Visit counts by referring site including date of first and last visit</div>' ||
+                        '</div>' ||
+                    '</option>' ||
                 '</select>' ||
             '</div>';
         END IF;
@@ -703,6 +770,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 getVisitsByLocation(pWebsiteId, pPage, pHandler, l_total_pages, l_row_count, l_article);
             WHEN 4 THEN
                 getVisitsByBrowser(pWebsiteId, pPage, pHandler, l_total_pages, l_row_count, l_article);
+            WHEN 5 THEN
+                getVisitsByReferrer(pWebsiteId, pPage, pHandler, l_total_pages, l_row_count, l_article);
         END CASE;
 
         IF ( (pPage-1)*ROWS_PER_PAGE+1=l_row_count ) THEN
