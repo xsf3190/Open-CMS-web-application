@@ -663,13 +663,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article CLOB;
         l_footer LONG;
         l_json JSON_OBJECT_T;
+        l_collection_type website_article.collection_type%type;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
         l_header:='<h4>Add / Delete pages, change navigation labels.</h4>';
 
         l_article:=
-        '<fieldset class="flex-items">' ||
+        '<fieldset class="pages hide-controls flex-items">' ||
             '<legend>Select page</legend>';
 
         FOR C IN (
@@ -680,39 +681,40 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         ) LOOP
             l_article:=l_article ||
             '<div>' ||
-                '<label for="nav-' || C.article_id || '">' || C.navigation_label || '</label>' ||
-                '<input id="nav-' || C.article_id || '" type="radio" name="nav" class="visually-hidden"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
+                '<input id="page-' || C.article_id || '" type="radio" name="page" data-collection="' || C.collection_type || '"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
+                '<label for="page-' || C.article_id || '" contenteditable>' || C.navigation_label || '</label>' ||
             '</div>';
+            IF (C.article_id=pArticleId) THEN
+                l_collection_type:=C.collection_type;
+            END IF;
         END LOOP;
         l_article:=l_article ||
         '</fieldset>';
 
         l_article:=l_article ||
-        '<fieldset class="flex-items">' ||
-            '<div>' ||
-                '<label for="navigation-label">Navigation Label</label>' ||
-                '<input type="text" id="navigation-label" name="navigation_label" maxlength="30" value="">' ||
+        '<fieldset class="collection-type show-controls flex-items">' ||
+            '<legend>Set Selected Page Type</legend>' ||
+            '<div>' ||            
+                '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"' || CASE WHEN l_collection_type='N/A' THEN ' checked' END || '>' ||
+                '<label for="collection_type-normal">Normal</label>' ||
             '</div>' ||
-            '<fieldset class="flex-items">' ||
-                '<legend>Page Type</legend>' ||
-                '<label for="collection_type-normal">Normal' ||
-                '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"></label>' ||
-                '<label for="collection_type-blog">Blog' ||
-                '<input type="radio" id="collection_type-blog" name="collection_type" value="BLOG"></label>' ||
-                '<label for="collection_type-portfolio">Portfolio' ||
-                '<input type="radio" id="collection_type-portfolio" name="collection_type" value="PORTFOLIO"></label>' ||
-            '</fieldset>' ||
+            '<div>' ||  
+                '<input type="radio" id="collection_type-blog" name="collection_type" value="BLOG"' || CASE WHEN l_collection_type='BLOG' THEN ' checked' END || '>' ||
+                '<label for="collection_type-blog">Blog</label>' ||
+            '</div>' ||
+            '<div>' ||  
+                '<input type="radio" id="collection_type-portfolio" name="collection_type" value="PORTFOLIO"' || CASE WHEN l_collection_type='PORTFOLIO' THEN ' checked' END || '>' ||
+                '<label for="collection_type-portfolio">Portfolio</label>' ||
+            '</div>' ||
+        '</fieldset>' ||
+        '<div class="flex-items">' ||
             '<button type="button" class="button add-page">Add Page</button>' ||
             '<button type="button" class="button delete-page">Delete Page</button>' ||
-            '<span class="errors" style="color:red"></span>' ||
-        '</fieldset>';
-
-        pck_core.log(l_article);
+        '</div>';
 
         l_footer:=
         '<div class="flex-items">' ||
             '<button type="button" class="button save">Save Changes</button>' ||
-            -- '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">PUBLISH</button>' ||
             '<span aria-live="polite"></span>' ||
             '<span class="loader icon"></span>' ||
         '</div>';
@@ -753,14 +755,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_do_deploy BOOLEAN;
         l_clob CLOB;
         l_json JSON_OBJECT_T;
+        l_bodytext CLOB:=pBodyText;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        pck_core.log(l_bodytext);
+
         l_old_nav:=pck_deploy.buildNav(pWebsiteid);
 
-        SELECT display_order, article_id, navigation_label, collection_type
+        SELECT display_order, SUBSTR(article_id,INSTR(article_id,'-')+1), navigation_label, collection_type
           BULK COLLECT INTO l_arr
-          FROM JSON_TABLE(pBodyText, '$[*]' COLUMNS (display_order FOR ORDINALITY, article_id, navigation_label, collection_type));
+          FROM JSON_TABLE(l_bodytext, '$[*]' COLUMNS (display_order FOR ORDINALITY, article_id, navigation_label, collection_type));
 
        -- Create ARTICLE and WEBSITE_ARTICLE rows for new pages.
         FOR i IN 1..l_arr.COUNT LOOP
@@ -790,14 +795,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_new_nav:=pck_deploy.buildNav(pWebsiteid);
 
         l_do_deploy:=NVL(l_new_nav,'x') <> NVL(l_old_nav,'x');
-        
-        IF (l_do_deploy) tHEN
-            UPDATE website SET nav_updated_date = current_timestamp WHERE id=pWebsiteid;
-        END IF;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('deploy',l_do_deploy);
+        IF (l_do_deploy) THEN
+            UPDATE website SET updated_date = current_timestamp WHERE id=pWebsiteid;
+        ELSE
+            l_json.put('message','NOTHING TO SAVE');
+        END IF;
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
