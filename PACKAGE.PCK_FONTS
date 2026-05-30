@@ -578,9 +578,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             CASE C.context
                 WHEN 'logo' THEN
                     l_html:=l_html ||
-                    '<div class="topnav flex-items space-between">' ||
-                        '<span class="logo" id="logo-font-text" contenteditable>' || C.logo_font_text || '</span>' || 
-                        '<nav>' || pck_deploy.buildNav(pWebsiteId) || '</nav>' || 
+                    '<div class="topnav flex-items">' ||
+                        '<span class="logo" id="logo-font-text" contenteditable>' || C.logo_font_text || '</span>' ||
                     '</div>';
 
                 WHEN 'headings' THEN
@@ -765,7 +764,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_article:=
             '<div class="flex-items">' ||
                 -- Contexts
-                '<fieldset class="flex-items">' ||
+                '<fieldset class="show-controls flex-items">' ||
                     '<legend>Context</legend>';
                 FOR i IN 1..l_contexts.COUNT LOOP
                     l_article:=l_article || 
