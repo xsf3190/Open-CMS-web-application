@@ -8,7 +8,6 @@ import { callAPI, handleError } from "deploy_callAPI";
 **  CLICK HANDLER
 */
 export const clickHandler = async (e) => {
-    /* click on <button class="logout"> */
     const live=dialog_footer.querySelector("[aria-live]");
     if (e.target.classList.contains("logout")) {
         callAPI("userinfo/:ID","DELETE",{action:"logout"})
@@ -26,17 +25,17 @@ export const clickHandler = async (e) => {
                 handleError(error);
             });
     }
-    if (e.target.classList.contains("delete")) {
-        deleteWebsite(e.target.dataset.websiteid, e.target.closest("tr"));
+    if (e.target.classList.contains("download")) {
+        downloadWebsite();
     }
 };
 
 /*
-**  CLICK DELETE WEBSITE BUTTON IN THE ARTICLE
+**  DOWNLOAD WEBSITE TO USER'S DOWNLOAD FOLDER
 */
 let isSending = false;
 
-const deleteWebsite = (websiteid, tablerow) => {
+const downloadWebsite = () => {
     if (isSending) {
         console.log("Prevent double sends");
         return;
@@ -45,18 +44,15 @@ const deleteWebsite = (websiteid, tablerow) => {
     const loader = dialog_footer.querySelector(".loader");
 
     isSending = true;
-    live.textContent = "Deleting website";
+    live.textContent = "Downloading website ... wait a few seconds";
     loader.style.opacity=1;
 
-    callAPI("website/:ID","DELETE",{websiteid:websiteid})
+    callAPI("download-website/:ID","GET")
         .then((data) => {
             isSending = false;
             loader.style.opacity=0;        
             live.replaceChildren();
             live.insertAdjacentHTML('beforeend',data.message);
-            const tabindex = tablerow.closest("[tabindex]");
-            tablerow.remove();
-            tabindex.focus();
         })
         .catch((error) => {
             handleError(error);
