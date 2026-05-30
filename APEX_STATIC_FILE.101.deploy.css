@@ -305,13 +305,12 @@ nav ul {
   --border-color: var(--color-text);
 }
 
-@media (width<=600px) {
-  nav ul {
-    display:none;
-  }
+/* HIDE MAIN NAVIGATION ON NARROW VIEWPORTD */
+nav ul {
+    @media (width<=600px) {
+        display:none;
+    }
 }
-
-
 
 /* 
 ** COLOUR SCHEME SWITCHER
