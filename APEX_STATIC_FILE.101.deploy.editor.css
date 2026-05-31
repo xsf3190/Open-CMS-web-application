@@ -554,9 +554,12 @@ selectedcontent {
 
 /* FORM STYLES - NEED TO CLEAN THIS UP */
 
-form label {
-  display: block;
-  font-weight: 550;
+label {
+    font-weight: 550;
+}
+
+label.block {
+    display: block;
 }
 
 input(:not([type='radio'])),
