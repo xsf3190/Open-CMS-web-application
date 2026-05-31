@@ -47,7 +47,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     PROCEDURE getUserinfoForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_json JSON_OBJECT_T;
-        l_delete_button VARCHAR2(2000);
         l_header VARCHAR2(200);
         l_footer VARCHAR2(500);
         l_article LONG;
@@ -57,13 +56,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        SELECT svg, viewbox INTO l_svg, l_viewbox FROM icon WHERE id='download';
+
         l_header:='<span>Domains hosted for ' || l_session_data.sub || '</span>';
 
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
                 '<caption id="table-caption">Platform CPU Usage for current month</caption>' ||
-                '<tr><th>Domain Name</th><th>Last Activity</th><th>Pages</th><th>Media</th><th class="align-right">Usage</th><th>Delete</th></tr>';
+                '<tr><th>Domain Name</th><th>Last Activity</th><th>Pages</th><th>Media</th><th class="align-right">Usage</th><th>Download</th></tr>';
 
         FOR C IN (
             WITH cpu AS
@@ -98,19 +99,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
              ORDER BY domain_name
         ) LOOP
             IF (l_session_data.scope='admin' OR C.contact_email=l_session_data.sub) THEN
-                IF (NVL(C.cpu_used_pct,0)=0) THEN
-                    n:=n+1;
-                    IF (n=1) THEN
-                        SELECT svg, viewbox INTO l_svg, l_viewbox FROM icon WHERE id='delete';
-                    END IF;
-                    l_delete_button:=
-                    '<button type="button" class="button delete" data-websiteid="' || C.id || '" data-button-variant="round-icon" style="--button-border-color:red" aria-labelledby="delete-' || C.id || '">' || 
-                        '<span id="delete-' || C.id || '" hidden>Delete unused website '|| C.domain_name || '</span>'||
-                        '<svg aria-hidden="true" width="1em" viewBox="' || l_viewbox || '" style="fill:red">' || l_svg || '</svg>' ||         
-                    '</button>';
-                ELSE
-                    l_delete_button:=null;
-                END IF;
                 l_article:=l_article ||
                 '<tr>' || 
                     '<td>' || C.domain_name || '</td>' || 
@@ -118,7 +106,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<td>' || C.nb_pages || '</td>' || 
                     '<td>' || C.nb_images || '</td>' || 
                     '<td class="align-right">' || NVL(C.cpu_used_pct,0) || '%</td>' || 
-                    '<td class="align-center">' || l_delete_button || '</td>' || 
+                    '<td class="align-center">' || 
+                        '<button type="button" class="button download" data-websiteid="' || C.id || '" style="--button-border-color:red" aria-labelledby="download-' || C.id || '">' || 
+                            '<span id="download-' || C.id || '" hidden>Download website '|| C.domain_name || '</span>'||
+                            '<svg aria-hidden="true" width="1em" viewBox="' || l_viewbox || '" style="fill:red">' || l_svg || '</svg>' ||         
+                        '</button>' ||
+                    '</td>' || 
                 '</tr>';
             END IF;
         END LOOP;
