@@ -783,7 +783,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '<legend>Design capabilities</legend>' ||
                 -- Categories
                 '<div>' ||
-                    '<label for="category">Font category</label>' ||
+                    '<label for="category" class="block">Font category</label>' ||
                     '<select id="category">' ||
                         '<button>' ||
                             '<selectedcontent></selectedcontent>' ||
@@ -816,7 +816,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_article:=l_article || 
             '<div class="flex-items">' ||
                 '<div>' ||
-                    '<label for="family">Select font</label>' ||
+                    '<label for="family" class="block">Select font</label>' ||
                     '<select id="family">' ||
                         '<button>' ||
                             '<selectedcontent></selectedcontent>' ||
@@ -826,7 +826,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '</div>' ||
                 '<span class="separator" id="separator1" style="inline-size:10rem"><strong>OR</strong></span>' ||
                 '<div>' ||
-                    '<label for="family2">Enter font name</label>' ||
+                    '<label for="family2" class="block">Enter font name</label>' ||
                     '<input type="text" autocomplete="off" id="family2" value="" list="family2list">' ||
                     '<datalist id="family2list">' ||
                     '</datalist>' ||
