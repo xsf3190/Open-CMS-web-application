@@ -4,6 +4,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_BACKUP" is
     --
     PROCEDURE downloadWebsite(pWebsiteid IN website.id%type, pStatus IN OUT NuMBER);
     --
+    PROCEDURE downloadWebsiteFonts(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER);
+    --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
@@ -361,23 +363,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
     END;
 
     /*
-    ** DOWNLOAD WEBSITE ASSETS
-    ** CREATE OPTIMIZED CSS AND FONT FILES AS IF DEPLOYING LIVE SITE
+    ** DOWNLOAD WEBSITE ASSETS IN RESPONSE TO ANCHOR <a href="">
     */
-    PROCEDURE downloadWebsite(pWebsiteid IN website.id%type, pStatus IN OUT NuMBER) IS
-        l_session_data pck_sec.t_session_data;
+    PROCEDURE downloadWebsite(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER) IS
         l_zip BLOB;
         l_zip_filename VARCHAR2(100);
         l_file BLOB;
         l_url VARCHAR2(100);
-        n PLS_INTEGER:=0;
+        l_start_time NUMBER;
+        l_user_id users.id%type;
     BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        l_start_time:=dbms_utility.get_cpu_time();
 
-        /* Populate temporary tables with optimized font and css files */
+        SELECT CASE 
+                WHEN netlify_last_published_custom IS NOT NULL THEN
+                    'https://' || w.domain_name
+                WHEN netlify_last_published IS NOT NULL THEN
+                    'https://' || REPLACE(w.domain_name,'.','-') || '.netlify.app'
+               END,
+               SUBSTR(w.domain_name,1,INSTR(w.domain_name,'.')-1) || '.zip', 
+               u.id 
+          INTO l_url, l_zip_filename, l_user_id
+          FROM website w, users u
+         WHERE w.id=pWebsiteid
+           AND u.email=w.contact_email;
+
+        /* Populate temporary tables with optimized font files */
         pck_fonts.getFontFiles(pWebsiteid);
-        pck_css.buildLiveCSS(pWebsiteid);
-
         FOR C IN (
             SELECT path, content
               FROM website_fontfiles_temp
@@ -387,26 +399,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
                 p_file_name   => C.path,
                 p_content     => C.content);
         END LOOP;
-        FOR C IN (
-            SELECT path, content
-              FROM website_cssfiles_temp
-        ) LOOP
-            apex_zip.add_file(
-                p_zipped_blob=>l_zip,
-                p_file_name=>C.path,
-                p_content=>APEX_UTIL.CLOB_TO_BLOB(C.content));
-        END LOOP;
-
-        SELECT 'https://' || REPLACE(domain_name,'.','-') || '.netlify.app', domain_name || '.zip'
-          INTO l_url, l_zip_filename
-          FROM website
-         WHERE id=pWebsiteid;
 
         FOR C IN (
             SELECT path
               FROM website_files
              WHERE website_id=pWebsiteid
-               AND path NOT IN (pck_css.PATH_NAME_CORE,pck_css.PATH_NAME_TOKENS)
         ) LOOP
             l_file:=apex_web_service.make_rest_request_b(p_url=>l_url || C.path, p_http_method=>'GET');
             apex_zip.add_file(
@@ -415,8 +412,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
                 p_content     => l_file);
         END LOOP;
         apex_zip.finish(p_zipped_blob => l_zip);
-
-        pck_core.log('Completed download of ' || l_url);
 
         htp.init;
         owa_util.mime_header('application/zip', false);
@@ -428,7 +423,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
 
         pStatus:=200;
 
-        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_user_id, pCpuUsedStart=>l_start_time);
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+        /*
+    ** DOWNLOAD WEBSITE ASSETS IN RESPONSE TO ANCHOR <a href="">
+    */
+    PROCEDURE downloadWebsiteFonts(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER) IS
+        l_zip BLOB;
+        l_zip_filename VARCHAR2(100);
+        l_file BLOB;
+        l_start_time NUMBER;
+        l_user_id users.id%type;
+    BEGIN
+        l_start_time:=dbms_utility.get_cpu_time();
+
+        SELECT SUBSTR(w.domain_name,1,INSTR(w.domain_name,'.')-1) || '.fonts.zip', 
+               u.id 
+          INTO l_zip_filename, l_user_id
+          FROM website w, users u
+         WHERE w.id=pWebsiteid
+           AND u.email=w.contact_email;
+
+        /* Populate temporary tables with optimized font files */
+        pck_fonts.getFontFiles(pWebsiteid);
+        FOR C IN (
+            SELECT path, content
+              FROM website_fontfiles_temp
+        ) LOOP
+            apex_zip.add_file(
+                p_zipped_blob => l_zip,
+                p_file_name   => C.path,
+                p_content     => C.content);
+        END LOOP;
+
+        apex_zip.finish(p_zipped_blob => l_zip);
+
+        htp.init;
+        owa_util.mime_header('application/zip', false);
+        htp.p('content-length: ' || dbms_lob.getlength(l_zip));
+        htp.p('content-disposition: filename="' || l_zip_filename || '"');
+        owa_util.http_header_close;
+
+        wpg_docload.download_file(l_zip);
+
+        pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_user_id, pCpuUsedStart=>l_start_time);
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
