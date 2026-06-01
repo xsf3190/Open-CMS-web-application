@@ -50,52 +50,29 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_header VARCHAR2(200);
         l_footer VARCHAR2(500);
         l_article LONG;
-        l_svg icon.svg%type;
-        l_viewbox icon.viewbox%type;
         n PLS_INTEGER:=0;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT svg, viewbox INTO l_svg, l_viewbox FROM icon WHERE id='download';
-
-        l_header:='<span>Domains hosted for ' || l_session_data.sub || '</span>';
+        l_header:='<span>Web sites hosted for ' || l_session_data.sub || '</span>';
 
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
                 '<caption id="table-caption">Platform CPU Usage for current month</caption>' ||
-                '<tr><th>Domain Name</th><th>Last Activity</th><th>Pages</th><th>Media</th><th class="align-right">Usage</th><th>Download</th></tr>';
+                '<tr><th>Domain Name</th><th>Last Activity</th><th class="align-right">Usage</th><th>Download Site</th><th>Fonts</th></tr>';
 
         FOR C IN (
             WITH cpu AS
             (
-                SELECT website_id, SUM(cpu_used) cpu_used FROM website_cpu WHERE period_start=TRUNC(current_timestamp,'mm') GROUP BY website_id
-            ),
-            activity AS
-            (
-                SELECT id, MAX(updated_date) as last_activity
-                FROM
-                (
-                    SELECT w.id, w.nav_updated_date, w.logo_updated_date, w.favicon_updated_date, wa.header_html_updated, wa.footer_html_updated, 
-                        a.updated_date as article_updated_date, wf.updated_date as font_updated_date, 
-                        NVL(w.netlify_last_published_custom, w.netlify_last_published) last_published,
-                    (SELECT MAX(visit_date) FROM page_hit WHERE website_id=w.id) as visit_date
-                    FROM website w, website_article wa, article a, website_font wf
-                    WHERE wa.website_id=w.id
-                    AND wa.article_id=NVL(a.parent_id,a.id)
-                    AND wf.website_id=w.id
-                    AND w.domain_name<>'es-modules'
-                )
-                UNPIVOT  (updated_date FOR COL IN (visit_date,last_published,nav_updated_date, logo_updated_date, favicon_updated_date, header_html_updated, footer_html_updated, article_updated_date, font_updated_date))
-                GROUP BY id
+                SELECT website_id, MAX(NVL(updated_date,created_date)) AS last_activity, SUM(cpu_used) AS cpu_used 
+                  FROM website_cpu 
+                 WHERE period_start=TRUNC(current_timestamp,'mm') 
+                 GROUP BY website_id
             )
-            SELECT w.id, w.domain_name, w.contact_email, a.last_activity, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct,
-                (SELECT COUNT(*) FROM article a, website_article wa WHERE wa.website_id=w.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_pages,
-                (SELECT COUNT(*) FROM article a, website_article wa, asset_used au WHERE wa.website_id=w.id AND au.article_id=a.id AND (a.id=wa.article_id OR a.parent_id=wa.article_id)) nb_images
-             FROM website w,  cpu c, activity a
+            SELECT w.id, w.domain_name, w.contact_email, c.last_activity, ROUND(RATIO_TO_REPORT(c.cpu_used) OVER ()*100,1) cpu_used_pct
+             FROM website w,  cpu c
              WHERE w.id=c.website_id(+)
-               AND w.id=a.id
-               AND w.domain_name<>'es-modules'
              ORDER BY domain_name
         ) LOOP
             IF (l_session_data.scope='admin' OR C.contact_email=l_session_data.sub) THEN
@@ -103,14 +80,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 '<tr>' || 
                     '<td>' || C.domain_name || '</td>' || 
                     '<td>' || apex_util.get_since(C.last_activity, false) || '</td>' || 
-                    '<td>' || C.nb_pages || '</td>' || 
-                    '<td>' || C.nb_images || '</td>' || 
                     '<td class="align-right">' || NVL(C.cpu_used_pct,0) || '%</td>' || 
-                    '<td class="align-center">' || 
-                        '<button type="button" class="button download" data-websiteid="' || C.id || '" style="--button-border-color:red" aria-labelledby="download-' || C.id || '">' || 
-                            '<span id="download-' || C.id || '" hidden>Download website '|| C.domain_name || '</span>'||
-                            '<svg aria-hidden="true" width="1em" viewBox="' || l_viewbox || '" style="fill:red">' || l_svg || '</svg>' ||         
-                        '</button>' ||
+                    '<td>' || 
+                        '<a href="' || pck_core.getRestURL() || 'download-website/' || C.id || '" download>' || SUBSTR(C.domain_name,1,INSTR(C.domain_name,'.')-1) || '.zip</a>' ||
+                    '</td>' || 
+                    '<td>' || 
+                        '<a href="' || pck_core.getRestURL() || 'download-website-fonts/' || C.id || '" download>fonts.zip</a>' ||
                     '</td>' || 
                 '</tr>';
             END IF;
