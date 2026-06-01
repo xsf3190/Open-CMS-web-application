@@ -291,8 +291,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             END IF;
         END LOOP;
 
-        pck_sec.updateCpuUsed(pWebsiteid=>pWebsiteid, pUserid=>null, pCpuUsedStart=>l_cpu_used_session);
-
+        /* CPU accounting */
+        FOR C IN (
+            SELECT u.id FROM website w, users u WHERE w.id=pWebsiteid AND u.email=w.contact_email
+        ) LOOP
+            pck_sec.updateCpuUsed(pWebsiteid=>pWebsiteid, pUserid=>C.id, pCpuUsedStart=>l_cpu_used_session);
+        END LOOP;
     END;
 
     /*
