@@ -63,12 +63,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         '</div>' ||
         '<p>Required fields are marked with an *</p>' ||
         '<div>' ||
-            '<label for="title">Enter title *</label>' ||
+            '<label for="title" class="block">Enter title *</label>' ||
             '<input type="text" maxlength="100" id="title" name="title" value="" required>' ||
             '<div id="title-error" class="inline-error">' ||
         '</div>' ||
         '<div>' ||
-            '<label for="excerpt">Enter excerpt *</label>' ||
+            '<label for="excerpt" class="block">Enter excerpt *</label>' ||
             '<textarea id="excerpt" name="excerpt" style="min-width:50%" maxlength="160" required></textarea>' ||
             '<div id="excerpt-error" class="inline-error">' ||
         '</div>';
@@ -667,7 +667,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
-        l_header:='<h4>Add / Delete pages, change navigation labels.</h4>';
+        l_header:='<h4>Manage Site Pages</h4>';
 
         l_article:=
         '<fieldset class="pages hide-controls flex-items">' ||
@@ -682,7 +682,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             l_article:=l_article ||
             '<div>' ||
                 '<input id="page-' || C.article_id || '" type="radio" name="page" data-collection="' || C.collection_type || '"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
-                '<label for="page-' || C.article_id || '" contenteditable>' || C.navigation_label || '</label>' ||
+                '<label for="page-' || C.article_id || '">' || C.navigation_label || '</label>' ||
             '</div>';
             IF (C.article_id=pArticleId) THEN
                 l_collection_type:=C.collection_type;
@@ -693,7 +693,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_article:=l_article ||
         '<fieldset class="collection-type show-controls flex-items">' ||
-            '<legend>Set Selected Page Type</legend>' ||
+            '<legend>Selected Page Type</legend>' ||
             '<div>' ||            
                 '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"' || CASE WHEN l_collection_type='N/A' THEN ' checked' END || '>' ||
                 '<label for="collection_type-normal">Normal</label>' ||
@@ -714,7 +714,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_footer:=
         '<div class="flex-items">' ||
-            '<button type="button" class="button save">Save Changes</button>' ||
+            '<button type="button" class="button save">PUBLISH</button>' ||
             '<span aria-live="polite"></span>' ||
             '<span class="loader icon"></span>' ||
         '</div>';
@@ -759,8 +759,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        pck_core.log(l_bodytext);
-
         l_old_nav:=pck_deploy.buildNav(pWebsiteid);
 
         SELECT display_order, SUBSTR(article_id,INSTR(article_id,'-')+1), navigation_label, collection_type
@@ -796,16 +794,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_do_deploy:=NVL(l_new_nav,'x') <> NVL(l_old_nav,'x');
 
+        IF (l_do_deploy) THEN
+            pck_deploy.deployEditorSite(pWebsiteid);
+        END IF;
+
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         IF (l_do_deploy) THEN
-            UPDATE website SET updated_date = current_timestamp WHERE id=pWebsiteid;
+            l_json.put('message','DEPLOY SUCCESSFUL ... RELOADING SITE');
         ELSE
-            l_json.put('message','NOTHING TO SAVE');
+            l_json.put('message','NO CHANGES');
         END IF;
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
