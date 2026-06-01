@@ -159,7 +159,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         ) LOOP
             l_article:=
             '<div class="flex-items">' ||
-                '<fieldset class="flex-items">' ||
+                '<fieldset class="flex-items show-controls">' ||
                     '<legend>Type of Logo</legend>' ||
                     '<span>' ||
         		        '<input type="radio" name="logo_type" id="img"' || CASE WHEN C.logo_type='img' THEN ' checked' END || '>' ||
