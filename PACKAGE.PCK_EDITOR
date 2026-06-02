@@ -655,7 +655,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  BUILD FORM CONTROLS TO ADD/DELETE WEBSITE PAGES AND CHANGE NAVIGATION LABELS
+    **  BUILD FORM CONTROLS TO MANAGE WEBSITE PAGES
     */
     PROCEDURE getPagesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -663,6 +663,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article CLOB;
         l_footer LONG;
         l_json JSON_OBJECT_T;
+        l_navigation_label website_article.navigation_label%type;
         l_collection_type website_article.collection_type%type;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -685,6 +686,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '<label for="page-' || C.article_id || '">' || C.navigation_label || '</label>' ||
             '</div>';
             IF (C.article_id=pArticleId) THEN
+                l_navigation_label:=C.navigation_label;
                 l_collection_type:=C.collection_type;
             END IF;
         END LOOP;
@@ -692,6 +694,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         '</fieldset>';
 
         l_article:=l_article ||
+        '<div>' ||
+            '<label for="navigation-label" class="block">Selected Page Name</label>' ||
+            '<input type="text" id="navigation-label" name="navigation-label" value="' || l_navigation_label || '">' ||
+        '</div>' ||
         '<fieldset class="collection-type show-controls flex-items">' ||
             '<legend>Selected Page Type</legend>' ||
             '<div>' ||            
@@ -805,6 +811,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         ELSE
             l_json.put('message','NO CHANGES');
         END IF;
+        l_json.put('published',l_do_deploy);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
