@@ -1,64 +1,64 @@
-01-JUN-26 00:02:33.039: Starting "EXAMPLE"."EXPORT_SCHEMA_34432":  
-01-JUN-26 00:02:39.142: Processing object type SCHEMA_EXPORT/TABLE/TABLE_DATA
-01-JUN-26 00:02:39.415: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_BODY
-01-JUN-26 00:02:40.299: Processing object type SCHEMA_EXPORT/PRE_SCHEMA/PROCACT_SCHEMA/LOGREP
-01-JUN-26 00:02:41.300: Processing object type SCHEMA_EXPORT/SEQUENCE/SEQUENCE
-01-JUN-26 00:02:48.794: Processing object type SCHEMA_EXPORT/TABLE/TABLE
-01-JUN-26 00:03:02.051: Processing object type SCHEMA_EXPORT/TABLE/COMMENT
-01-JUN-26 00:03:02.322: Processing object type SCHEMA_EXPORT/TABLE/IDENTITY_COLUMN
-01-JUN-26 00:03:02.955: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_SPEC
-01-JUN-26 00:03:03.521: Processing object type SCHEMA_EXPORT/PROCEDURE/PROCEDURE
-01-JUN-26 00:03:03.776: Processing object type SCHEMA_EXPORT/PACKAGE/COMPILE_PACKAGE/PACKAGE_SPEC/ALTER_PACKAGE_SPEC
-01-JUN-26 00:03:03.941: Processing object type SCHEMA_EXPORT/PROCEDURE/ALTER_PROCEDURE
-01-JUN-26 00:03:06.678: Processing object type SCHEMA_EXPORT/VIEW/VIEW
-01-JUN-26 00:03:07.672: Processing object type SCHEMA_EXPORT/TABLE/INDEX/INDEX
-01-JUN-26 00:03:11.971: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
-01-JUN-26 00:03:13.476: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/REF_CONSTRAINT
-01-JUN-26 00:03:16.063: Processing object type SCHEMA_EXPORT/POST_SCHEMA/PROCACT_SCHEMA/LBAC_EXP
-01-JUN-26 00:03:16.485: . . exported "EXAMPLE"."PAGE_HIT"                          1.2 MB   17688 rows
-01-JUN-26 00:03:16.533: . . exported "EXAMPLE"."LANGUAGE"                         16.5 KB      20 rows
-01-JUN-26 00:03:16.610: . . exported "EXAMPLE"."ASSET"                           486.1 KB   21711 rows
-01-JUN-26 00:03:16.732: . . exported "EXAMPLE"."ARTICLE"                         697.8 KB     725 rows
-01-JUN-26 00:03:16.775: . . exported "EXAMPLE"."TEMP_ARTICLE"                     10.5 KB       1 rows
-01-JUN-26 00:03:16.825: . . exported "EXAMPLE"."ICON"                             13.9 KB      25 rows
-01-JUN-26 00:03:16.885: . . exported "EXAMPLE"."IP_LOOKUP_HASH"                  404.7 KB   12804 rows
-01-JUN-26 00:03:16.927: . . exported "EXAMPLE"."WEBSITE_ARTICLE"                  13.3 KB      63 rows
-01-JUN-26 00:03:16.977: . . exported "EXAMPLE"."FONT"                            124.6 KB    1943 rows
-01-JUN-26 00:03:17.026: . . exported "EXAMPLE"."GOOGLE_FONT"                       120 KB    1943 rows
-01-JUN-26 00:03:17.065: . . exported "EXAMPLE"."LOG"                               9.1 KB      95 rows
-01-JUN-26 00:03:17.111: . . exported "EXAMPLE"."USAGE"                            73.1 KB    2336 rows
-01-JUN-26 00:03:17.154: . . exported "EXAMPLE"."SECURITY_LOG"                     19.5 KB     255 rows
-01-JUN-26 00:03:17.198: . . exported "EXAMPLE"."BROWSER_LOOKUP"                     37 KB    1057 rows
-01-JUN-26 00:03:17.239: . . exported "EXAMPLE"."WEBSITE_FILES"                    19.7 KB     317 rows
-01-JUN-26 00:03:17.282: . . exported "EXAMPLE"."ARTICLE_CHARS"                    19.5 KB     314 rows
-01-JUN-26 00:03:17.330: . . exported "EXAMPLE"."WEBSITE"                          11.3 KB      23 rows
-01-JUN-26 00:03:17.370: . . exported "EXAMPLE"."FONT_AXES"                        12.2 KB    1550 rows
-01-JUN-26 00:03:17.408: . . exported "EXAMPLE"."FONT_STATIC_WGHT"                 11.7 KB    2326 rows
-01-JUN-26 00:03:17.448: . . exported "EXAMPLE"."WEBSITE_FONT"                       12 KB      45 rows
-01-JUN-26 00:03:17.494: . . exported "EXAMPLE"."USERS"                              11 KB      54 rows
-01-JUN-26 00:03:17.536: . . exported "EXAMPLE"."WEBSITE_CPU"                       9.1 KB     141 rows
-01-JUN-26 00:03:17.576: . . exported "EXAMPLE"."FONT_METADATA"                     8.8 KB      53 rows
-01-JUN-26 00:03:17.617: . . exported "EXAMPLE"."TEMP_WEBSITE_FONT"                 6.6 KB      46 rows
-01-JUN-26 00:03:17.657: . . exported "EXAMPLE"."NETLIFY_DNS_RECORD"                6.8 KB      40 rows
-01-JUN-26 00:03:17.695: . . exported "EXAMPLE"."FINGERPRINT"                         8 KB      52 rows
-01-JUN-26 00:03:17.735: . . exported "EXAMPLE"."JWKS_KEY_CACHE"                      7 KB       6 rows
-01-JUN-26 00:03:17.775: . . exported "EXAMPLE"."NETLIFY_SITE"                      7.2 KB      37 rows
-01-JUN-26 00:03:17.813: . . exported "EXAMPLE"."REFRESH_TOKEN_NEW"                 7.3 KB      47 rows
-01-JUN-26 00:03:17.855: . . exported "EXAMPLE"."REFRESH_TOKEN"                       7 KB      42 rows
-01-JUN-26 00:03:17.893: . . exported "EXAMPLE"."FONT_AXES_VALUE"                     6 KB      64 rows
-01-JUN-26 00:03:17.932: . . exported "EXAMPLE"."ARTICLE_MESSAGE"                   5.8 KB      28 rows
-01-JUN-26 00:03:17.973: . . exported "EXAMPLE"."ASSET_USED"                        5.4 KB     104 rows
-01-JUN-26 00:03:18.012: . . exported "EXAMPLE"."NETLIFY_FILE"                      5.4 KB      14 rows
-01-JUN-26 00:03:18.052: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE"                  5.4 KB      12 rows
-01-JUN-26 00:03:18.095: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE_SERVER"             5 KB      48 rows
-01-JUN-26 00:03:18.135: . . exported "EXAMPLE"."WEBSITE_VISITOR"                   4.9 KB       1 rows
-01-JUN-26 00:03:18.173: . . exported "EXAMPLE"."API_CREDENTIAL"                    4.7 KB       1 rows
-01-JUN-26 00:03:18.213: . . exported "EXAMPLE"."WEBSITE_LANGUAGE"                  4.8 KB      23 rows
-01-JUN-26 00:03:18.252: . . exported "EXAMPLE"."ARTICLE_LINK"                      4.7 KB      27 rows
-01-JUN-26 00:03:18.257: . . exported "EXAMPLE"."DBTOOLS$EXECUTION_HISTORY"           0 KB       0 rows
-01-JUN-26 00:03:18.262: . . exported "EXAMPLE"."ES_MODULES_FONTS"                    0 KB       0 rows
-01-JUN-26 00:03:21.863: Master table "EXAMPLE"."EXPORT_SCHEMA_34432" successfully loaded/unloaded
-01-JUN-26 00:03:22.130: ******************************************************************************
-01-JUN-26 00:03:22.131: Dump file set for EXAMPLE.EXPORT_SCHEMA_34432 is:
-01-JUN-26 00:03:22.132:   /u03/dbfs/1E20BEEAF2C0BC4DE063ED5D000AE048/data/dpdump/EXPORT_SCHEMA.EXAMPLE.dmp
-01-JUN-26 00:03:22.142: Job "EXAMPLE"."EXPORT_SCHEMA_34432" successfully completed at Mon Jun 1 00:03:22 2026 elapsed 0 00:00:53
+02-JUN-26 00:02:36.340: Starting "EXAMPLE"."EXPORT_SCHEMA_34460":  
+02-JUN-26 00:02:40.571: Processing object type SCHEMA_EXPORT/TABLE/TABLE_DATA
+02-JUN-26 00:02:40.852: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_BODY
+02-JUN-26 00:02:41.762: Processing object type SCHEMA_EXPORT/PRE_SCHEMA/PROCACT_SCHEMA/LOGREP
+02-JUN-26 00:02:42.828: Processing object type SCHEMA_EXPORT/SEQUENCE/SEQUENCE
+02-JUN-26 00:02:50.211: Processing object type SCHEMA_EXPORT/TABLE/TABLE
+02-JUN-26 00:03:02.829: Processing object type SCHEMA_EXPORT/TABLE/COMMENT
+02-JUN-26 00:03:03.130: Processing object type SCHEMA_EXPORT/TABLE/IDENTITY_COLUMN
+02-JUN-26 00:03:03.757: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_SPEC
+02-JUN-26 00:03:04.309: Processing object type SCHEMA_EXPORT/PROCEDURE/PROCEDURE
+02-JUN-26 00:03:04.550: Processing object type SCHEMA_EXPORT/PACKAGE/COMPILE_PACKAGE/PACKAGE_SPEC/ALTER_PACKAGE_SPEC
+02-JUN-26 00:03:04.709: Processing object type SCHEMA_EXPORT/PROCEDURE/ALTER_PROCEDURE
+02-JUN-26 00:03:07.084: Processing object type SCHEMA_EXPORT/VIEW/VIEW
+02-JUN-26 00:03:08.005: Processing object type SCHEMA_EXPORT/TABLE/INDEX/INDEX
+02-JUN-26 00:03:12.145: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
+02-JUN-26 00:03:13.619: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/REF_CONSTRAINT
+02-JUN-26 00:03:15.743: Processing object type SCHEMA_EXPORT/POST_SCHEMA/PROCACT_SCHEMA/LBAC_EXP
+02-JUN-26 00:03:16.122: . . exported "EXAMPLE"."PAGE_HIT"                          1.2 MB   17719 rows
+02-JUN-26 00:03:16.169: . . exported "EXAMPLE"."LANGUAGE"                         16.5 KB      20 rows
+02-JUN-26 00:03:16.254: . . exported "EXAMPLE"."ASSET"                           486.1 KB   21711 rows
+02-JUN-26 00:03:16.379: . . exported "EXAMPLE"."ARTICLE"                         697.8 KB     724 rows
+02-JUN-26 00:03:16.424: . . exported "EXAMPLE"."TEMP_ARTICLE"                     10.5 KB       1 rows
+02-JUN-26 00:03:16.486: . . exported "EXAMPLE"."ICON"                             13.9 KB      25 rows
+02-JUN-26 00:03:16.594: . . exported "EXAMPLE"."IP_LOOKUP_HASH"                  405.2 KB   12817 rows
+02-JUN-26 00:03:16.647: . . exported "EXAMPLE"."WEBSITE_ARTICLE"                  13.3 KB      62 rows
+02-JUN-26 00:03:16.699: . . exported "EXAMPLE"."FONT"                            124.6 KB    1943 rows
+02-JUN-26 00:03:16.753: . . exported "EXAMPLE"."GOOGLE_FONT"                       120 KB    1943 rows
+02-JUN-26 00:03:16.805: . . exported "EXAMPLE"."LOG"                               8.9 KB     120 rows
+02-JUN-26 00:03:16.860: . . exported "EXAMPLE"."USAGE"                            73.1 KB    2336 rows
+02-JUN-26 00:03:16.907: . . exported "EXAMPLE"."SECURITY_LOG"                     19.7 KB     257 rows
+02-JUN-26 00:03:16.956: . . exported "EXAMPLE"."BROWSER_LOOKUP"                     37 KB    1057 rows
+02-JUN-26 00:03:17.003: . . exported "EXAMPLE"."WEBSITE_FILES"                    19.5 KB     316 rows
+02-JUN-26 00:03:17.047: . . exported "EXAMPLE"."ARTICLE_CHARS"                    19.5 KB     314 rows
+02-JUN-26 00:03:17.101: . . exported "EXAMPLE"."WEBSITE"                          11.3 KB      23 rows
+02-JUN-26 00:03:17.145: . . exported "EXAMPLE"."FONT_AXES"                        12.2 KB    1550 rows
+02-JUN-26 00:03:17.187: . . exported "EXAMPLE"."FONT_STATIC_WGHT"                 11.7 KB    2326 rows
+02-JUN-26 00:03:17.231: . . exported "EXAMPLE"."WEBSITE_FONT"                       12 KB      45 rows
+02-JUN-26 00:03:17.277: . . exported "EXAMPLE"."USERS"                              11 KB      54 rows
+02-JUN-26 00:03:17.319: . . exported "EXAMPLE"."WEBSITE_CPU"                       9.3 KB     145 rows
+02-JUN-26 00:03:17.377: . . exported "EXAMPLE"."FONT_METADATA"                     8.8 KB      53 rows
+02-JUN-26 00:03:17.421: . . exported "EXAMPLE"."TEMP_WEBSITE_FONT"                 6.6 KB      46 rows
+02-JUN-26 00:03:17.465: . . exported "EXAMPLE"."NETLIFY_DNS_RECORD"                6.8 KB      40 rows
+02-JUN-26 00:03:17.509: . . exported "EXAMPLE"."FINGERPRINT"                       8.1 KB      54 rows
+02-JUN-26 00:03:17.552: . . exported "EXAMPLE"."JWKS_KEY_CACHE"                      7 KB       6 rows
+02-JUN-26 00:03:17.595: . . exported "EXAMPLE"."NETLIFY_SITE"                      7.2 KB      37 rows
+02-JUN-26 00:03:17.637: . . exported "EXAMPLE"."REFRESH_TOKEN_NEW"                 7.3 KB      47 rows
+02-JUN-26 00:03:17.681: . . exported "EXAMPLE"."REFRESH_TOKEN"                       7 KB      42 rows
+02-JUN-26 00:03:17.723: . . exported "EXAMPLE"."FONT_AXES_VALUE"                     6 KB      64 rows
+02-JUN-26 00:03:17.766: . . exported "EXAMPLE"."ARTICLE_MESSAGE"                   5.8 KB      28 rows
+02-JUN-26 00:03:17.807: . . exported "EXAMPLE"."ASSET_USED"                        5.4 KB     104 rows
+02-JUN-26 00:03:17.848: . . exported "EXAMPLE"."NETLIFY_FILE"                      5.4 KB      14 rows
+02-JUN-26 00:03:17.890: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE"                  5.4 KB      12 rows
+02-JUN-26 00:03:17.930: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE_SERVER"             5 KB      48 rows
+02-JUN-26 00:03:17.971: . . exported "EXAMPLE"."WEBSITE_VISITOR"                   4.9 KB       1 rows
+02-JUN-26 00:03:18.012: . . exported "EXAMPLE"."API_CREDENTIAL"                    4.7 KB       1 rows
+02-JUN-26 00:03:18.054: . . exported "EXAMPLE"."WEBSITE_LANGUAGE"                  4.8 KB      23 rows
+02-JUN-26 00:03:18.095: . . exported "EXAMPLE"."ARTICLE_LINK"                      4.7 KB      27 rows
+02-JUN-26 00:03:18.101: . . exported "EXAMPLE"."DBTOOLS$EXECUTION_HISTORY"           0 KB       0 rows
+02-JUN-26 00:03:18.107: . . exported "EXAMPLE"."ES_MODULES_FONTS"                    0 KB       0 rows
+02-JUN-26 00:03:20.931: Master table "EXAMPLE"."EXPORT_SCHEMA_34460" successfully loaded/unloaded
+02-JUN-26 00:03:21.196: ******************************************************************************
+02-JUN-26 00:03:21.198: Dump file set for EXAMPLE.EXPORT_SCHEMA_34460 is:
+02-JUN-26 00:03:21.198:   /u03/dbfs/1E20BEEAF2C0BC4DE063ED5D000AE048/data/dpdump/EXPORT_SCHEMA.EXAMPLE.dmp
+02-JUN-26 00:03:21.208: Job "EXAMPLE"."EXPORT_SCHEMA_34460" successfully completed at Tue Jun 2 00:03:21 2026 elapsed 0 00:00:50
