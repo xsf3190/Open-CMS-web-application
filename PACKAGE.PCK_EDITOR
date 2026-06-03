@@ -10,6 +10,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER);
     --
+    PROCEDURE deployliveWebsite(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
+    --
+    PROCEDURE getGoliveForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
+    --
     PROCEDURE getPageOptionsForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
@@ -611,6 +615,77 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         pck_core.log_error(pStatus);
     END;
 
+    /*
+    **   CONSTRUCT FORM IN RESPONSE TO USER REQUEST TO GO-LIVE
+    */
+    PROCEDURE getGoliveForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article LONG;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        /*
+        ** Conditions to deploy Live site:
+        ** 1. last published date earlier than last published date of editor site
+        */
+        
+        l_header:='<h4>PUBLISH LIVE SITE</h4>';
+
+        l_article:=
+        '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+        '<table>' ||
+            '<caption id="table-caption">Site Last Published Status</caption>' ||
+            '<thead>' ||
+                '<tr>' ||
+                    '<th>Editor Site</th>' ||
+                    '<th>Live Site</th>' ||
+                '</tr>' ||
+            '</thead>' ||
+            '<tbody>';
+
+        FOR C IN (
+            SELECT netlify_last_published, netlify_last_published_custom
+              FROM website
+             WHERE id=pWebsiteid
+        ) LOOP
+            l_article:=l_article ||
+            '<tr>' ||
+                '<td>' || TO_CHAR(C.netlify_last_published at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
+                '<td>' || TO_CHAR(C.netlify_last_published_custom at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
+            '</tr>';
+
+            IF (C.netlify_last_published>C.netlify_last_published_custom) THEN            
+                l_footer:=
+                '<div class="flex-items space-apart">' ||
+                    '<button type="button" class="button go-live">GO LIVE</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                    '<span class="loader icon"></span>' ||
+                '</div>';
+            ELSE
+                l_footer:=
+                '<span>NOTHING TO DO</span>';
+            END IF;
+        END LOOP;
+
+        l_article:=l_article ||
+        '</tbody></table></div>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header', l_header);
+        l_json.put('article', l_article);
+        l_json.put('footer', l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+    END;
+
     /* 
     **  DEPLOY WEBSITE
     */
@@ -653,6 +728,38 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         pck_core.log_error(pStatus);
 
     END;
+
+    /*
+    **   PUBLISH LIVE SITE AND RETURNING URL OF SENDING PAGE THAT JAVASCRIPT WILL LOAD
+    */
+    PROCEDURE deployLiveWebsite(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        FOR C IN (
+            SELECT 'https://' || w.domain_name || '/' || apex_string_util.get_slug(wa.navigation_label) AS live_url
+              FROM website w, website_article wa
+             WHERE w.id=pWebsiteId
+               AND wa.website_id=w.id
+               AND wa.article_id=pArticleId
+        ) LOOP    
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('success',true);
+            l_json.put('link',C.live_url);
+            apex_util.prn(l_json.to_clob,false);
+        END LOOP;
+
+        pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+
+    END;
+
 
     /* 
     **  BUILD FORM CONTROLS TO MANAGE WEBSITE PAGES
