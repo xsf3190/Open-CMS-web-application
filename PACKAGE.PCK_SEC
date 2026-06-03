@@ -451,7 +451,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', 'cyan', '⚽', 'Codepen');
 
         FOR C IN (SELECT null FROM website WHERE id=pWebsiteid AND netlify_site_id_custom IS NOT NULL) LOOP
-            l_html:=l_html || addMenuitem('go-live/:ID', '', '🆕', 'GO LIVE');
+            l_html:=l_html || addMenuitem('go-live/:ID/:PAGE', '', '🌐', 'GO LIVE');
         END LOOP;
 
         RETURN (l_html);
