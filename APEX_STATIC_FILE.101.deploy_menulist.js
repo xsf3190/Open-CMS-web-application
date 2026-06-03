@@ -1,50 +1,22 @@
-import { getJWTClaim } from "deploy_elements";
+import { getJWTClaim, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 const form = document.querySelector("dialog.output form");
 
-let isSending = false;
-
 const eventHandler = async (e) => {
     /* Common controls */
-    if (e.target.classList.contains("reload")) {
-        window.location.reload();
-        return;
-    }
-    
+
     if (e.target.classList.contains("close")) {
         e.target.closest("dialog").close();
         return;
     }
 
     if (e.target.classList.contains("publish")) {
-        if (isSending) {
-            console.log("Prevent double sends");
-            return;
-        }
-        const live=form.querySelector("[aria-live]");
-        const loader = form.querySelector(".loader");
-
-        isSending = true;
-        live.textContent = e.target.dataset.processing;
-        loader.style.opacity=1;
-
-        callAPI("publish-website/:ID", "POST", {})
+        callAPI("publish-website/:ID")
             .then((data) => {
-                isSending = false;
-                loader.style.opacity=0;        
-                live.replaceChildren();
-                if (data.link) {
-                    live.insertAdjacentHTML('beforeend',data.link);
-                    live.style.color = "green";
-                }
-                if (data.message) {
-                    live.insertAdjacentHTML('beforeend',data.message);
-                    live.style.color = "red";
-                }
+                initDialog(data);
             })
             .catch((error) => {
-                loader.style.opacity=0;
                 handleError(error);
             });
         return;
