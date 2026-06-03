@@ -33,19 +33,20 @@ export const clickHandler = async (e) => {
         live.textContent = e.target.dataset.processing;
         loader.style.opacity=1;
 
-        await callAPI(endpoint,'POST', arr)
+        await callAPI(endpoint,'POST',{})
             .then((data) => {
                 isSending = false;
                 loader.style.opacity=0;        
                 live.replaceChildren();
                 live.textContent = data.message;
-                if (data.live-site) {
+                if (data.live_url) {
                     setTimeout(() => {
-                        window.location.replace(data.live-site);
+                        window.location.replace(data.live_url);
                     }, 1500);
                 }
             })
             .catch((error) => {
+                loader.style.opacity=0;
                 handleError(error);
             });
     }
