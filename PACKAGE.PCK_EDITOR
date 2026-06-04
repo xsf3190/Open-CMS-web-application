@@ -4,13 +4,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
      --
     PROCEDURE deletePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    PROCEDURE deployEditorWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE getCollectionItemForm(pWebsiteId IN website.id%type, pParentId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER);
     --
-    PROCEDURE deployliveWebsite(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
+    PROCEDURE deployLiveWebsite(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getGoliveForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
@@ -538,6 +538,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_netlify_last_published website.netlify_last_published%type;
+        l_datetime_format VARCHAR2(30):='fmdd Mon yy, hh24:fmmipm';
         l_header LONG;
         l_article LONG;
         l_footer LONG;
@@ -559,7 +560,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
         '<table>' ||
-            '<caption id="table-caption">' || 'Content changes since last published on ' || TO_CHAR(l_netlify_last_published at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</caption>' ||
+            '<caption id="table-caption">' || 'Changes since last published on ' || TO_CHAR(l_netlify_last_published at time zone l_session_data.timeZone,l_datetime_format) || '</caption>' ||
             '<thead>' ||
                 '<tr>' ||
                     '<th>Page</th>' ||
@@ -570,16 +571,41 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         n:=0;
         FOR C IN (
-            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, GREATEST(a.updated_date,wa.header_html_updated,wa.footer_html_updated) updated_date
+            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, a.updated_date, wa.header_html_updated, wa.footer_html_updated
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteid
                AND wa.article_id=NVL(a.parent_id,a.id)
-               AND GREATEST(a.updated_date,wa.header_html_updated,wa.footer_html_updated)>l_netlify_last_published 
             ORDER BY wa.display_order, a.title nulls FIRST
         ) LOOP
-            n:=n+1;
-            l_article:=l_article || 
-            '<tr><td>' || C.page || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, 'dd-mm-yy fmhh24:fmmipm') || '</td></tr>';
+            IF (C.updated_date>l_netlify_last_published) THEN
+                n:=n+1;
+                l_article:=l_article || 
+                '<tr><td>' || C.page || ' (main content)</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+            END IF;
+            IF (C.header_html_updated>l_netlify_last_published) THEN
+                n:=n+1;
+                l_article:=l_article || 
+                '<tr><td>' || C.page || ' (header)</td><td>' || TO_CHAR(C.header_html_updated at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+            END IF;
+            IF (C.footer_html_updated>l_netlify_last_published) THEN
+                n:=n+1;
+                l_article:=l_article || 
+                '<tr><td>' || C.page || ' (footer)</td><td>' || TO_CHAR(C.footer_html_updated at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+            END IF;
+        END LOOP;
+
+        FOR C IN (
+            SELECT wf.context, wf.updated_date, f.family
+              FROM website_font wf, font f
+             WHERE wf.website_id=pWebsiteid
+               AND wf.font_id=f.id
+            ORDER BY wf.context
+        ) LOOP
+            IF (C.updated_date>l_netlify_last_published) THEN
+                n:=n+1;
+                l_article:=l_article || 
+                '<tr><td>ALL PAGES - ' || C.context || ' font changed to ' || C.family || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+            END IF;
         END LOOP;
 
         IF (n=0) THEN
@@ -593,7 +619,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         IF (n>0) THEN    
             l_footer:=
             '<div class="flex-items space-apart">' ||
-                '<button type="button" class="button publish" data-env="TEST">PUBLISH</button>' ||
+                '<button type="button" class="button publish-editor-site">PUBLISH</button>' ||
                 '<span aria-live="polite"></span>' ||
                 '<span class="loader icon"></span>' ||
             '</div>';
@@ -637,7 +663,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
         '<table>' ||
-            '<caption id="table-caption">Site Last Published Status</caption>' ||
+            '<caption id="table-caption">Last Published Dates</caption>' ||
             '<thead>' ||
                 '<tr>' ||
                     '<th>Editor Site</th>' ||
@@ -666,7 +692,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '</div>';
             ELSE
                 l_footer:=
-                '<span>NOTHING TO DO</span>';
+                '<span>LIVE site already published</span>';
             END IF;
         END LOOP;
 
@@ -687,37 +713,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  DEPLOY WEBSITE
+    **  DEPLOY "EDITOR" WEBSITE
     */
-    PROCEDURE deployWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+    PROCEDURE deployEditorWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_env VARCHAR2(4);
-        l_link VARCHAR2(200);
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        SELECT NVL(env,'TEST') INTO l_env FROM JSON_TABLE(pBodyText, '$' COLUMNS(env));
-
-        CASE l_env
-            WHEN 'LIVE' THEN
-                pck_deploy.deployLiveSite(pWebsiteid);
-                FOR C IN (
-                    SELECT domain_name FROM website WHERE id=pWebsiteId
-                ) LOOP 
-                    l_link:='<a href="https://' || C.domain_name || '">' || C.domain_name || ' IS LIVE</a>';
-                END LOOP;
-            WHEN 'TEST' THEN
-                pck_deploy.deployEditorSite(pWebsiteid);
-                l_link:=
-                --'<a href="https://' || l_session_data.url || '">Reload website</a>' ||
-                '<button type="button" class="button reload" style="margin-inline-end:2em">RELOAD</button>' ||
-                '<button type="button" class="button publish" data-env="LIVE">GO LIVE</button>';
-        END CASE;
+        pck_deploy.deployEditorSite(pWebsiteid);
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('link',l_link);
+        l_json.put('message','Editor site successfully published .. reloading');
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -734,22 +743,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     */
     PROCEDURE deployLiveWebsite(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_live_url VARCHAR2(200);
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        FOR C IN (
-            SELECT 'https://' || w.domain_name || '/' || apex_string_util.get_slug(wa.navigation_label) AS live_url
-              FROM website w, website_article wa
-             WHERE w.id=pWebsiteId
-               AND wa.website_id=w.id
-               AND wa.article_id=pArticleId
-        ) LOOP    
-            l_json:= new JSON_OBJECT_T;
-            l_json.put('success',true);
-            l_json.put('link',C.live_url);
-            apex_util.prn(l_json.to_clob,false);
-        END LOOP;
+        pck_deploy.deployLiveSite(pWebsiteid);
+
+        SELECT 'https://' || w.domain_name || CASE WHEN wa.display_order>1 THEN '/' || apex_string_util.get_slug(wa.navigation_label) END
+          INTO l_live_url
+          FROM website w, website_article wa, article a
+         WHERE w.id=pWebsiteId
+           AND wa.website_id=w.id
+           AND a.id=pArticleId
+           AND wa.article_id=NVL(a.parent_id,a.id);
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('live_url',l_live_url);
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
@@ -1012,27 +1024,49 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     **  UPDATE ASSET_USED TABLE FOR ALL CLOUDINARY ASSETS INCLUDED IN CONTENT
     */
     PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB) IS
-        l_res_regex VARCHAR2(50):='src="https://res.cloudinary.com/(.+?)/(.+?)"';
+        l_img_regex VARCHAR2(50):='<img (.+?)>';
+        l_img_html VARCHAR2(4000);
+        l_img_url VARCHAR2(200);
         l_cld_cloud_name asset.cld_cloud_name%type;
         l_public_id asset.public_id%type;
         n PLS_INTEGER;
+        n1 PLS_INTEGER;
+        n2 PLS_INTEGER;
+        n3 PLS_INTEGER;
 
         TYPE t_asset_id IS TABLE OF asset.id%type;
         l_asset_id t_asset_id:=t_asset_id();
+
+        FUNCTION getAttribute(pImg IN VARCHAR2, pAttribute IN VARCHAR2) RETURN VARCHAR2 IS
+            pos1 PLS_INTEGER;
+            pos2 PLS_INTEGER;
+        BEGIN
+            pos1:=INSTR(pImg,pAttribute||'="');
+            IF (pos1=0) THEN
+                RETURN NULL;
+            END IF;
+            pos1:=pos1+LENGTH(pAttribute)+2;
+            pos2:=INSTR(pImg,'"',pos1,1);
+            RETURN SUBSTR(pImg,pos1,pos2-pos1);
+        END;
+
     BEGIN
-        n:=NVL(regexp_count(pHtml,l_res_regex),0);
+        n:=NVL(regexp_count(pHtml,l_img_regex),0);
         FOR i IN 1..n LOOP
-            l_cld_cloud_name:=regexp_substr(pHtml,l_res_regex,1,i,null,1);
-            l_public_id:=regexp_substr(pHtml,l_res_regex,1,i,null,2);
+            l_img_html:=regexp_substr(pHtml,l_img_regex,1,i,null,1);
+            l_img_url:=getAttribute(l_img_html,'src');
+            n1:=INSTR(l_img_url,'/',1,3)+1;
+            n2:=INSTR(l_img_url,'/',n1,1)+1;
+            n3:=INSTR(l_img_url,'/',n2,1)+1;
+            l_cld_cloud_name:=SUBSTR(l_img_url,n1,n2-n1-1);
+            l_public_id:=SUBSTR(l_img_url,n3);
             l_public_id:=REPLACE(SUBSTR(l_public_id,INSTR(l_public_id,'/',-1)+1),'.pdf');
             
-            -- dbms_output.put_line(' l_cld_cloud_name:'||l_cld_cloud_name||' l_public_id:'||l_public_id);
             FOR C IN (
                 SELECT id FROM asset WHERE cld_cloud_name=l_cld_cloud_name AND public_id=l_public_id
             ) LOOP
                 l_asset_id.EXTEND;
-                l_asset_id(l_asset_id.COUNT):=C.id;
-                -- dbms_output.put_line('C.id:'||C.id||' l_cld_cloud_name:'||l_cld_cloud_name||' l_public_id:'||l_public_id);
+                l_asset_id(l_asset_id.COUNT):=C.id;            
             END LOOP;
         END LOOP;
         
