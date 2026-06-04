@@ -440,22 +440,17 @@ export const init = async (element) => {
 /*
 ** SAVE CHANGED DATA TO SERVER. TRACK EDITED PAGES IN ORDER TO INITIALIZE EDITOR ON SESSION VISITS.
 */
-
-const pages_edited = JSON.parse(sessionStorage.getItem("pages_edited"));
-const pages_set = new Set(pages_edited);
-const page_id = Number(document.body.dataset.articleid);
-
-
 const saveData = async ( data, endpoint, id ) => {
+    const images = [...id.getElementsByTagName("img")];
+    const img_src = images.map(img => img.getAttribute('src'));
+    const a11y_alt_fails = images.filter(img => !img.hasAttribute('alt')).length;
+    const title = id.querySelector("h2,h3,h4")?.textContent;
+    const excerpt = id.querySelector("p")?.textContent;
 
     // callAPI(endpoint,'PUT', {body_html: data, word_count: wordcount.textContent, id: id})
-    callAPI(endpoint,'PUT', {body_html: data, id: id, words: words})
+    callAPI(endpoint,'PUT', {body_html: data, id: id, words: words, img_src: img_src, a11y_alt_fails: a11y_alt_fails, title: title, excerpt: excerpt})
         .then((data) => {
             console.log(data.message);
-            if (!pages_set.has(page_id)) {
-                pages_set.add(page_id);
-                sessionStorage.setItem("pages_edited",JSON.stringify(Array.from(pages_set)));
-            }
         })
         .catch((error) => {
             handleError(error);
