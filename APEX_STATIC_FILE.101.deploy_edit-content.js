@@ -438,17 +438,56 @@ export const init = async (element) => {
 }
 
 /*
-** SAVE CHANGED DATA TO SERVER. TRACK EDITED PAGES IN ORDER TO INITIALIZE EDITOR ON SESSION VISITS.
+** RETURN BITMAP COUNT FOR DISTINCT ELEMENTS USED IN CONTENT
+*/
+const getElementsUsed = (ele) => {
+    const arr = ['blockquote','code','img','hr','ol','pre','table','ul'];
+    const len = arr.length;
+    let value=0;
+    for (let i = 0; i < len; i++) {
+        if (ele.querySelector(arr[i]) !== null) {
+            value+=(2 ** i);
+        }
+    }
+    return value;
+}
+
+/*
+** RETURN DISTINCT CHARACTER USED IN ELEMENT
+*/
+const distinct = (ele, selector) => {
+    const chars = Array.from(ele.querySelectorAll(selector), ({ textContent }) => textContent).join("");
+    return [...new Set(chars)].join("");
+}
+
+/*
+** SAVE CHANGED DATA TO SERVER INCLUDING DISTINCT CHARACTERS USED IN VARIOUS CONTEXTS 
 */
 const saveData = async ( data, endpoint, id ) => {
-    const images = [...id.getElementsByTagName("img")];
+    const ele = document.getElementById(id);
+    const images = [...ele.getElementsByTagName("img")];
     const img_src = images.map(img => img.getAttribute('src'));
     const a11y_alt_fails = images.filter(img => !img.hasAttribute('alt')).length;
-    const title = id.querySelector("h2,h3,h4")?.textContent;
-    const excerpt = id.querySelector("p")?.textContent;
+    const title = ele.querySelector("h2,h3,h4")?.textContent;
+    const excerpt = ele.querySelector("p")?.textContent;
 
-    // callAPI(endpoint,'PUT', {body_html: data, word_count: wordcount.textContent, id: id})
-    callAPI(endpoint,'PUT', {body_html: data, id: id, words: words, img_src: img_src, a11y_alt_fails: a11y_alt_fails, title: title, excerpt: excerpt})
+    callAPI(endpoint,'PUT', {
+            body_html: data, 
+            id: id, 
+            words: words, 
+            img_src: img_src, 
+            a11y_alt_fails: a11y_alt_fails, 
+            elements_used: getElementsUsed(ele), 
+            title: title, 
+            excerpt: excerpt,
+            headings: distinct(ele,'h2:not(:has(i)),h3:not(:has(i)),h4:not(:has(i))'),
+            headings_italic: distinct(ele,'h2 i,h3 i,h4 i'),
+            text: distinct(ele,'*:not(strong,i,h2,h3,h4,code)'),
+            italic: distinct(ele,'i:not(:has(strong))'),
+            bold: distinct(ele,'strong:not(i>strong)'),
+            bolditalic: distinct(ele,'i>strong'),
+            code: distinct(ele,'code')
+        })
         .then((data) => {
             console.log(data.message);
         })
