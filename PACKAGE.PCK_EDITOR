@@ -22,7 +22,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE publishPageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB);
+    -- PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB);
     --
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -1023,12 +1023,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /* 
     **  UPDATE ASSET_USED TABLE FOR ALL CLOUDINARY ASSETS INCLUDED IN CONTENT
     */
-    PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB) IS
+    FUNCTION setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB) RETURN NUMBER IS
         l_img_regex VARCHAR2(50):='<img (.+?)>';
         l_img_html VARCHAR2(4000);
         l_img_url VARCHAR2(200);
         l_cld_cloud_name asset.cld_cloud_name%type;
         l_public_id asset.public_id%type;
+        l_a11y_alt_fails article.a11y_alt_fails%type;
         n PLS_INTEGER;
         n1 PLS_INTEGER;
         n2 PLS_INTEGER;
@@ -1051,6 +1052,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         END;
 
     BEGIN
+        l_a11y_alt_fails:=0;
         n:=NVL(regexp_count(pHtml,l_img_regex),0);
         FOR i IN 1..n LOOP
             l_img_html:=regexp_substr(pHtml,l_img_regex,1,i,null,1);
@@ -1068,12 +1070,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_asset_id.EXTEND;
                 l_asset_id(l_asset_id.COUNT):=C.id;            
             END LOOP;
+
+            IF (getAttribute(l_img_html,'src') IS NULL) THEN
+                l_a11y_alt_fails:=l_a11y_alt_fails+1;
+            END IF;
+
         END LOOP;
         
         DELETE asset_used WHERE article_id=pArticleid;
         FORALL i IN 1..l_asset_id.COUNT
             INSERT INTO asset_used (asset_id, article_id) 
             VALUES (l_asset_id(i), pArticleid);
+
+        RETURN (l_a11y_alt_fails);
     END;
 
     /* 
@@ -1087,6 +1096,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_id VARCHAR2(6);
         l_elements_used article.elements_used%type;
         l_parent_id article.parent_id%type;
+        l_a11y_alt_fails article.a11y_alt_fails%type;
         l_json JSON_OBJECT_T;
 
     BEGIN
@@ -1096,7 +1106,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         ** Calculated elements_used based on HTML tags used in the content 
         **  KEEP ALIGNED WITH CODE IN pck_deploy.deployLivesite
         */
-        SELECT words, body_html, id,
+        SELECT words, body_html, id, 
                 CASE WHEN INSTR(body_html,'<blockquote>')>0 THEN 1   ELSE 0 END + 
                 CASE WHEN INSTR(body_html,'<code')>0        THEN 2   ELSE 0 END + 
                 CASE WHEN INSTR(body_html,'<img')>0         THEN 4   ELSE 0 END + 
@@ -1106,7 +1116,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 CASE WHEN INSTR(body_html,'<table')>0       THEN 64  ELSE 0 END + 
                 CASE WHEN INSTR(body_html,'<ul>')>0         THEN 128 ELSE 0 END
           INTO l_word_count, l_html, l_id, l_elements_used
-          FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (body_html CLOB, id, words));
+          FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (body_html CLOB, id, words, img_src, a11y_alt_fails, title, excerpt));
 
         
         CASE l_id
@@ -1119,12 +1129,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                    AND article_id=pArticleId;
 
             WHEN 'main' THEN
+                l_a11y_alt_fails:=setAssetUsed(pArticleId, l_html);
+
                 UPDATE article 
                    SET word_count=l_word_count,
                        title=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1))),1,100),
                        excerpt=NVL(excerpt, SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<p>(.+?)<\/p>',1,1))),1,160)), 
                        body_html=l_html,
                        elements_used=NVL(l_elements_used,0),
+                       a11y_alt_fails=l_a11y_alt_fails,
                        updated_date = current_timestamp
                  WHERE id=pArticleId
                  RETURNING parent_id INTO l_parent_id;
@@ -1134,8 +1147,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        SET updated_date = current_timestamp
                      WHERE id=l_parent_id;
                 END IF;
-
-                setAssetUsed(pArticleId, l_html);
+                
 
             WHEN 'footer' THEN
                 UPDATE website_article 
