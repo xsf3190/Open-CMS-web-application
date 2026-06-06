@@ -3,6 +3,7 @@
 */
 
 import { callAPI, handleError } from "deploy_callAPI";
+import { dialog_article } from "deploy_elements";
 
 let endpoint;
 let words;
@@ -410,16 +411,6 @@ export const init = async (element) => {
                 console.error(id + "not supported");
         }
 
-        /* Remove deployed srcset attribute from all images */
-        /*
-        const images = document.getElementsByTagName('img'); 
-        for (let i=0; i < images.length; i++) {
-            const  currentSrc=images[i].currentSrc;
-            images[i].removeAttribute("srcset");
-            images[i].src = currentSrc;
-        }
-        */
-
         InlineEditor.create(
             element,
             config
@@ -466,28 +457,36 @@ const distinct = (ele, selector) => {
 const saveData = async ( data, endpoint, id ) => {
     const ele = document.getElementById(id);
     const images = [...ele.getElementsByTagName("img")];
-    const img_src = images.map(img => img.getAttribute('src'));
-    const a11y_alt_fails = images.filter(img => !img.hasAttribute('alt')).length;
-    const title = ele.querySelector("h2,h3,h4")?.textContent;
-    const excerpt = ele.querySelector("p")?.textContent;
 
-    callAPI(endpoint,'PUT', {
-            body_html: data, 
-            id: id, 
-            words: words, 
-            img_src: img_src, 
-            a11y_alt_fails: a11y_alt_fails, 
-            elements_used: getElementsUsed(ele), 
-            title: title, 
-            excerpt: excerpt,
-            headings: distinct(ele,'h2:not(:has(i)),h3:not(:has(i)),h4:not(:has(i))'),
-            headings_italic: distinct(ele,'h2 i,h3 i,h4 i'),
-            text: distinct(ele,'*:not(strong,i,h2,h3,h4,code)'),
-            italic: distinct(ele,'i:not(:has(strong))'),
-            bold: distinct(ele,'strong:not(i>strong)'),
-            bolditalic: distinct(ele,'i>strong'),
-            code: distinct(ele,'code')
-        })
+    const obj={
+        body_html: data, 
+        id: id, 
+        words: words, 
+        img_src: images.map(img => img.getAttribute('src')),
+        a11y_alt_fails: images.filter(img => !img.hasAttribute('alt')).length,
+        elements_used: getElementsUsed(ele), 
+        title: ele.querySelector("h2,h3,h4")?.textContent,
+        excerpt: ele.querySelector("p")?.textContent,
+        headings:distinct(ele,'h1,h2,h3,h4'),
+        headings_italics:distinct(ele,'h1 i,h2 i,h3 i,h4 i'),
+        italic:distinct(ele,'i:not(:has(strong))'),
+        bolditalic:distinct(ele,'i>strong'),
+        bold:distinct(ele,'strong:not(i>strong)'),
+        code:distinct(ele,'code')
+    };
+
+    if (obj.code || obj.bold || obj.italic || obj.bolditalic) {
+        dialog_article.replaceChildren();
+        dialog_article.insertAdjacentHTML('afterbegin',ele.innerHTML);
+        dialog_article.querySelectorAll('code,strong,i').forEach((tag)=> {
+            tag.remove();
+        });
+        obj.text = distinct(dialog_article,':not(h1,h2,h3,h4)')
+    } else {
+        obj.text = distinct(ele,':not(h1,h2,h3,h4)')
+    }
+
+    callAPI(endpoint,'PUT', obj)
         .then((data) => {
             console.log(data.message);
         })
