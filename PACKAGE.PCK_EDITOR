@@ -1021,143 +1021,150 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  UPDATE ASSET_USED TABLE FOR ALL CLOUDINARY ASSETS INCLUDED IN CONTENT
-    */
-    FUNCTION setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB) RETURN NUMBER IS
-        l_img_regex VARCHAR2(50):='<img (.+?)>';
-        l_img_html VARCHAR2(4000);
-        l_img_url VARCHAR2(200);
-        l_cld_cloud_name asset.cld_cloud_name%type;
-        l_public_id asset.public_id%type;
-        l_a11y_alt_fails article.a11y_alt_fails%type;
-        n PLS_INTEGER;
-        n1 PLS_INTEGER;
-        n2 PLS_INTEGER;
-        n3 PLS_INTEGER;
-
-        TYPE t_asset_id IS TABLE OF asset.id%type;
-        l_asset_id t_asset_id:=t_asset_id();
-
-        FUNCTION getAttribute(pImg IN VARCHAR2, pAttribute IN VARCHAR2) RETURN VARCHAR2 IS
-            pos1 PLS_INTEGER;
-            pos2 PLS_INTEGER;
-        BEGIN
-            pos1:=INSTR(pImg,pAttribute||'="');
-            IF (pos1=0) THEN
-                RETURN NULL;
-            END IF;
-            pos1:=pos1+LENGTH(pAttribute)+2;
-            pos2:=INSTR(pImg,'"',pos1,1);
-            RETURN SUBSTR(pImg,pos1,pos2-pos1);
-        END;
-
-    BEGIN
-        l_a11y_alt_fails:=0;
-        n:=NVL(regexp_count(pHtml,l_img_regex),0);
-        FOR i IN 1..n LOOP
-            l_img_html:=regexp_substr(pHtml,l_img_regex,1,i,null,1);
-            l_img_url:=getAttribute(l_img_html,'src');
-            n1:=INSTR(l_img_url,'/',1,3)+1;
-            n2:=INSTR(l_img_url,'/',n1,1)+1;
-            n3:=INSTR(l_img_url,'/',n2,1)+1;
-            l_cld_cloud_name:=SUBSTR(l_img_url,n1,n2-n1-1);
-            l_public_id:=SUBSTR(l_img_url,n3);
-            l_public_id:=REPLACE(SUBSTR(l_public_id,INSTR(l_public_id,'/',-1)+1),'.pdf');
-            
-            FOR C IN (
-                SELECT id FROM asset WHERE cld_cloud_name=l_cld_cloud_name AND public_id=l_public_id
-            ) LOOP
-                l_asset_id.EXTEND;
-                l_asset_id(l_asset_id.COUNT):=C.id;            
-            END LOOP;
-
-            IF (getAttribute(l_img_html,'src') IS NULL) THEN
-                l_a11y_alt_fails:=l_a11y_alt_fails+1;
-            END IF;
-
-        END LOOP;
-        
-        DELETE asset_used WHERE article_id=pArticleid;
-        FORALL i IN 1..l_asset_id.COUNT
-            INSERT INTO asset_used (asset_id, article_id) 
-            VALUES (l_asset_id(i), pArticleid);
-
-        RETURN (l_a11y_alt_fails);
-    END;
-
-    /* 
     **  UPDATE CONTENT RECEIVED FROM CKEDITOR. 
     **  SET FLAG ON WEBSITE IF IT'S THE HOME PAGE HEADER OR FOOTER UPDATED
     */
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_bodytext CLOB:=pBodyText;
         l_word_count NUMBER;
         l_html CLOB;
         l_id VARCHAR2(6);
-        l_elements_used article.elements_used%type;
         l_parent_id article.parent_id%type;
-        l_a11y_alt_fails article.a11y_alt_fails%type;
+        l_cld_cloud_name asset.cld_cloud_name%type;
+        l_public_id asset.public_id%type;
+        n1 PLS_INTEGER;
+        n2 PLS_INTEGER;
+        n3 PLS_INTEGER;
         l_json JSON_OBJECT_T;
+        TYPE t_asset_id IS TABLE OF asset.id%type;
+        l_asset_id t_asset_id:=t_asset_id();
 
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         /* 
-        ** Calculated elements_used based on HTML tags used in the content 
-        **  KEEP ALIGNED WITH CODE IN pck_deploy.deployLivesite
+        ** NB: Calculated elements_used based on HTML tags used in the content 
+        **  KEEP ALIGNED WITH DEPLOYMENT CODE
         */
-        SELECT words, body_html, id, 
-                CASE WHEN INSTR(body_html,'<blockquote>')>0 THEN 1   ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<code')>0        THEN 2   ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<img')>0         THEN 4   ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<hr>')>0         THEN 8   ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<ol>')>0         THEN 16  ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<pre>')>0        THEN 32  ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<table')>0       THEN 64  ELSE 0 END + 
-                CASE WHEN INSTR(body_html,'<ul>')>0         THEN 128 ELSE 0 END
-          INTO l_word_count, l_html, l_id, l_elements_used
-          FROM JSON_TABLE(pBodyText FORMAT JSON, '$' COLUMNS (body_html CLOB, id, words, img_src, a11y_alt_fails, title, excerpt));
+        SELECT id
+          INTO l_id
+          FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (id));
 
-        
         CASE l_id
             WHEN 'header' THEN
                 UPDATE website_article 
                    SET header_html=l_html,
-                       elements_used_header=NVL(l_elements_used,0),
+                    --    elements_used_header=NVL(l_elements_used,0),
                        header_html_updated = current_timestamp
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
 
             WHEN 'main' THEN
-                l_a11y_alt_fails:=setAssetUsed(pArticleId, l_html);
+                FOR C IN (
+                    SELECT words, body_html, elements_used, a11y_alt_fails, title, excerpt
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB, words, a11y_alt_fails, elements_used, title, excerpt))
+                ) LOOP
+                    UPDATE article 
+                       SET word_count=C.words,
+                           title=CAST(SUBSTR(C.title,1,100) AS VARCHAR2(100)),
+                           excerpt=CAST(SUBSTR(C.excerpt,1,160) AS VARCHAR2(160)),
+                           body_html=C.body_html,
+                           elements_used=C.elements_used,
+                           a11y_alt_fails=C.a11y_alt_fails,
+                           updated_date = current_timestamp
+                     WHERE id=pArticleId
+                     RETURNING parent_id INTO l_parent_id;
 
-                UPDATE article 
-                   SET word_count=l_word_count,
-                       title=SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<h[2-4]>(.+?)<\/h[2-4]>',1,1))),1,100),
-                       excerpt=NVL(excerpt, SUBSTR(utl_i18n.unescape_reference(apex_escape.striphtml(regexp_substr(l_html,'<p>(.+?)<\/p>',1,1))),1,160)), 
-                       body_html=l_html,
-                       elements_used=NVL(l_elements_used,0),
-                       a11y_alt_fails=l_a11y_alt_fails,
-                       updated_date = current_timestamp
-                 WHERE id=pArticleId
-                 RETURNING parent_id INTO l_parent_id;
+                    /* If article is collection item force next deployment to build its index page */
+                    IF (l_parent_id IS NOT NULL) THEN
+                        UPDATE article
+                           SET updated_date = current_timestamp
+                         WHERE id=l_parent_id;
+                    END IF;
+                END LOOP;
 
-                IF (l_parent_id IS NOT NULL) THEN
-                    UPDATE article
-                       SET updated_date = current_timestamp
-                     WHERE id=l_parent_id;
-                END IF;
+                FOR C IN (
+                    SELECT url
+                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS (NESTED '$.img_src[*]' COLUMNS (url varchar2(250) path '$')))
+                ) LOOP
+                    n1:=INSTR(C.url,'/',1,3)+1;
+                    n2:=INSTR(C.url,'/',n1,1)+1;
+                    n3:=INSTR(C.url,'/',n2,1)+1;
+                    l_cld_cloud_name:=SUBSTR(C.url,n1,n2-n1-1);
+                    l_public_id:=SUBSTR(C.url,n3);
+                    l_public_id:=REPLACE(SUBSTR(l_public_id,INSTR(l_public_id,'/',-1)+1),'.pdf');
+                    
+                    FOR C1 IN (
+                        SELECT id FROM asset WHERE cld_cloud_name=l_cld_cloud_name AND public_id=l_public_id
+                    ) LOOP
+                        l_asset_id.EXTEND;
+                        l_asset_id(l_asset_id.COUNT):=C1.id;            
+                    END LOOP;
+
+                    DELETE asset_used WHERE article_id=pArticleid;
+                    FORALL i IN 1..l_asset_id.COUNT
+                        INSERT INTO asset_used (asset_id, article_id) 
+                        VALUES (l_asset_id(i), pArticleid);
+                END LOOP;
+
+                FOR C IN (
+                    SELECT headings, headings_italic, italic, bold, bolditalic, text, code
+                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS (headings, headings_italic, italic, bold, bolditalic, text, code))
+                ) LOOP
+                    /* "headings" */
+                    UPDATE article_chars
+                       SET chars_italic=C.headings_italic,
+                           chars_normal=C.headings,
+                        --    first_heading=l_first_heading,
+                        --    second_heading=l_second_heading,
+                           updated_date=current_timestamp
+                     WHERE article_id=pArticleId
+                       AND context='headings';                
+                    IF (sql%rowcount=0) THEN
+                        INSERT INTO article_chars(article_id, context, chars_italic, chars_normal)
+                        VALUES (pArticleId, 'headings', C.headings_italic, C.headings);
+                    END IF;
+
+                    /* "text" */
+                    UPDATE article_chars
+                       SET chars_italic=C.italic,
+                           chars_normal=C.text,
+                           chars_bold_italic=C.bolditalic,
+                           chars_bold_normal=C.bold,
+                        --    first_text=l_first_text,
+                           updated_date=current_timestamp
+                     WHERE article_id=pArticleId
+                       AND context='text';
+                    IF (sql%rowcount=0) THEN
+                        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
+                        VALUES (pArticleId, 'text', C.bolditalic, C.bold, C.italic, C.text);   
+                    END IF;
+
+                    /* "code" */
+                    UPDATE article_chars
+                       SET chars_normal=C.code,
+                           updated_date=current_timestamp
+                     WHERE article_id=pArticleId
+                       AND context='code';
+                    IF (sql%rowcount=0) THEN
+                        INSERT INTO article_chars(article_id, context, chars_normal)
+                        VALUES (pArticleId, 'code', C.code);
+                    END IF;
+
+                END LOOP;
                 
 
             WHEN 'footer' THEN
                 UPDATE website_article 
                    SET footer_html=l_html,
-                       elements_used_footer=NVL(l_elements_used,0),
+                    --    elements_used_footer=NVL(l_elements_used,0),
                        footer_html_updated = current_timestamp
                  WHERE website_id=pWebsiteid
                    AND article_id=pArticleId;
         END CASE;
 
+        /*
         FOR C IN (
             SELECT wa.header_html || a.body_html || wa.footer_html AS content, wa.display_order
               FROM article a, website_article wa
@@ -1172,6 +1179,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                  WHERE id=pWebsiteId;
             END IF;
         END LOOP;
+        */
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
