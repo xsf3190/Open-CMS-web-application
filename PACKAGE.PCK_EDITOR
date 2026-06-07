@@ -1027,8 +1027,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_bodytext CLOB:=pBodyText;
-        l_word_count NUMBER;
-        l_html CLOB;
+        -- l_word_count NUMBER;
+        -- l_html CLOB;
         l_id VARCHAR2(6);
         l_parent_id article.parent_id%type;
         l_cld_cloud_name asset.cld_cloud_name%type;
@@ -1053,12 +1053,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         CASE l_id
             WHEN 'header' THEN
-                UPDATE website_article 
-                   SET header_html=l_html,
-                    --    elements_used_header=NVL(l_elements_used,0),
-                       header_html_updated = current_timestamp
-                 WHERE website_id=pWebsiteid
-                   AND article_id=pArticleId;
+                FOR C IN (
+                    SELECT body_html, headings, headings_italic
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB, headings, headings_italic))
+                ) LOOP
+                    UPDATE website_article 
+                       SET header_html=C.body_html,
+                           header_html_updated = current_timestamp
+                     WHERE website_id=pWebsiteid
+                       AND article_id=pArticleId;
+                    
+                    MERGE INTO article_chars t
+                    USING (
+                        SELECT pck_fonts.distinct_chars(chars_normal || C.headings) AS headings, 
+                               pck_fonts.distinct_chars(chars_italic || C.headings_italic) AS headings_italic
+                          FROM article_chars
+                         WHERE context='headings'
+                           AND article_id=pArticleid
+                    ) s
+                    ON (t.article_id=pArticleid AND context='headings')
+                    WHEN MATCHED THEN
+                        UPDATE SET
+                            t.chars_normal = s.headings,
+                            t.chars_italic = s.headings_italic,
+                            t.updated_date=current_timestamp
+                    WHEN NOT MATCHED THEN
+                        INSERT (article_id, context, chars_normal, chars_italic)
+                        VALUES (pArticleid, 'headings', s.headings, s.headings_italic);
+                END LOOP;
 
             WHEN 'main' THEN
                 FOR C IN (
@@ -1157,7 +1179,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
             WHEN 'footer' THEN
                 UPDATE website_article 
-                   SET footer_html=l_html,
+                   SET --footer_html=l_html,
                     --    elements_used_footer=NVL(l_elements_used,0),
                        footer_html_updated = current_timestamp
                  WHERE website_id=pWebsiteid
