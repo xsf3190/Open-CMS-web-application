@@ -429,7 +429,7 @@ export const init = async (element) => {
 }
 
 /*
-** RETURN BITMAP COUNT FOR DISTINCT ELEMENTS USED IN CONTENT
+** RETURN BITMAP FOR DISTINCT ELEMENTS USED IN CONTENT
 */
 const getElementsUsed = (ele) => {
     const arr = ['blockquote','code','img','hr','ol','pre','table','ul'];
@@ -444,10 +444,10 @@ const getElementsUsed = (ele) => {
 }
 
 /*
-** RETURN DISTINCT CHARACTER USED IN ELEMENT
+** RETURN DISTINCT CHARACTERS USED IN ELEMENT
 */
 const distinct = (ele, selector) => {
-    const chars = Array.from(ele.querySelectorAll(selector), ({ textContent }) => textContent).join("");
+    const chars = Array.from(ele.querySelectorAll(selector), ({ textContent }) => textContent.trim()).join("");
     return [...new Set(chars)].join("");
 }
 
@@ -467,24 +467,29 @@ const saveData = async ( data, endpoint, id ) => {
         elements_used: getElementsUsed(ele), 
         title: ele.querySelector("h2,h3,h4")?.textContent,
         excerpt: ele.querySelector("p")?.textContent,
-        headings:distinct(ele,'h1,h2,h3,h4'),
-        headings_italics:distinct(ele,'h1 i,h2 i,h3 i,h4 i'),
-        italic:distinct(ele,'i:not(:has(strong))'),
-        bolditalic:distinct(ele,'i>strong'),
-        bold:distinct(ele,'strong:not(i>strong)'),
-        code:distinct(ele,'code')
     };
 
-    if (obj.code || obj.bold || obj.italic || obj.bolditalic) {
-        dialog_article.replaceChildren();
-        dialog_article.insertAdjacentHTML('afterbegin',ele.innerHTML);
-        dialog_article.querySelectorAll('code,strong,i').forEach((tag)=> {
-            tag.remove();
-        });
-        obj.text = distinct(dialog_article,':not(h1,h2,h3,h4)')
-    } else {
-        obj.text = distinct(ele,':not(h1,h2,h3,h4)')
+    dialog_article.replaceChildren(); 
+    dialog_article.insertAdjacentHTML('afterbegin',ele.innerHTML);
+
+    /* headings first */
+    obj.headings_italic = distinct(dialog_article,':is(h1,h2,h3,h4) i');
+    if (obj.headings_italic) { 
+        dialog_article.querySelectorAll(':is(h1,h2,h3,h4) i').forEach((i) => {i.remove()});
     }
+    obj.headings = distinct(dialog_article,':is(h1,h2,h3,h4)');
+    dialog_article.querySelectorAll(':is(h1,h2,h3,h4)').forEach((h) => {h.remove();});
+
+    /* text */
+    obj.italic = distinct(dialog_article,'i:not(:has(strong))');
+    obj.bolditalic = distinct(dialog_article,'i>strong');
+    obj.bold = distinct(dialog_article,'strong:not(i>strong)');
+    obj.code = distinct(dialog_article,'code');
+
+    if (obj.code || obj.bold || obj.italic || obj.bolditalic) {
+        dialog_article.querySelectorAll('code,strong,i').forEach((tag)=> {tag.remove();});
+    }  
+    obj.text = distinct(dialog_article,'*');
 
     callAPI(endpoint,'PUT', obj)
         .then((data) => {
