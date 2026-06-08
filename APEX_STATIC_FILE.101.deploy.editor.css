@@ -57,7 +57,7 @@
   }
 }
 
-/* All UI elements Inherit font */
+/* All UI elements use system-ui */
 
 input,
 button,
@@ -69,6 +69,7 @@ select {
 
 input {
     line-height: 1lh;
+    padding: 0.15em 0.25em;
 }
 
 /* DIALOG STYLES */
