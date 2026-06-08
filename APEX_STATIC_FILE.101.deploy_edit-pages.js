@@ -77,6 +77,7 @@ export const clickHandler = async (e) => {
         const clone = selected.cloneNode(true);
         const label = clone.querySelector("label");
         label.textContent = "New Page";
+        navigation_label.value = "New Page";
         label.style.color = "red";
         label.setAttribute("for",id);
         const input = clone.querySelector("input");
