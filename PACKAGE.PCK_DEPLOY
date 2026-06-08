@@ -739,29 +739,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             ** Build font preloads to minimise CLS
             */
             FOR C1 IN (
-                SELECT context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic
-                  FROM article_chars
-                 WHERE article_id=pArticleid
-                 UNION ALL
-                SELECT 'logo', logo_font_text, null, null, null
-                  FROM website 
-                 WHERE id=pWebsiteid 
-                   AND logo_type='font' 
-                   AND logo_font_text IS NOT NULL
+                SELECT context, SUM(chars_normal) chars_normal, SUM(chars_italic) chars_italic, SUM(chars_bold_normal) chars_bold_normal, SUM(chars_bold_italic) chars_bold_italic
+                  FROM
+                    (
+                    SELECT context, NVL2(chars_normal, 1, 0) chars_normal, NVL2(chars_italic, 1, 0) chars_italic, NVL2(chars_bold_normal, 1, 0)  chars_bold_normal, NVL2(chars_bold_italic, 0, 1) chars_bold_italic
+                      FROM article_chars
+                     WHERE article_id=pArticleid
+                     UNION ALL
+                    SELECT 'logo', 1, 0, 0, 0
+                      FROM website 
+                     WHERE id=pWebsiteid 
+                       AND logo_type='font' 
+                       AND logo_font_text IS NOT NULL
+                    )
+                GROUP BY context
+                ORDER BY context 
             ) LOOP
-                IF (C1.chars_normal IS NOT NULL) THEN
+                IF (C1.chars_normal>0) THEN
                     l_preload_fonts:=l_preload_fonts ||
                     REPLACE(l_preload,'#FONT#',C1.context || '.normal.woff2');
                 END IF;
-                IF (C1.chars_italic IS NOT NULL) THEN
+                IF (C1.chars_italic>0) THEN
                     l_preload_fonts:=l_preload_fonts ||
                     REPLACE(l_preload,'#FONT#',C1.context || '.italic.woff2');
                 END IF;
-                IF (C1.chars_bold_normal IS NOT NULL) THEN
+                IF (C1.chars_bold_normal>0) THEN
                     l_preload_fonts:=l_preload_fonts ||
                     REPLACE(l_preload,'#FONT#',C1.context || '.bold.woff2');
                 END IF;
-                IF (C1.chars_bold_italic IS NOT NULL) THEN
+                IF (C1.chars_bold_italic>0) THEN
                     l_preload_fonts:=l_preload_fonts ||
                     REPLACE(l_preload,'#FONT#',C1.context || '.bold.italic.woff2');
                 END IF;
@@ -1090,29 +1096,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         */
         n:=0;
         FOR C IN (
-            WITH content AS
+            WITH source AS
             (
-                SELECT wa.article_id, wa.collection_type, '/' || CASE WHEN wa.display_order=1 THEN 'index' ELSE apex_string_util.get_slug(wa.navigation_label) END || '.html' path, 
-                        GREATEST(NVL(w.nav_updated_date,w.updated_date),NVL(w.logo_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
-                  FROM article a, website_article wa, website w
-                 WHERE w.id=pWebsiteId
-                   AND wa.website_id=w.id
-                   AND a.id=wa.article_id
-                UNION ALL 
-                SELECT a.id, null, '/' || apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(a.title) || '.html' path, 
-                        GREATEST(NVL(w.nav_updated_date,w.updated_date),NVL(w.logo_updated_date,w.updated_date),a.updated_date,wa.updated_date) updated_date
-                  FROM article a, website_article wa, website w
-                 WHERE w.id=pWebsiteId
-                   AND wa.website_id=w.id
-                   AND a.parent_id=wa.article_id
+                SELECT a.id article_id, wa.collection_type, a.updated_date article_updated_date, wa.updated_date website_article_updated_date,
+                        '/' || 
+                        CASE WHEN wa.display_order=1 THEN 'index'
+                             WHEN a.parent_id IS NULL THEN apex_string_util.get_slug(wa.navigation_label) 
+                             ELSE apex_string_util.get_slug(wa.navigation_label) || '/' || apex_string_util.get_slug(a.title) 
+                        END || '.html' path
+                  FROM article a, website_article wa
+                 WHERE wa.website_id=pWebsiteid
+                   AND wa.article_id=NVL(a.parent_id,a.id)
             )
-            SELECT C.article_id, C.path, C.collection_type, f.sha1, 
-                    CASE WHEN f.deployed_date IS NULL OR c.updated_date > f.deployed_date THEN 1 ELSE 0 END build
-              FROM content c, website_files f
-             WHERE f.website_id(+)=pWebsiteId
-               AND f.site_id(+)=pSiteid
-               AND f.path(+)=c.path
-               AND f.mime_type(+)='html'
+            SELECT s.article_id, s.collection_type, s.path, s.article_updated_date, s.website_article_updated_date, wf.deployed_date, wf.sha1,
+                    CASE WHEN s.article_updated_date>wf.deployed_date THEN 1 WHEN s.website_article_updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+              FROM source s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=s.path
+               AND wf.mime_type(+)='html'
         ) LOOP
             IF (C.build=0) THEN
                 l_files.put(C.path, C.sha1);
