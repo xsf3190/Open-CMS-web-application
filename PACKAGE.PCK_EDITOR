@@ -1027,8 +1027,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_bodytext CLOB:=pBodyText;
-        -- l_word_count NUMBER;
-        -- l_html CLOB;
         l_id VARCHAR2(6);
         l_parent_id article.parent_id%type;
         l_cld_cloud_name asset.cld_cloud_name%type;
@@ -1051,35 +1049,48 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
           INTO l_id
           FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (id));
 
+    -- pck_core.log(l_bodytext);
+
+        MERGE INTO article_chars t
+            USING (
+                WITH j AS
+                (
+                    SELECT id, headings, headings_italic, text, italic, bold, bolditalic, code
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (id, headings, headings_italic, text, italic, bold, bolditalic, code))
+                )
+                SELECT 'headings' AS context, id AS page_id, headings AS chars_normal, headings_italic AS chars_italic, null AS chars_bold_normal, null AS chars_bold_italic FROM j
+                UNION ALL
+                SELECT 'text', id, text, italic, bold, bolditalic FROM j
+                UNION ALL
+                SELECT 'code', id, code, null, null, null FROM j
+            ) s
+            ON (t.article_id=pArticleid AND t.context=s.context AND t.page_id=s.page_id)
+            WHEN MATCHED THEN
+                UPDATE SET
+                    t.chars_normal = s.chars_normal,
+                    t.chars_italic = s.chars_italic,
+                    t.chars_bold_normal = s.chars_bold_normal,
+                    t.chars_bold_italic = s.chars_bold_italic,
+                    t.updated_date=current_timestamp
+            WHEN NOT MATCHED THEN
+                INSERT (article_id, context, page_id, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic)
+                VALUES (pArticleid, s.context, s.page_id, s.chars_normal, s.chars_italic, s.chars_bold_normal, s.chars_bold_italic);
+
+        /* Identify any font changes required when rebuilding page */
+        
+        
+    
         CASE l_id
             WHEN 'header' THEN
                 FOR C IN (
-                    SELECT body_html, headings, headings_italic
-                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB, headings, headings_italic))
+                    SELECT body_html
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB))
                 ) LOOP
                     UPDATE website_article 
                        SET header_html=C.body_html,
-                           header_html_updated = current_timestamp
+                           updated_date = current_timestamp
                      WHERE website_id=pWebsiteid
                        AND article_id=pArticleId;
-                    
-                    MERGE INTO article_chars t
-                    USING (
-                        SELECT pck_fonts.distinct_chars(chars_normal || C.headings) AS headings, 
-                               pck_fonts.distinct_chars(chars_italic || C.headings_italic) AS headings_italic
-                          FROM article_chars
-                         WHERE context='headings'
-                           AND article_id=pArticleid
-                    ) s
-                    ON (t.article_id=pArticleid AND context='headings')
-                    WHEN MATCHED THEN
-                        UPDATE SET
-                            t.chars_normal = s.headings,
-                            t.chars_italic = s.headings_italic,
-                            t.updated_date=current_timestamp
-                    WHEN NOT MATCHED THEN
-                        INSERT (article_id, context, chars_normal, chars_italic)
-                        VALUES (pArticleid, 'headings', s.headings, s.headings_italic);
                 END LOOP;
 
             WHEN 'main' THEN
@@ -1130,78 +1141,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         VALUES (l_asset_id(i), pArticleid);
                 END LOOP;
 
-                FOR C IN (
-                    SELECT headings, headings_italic, italic, bold, bolditalic, text, code
-                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS (headings, headings_italic, italic, bold, bolditalic, text, code))
-                ) LOOP
-                    /* "headings" */
-                    UPDATE article_chars
-                       SET chars_italic=C.headings_italic,
-                           chars_normal=C.headings,
-                        --    first_heading=l_first_heading,
-                        --    second_heading=l_second_heading,
-                           updated_date=current_timestamp
-                     WHERE article_id=pArticleId
-                       AND context='headings';                
-                    IF (sql%rowcount=0) THEN
-                        INSERT INTO article_chars(article_id, context, chars_italic, chars_normal)
-                        VALUES (pArticleId, 'headings', C.headings_italic, C.headings);
-                    END IF;
-
-                    /* "text" */
-                    UPDATE article_chars
-                       SET chars_italic=C.italic,
-                           chars_normal=C.text,
-                           chars_bold_italic=C.bolditalic,
-                           chars_bold_normal=C.bold,
-                        --    first_text=l_first_text,
-                           updated_date=current_timestamp
-                     WHERE article_id=pArticleId
-                       AND context='text';
-                    IF (sql%rowcount=0) THEN
-                        INSERT INTO article_chars(article_id, context, chars_bold_italic, chars_bold_normal, chars_italic, chars_normal)
-                        VALUES (pArticleId, 'text', C.bolditalic, C.bold, C.italic, C.text);   
-                    END IF;
-
-                    /* "code" */
-                    UPDATE article_chars
-                       SET chars_normal=C.code,
-                           updated_date=current_timestamp
-                     WHERE article_id=pArticleId
-                       AND context='code';
-                    IF (sql%rowcount=0) THEN
-                        INSERT INTO article_chars(article_id, context, chars_normal)
-                        VALUES (pArticleId, 'code', C.code);
-                    END IF;
-
-                END LOOP;
-                
-
             WHEN 'footer' THEN
-                UPDATE website_article 
-                   SET --footer_html=l_html,
-                    --    elements_used_footer=NVL(l_elements_used,0),
-                       footer_html_updated = current_timestamp
-                 WHERE website_id=pWebsiteid
-                   AND article_id=pArticleId;
+                FOR C IN (
+                    SELECT body_html
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB))
+                ) LOOP
+                    UPDATE website_article 
+                       SET footer_html=C.body_html,
+                           updated_date = current_timestamp
+                     WHERE website_id=pWebsiteid
+                       AND article_id=pArticleId;
+                END LOOP;
         END CASE;
-
-        /*
-        FOR C IN (
-            SELECT wa.header_html || a.body_html || wa.footer_html AS content, wa.display_order
-              FROM article a, website_article wa
-             WHERE wa.website_id=pWebsiteid
-               AND a.id=pArticleid
-               AND wa.article_id=NVL(a.parent_id,pArticleid)
-        ) LOOP
-            pck_fonts.getCharsUsed(pArticleid,C.content);
-            IF (C.display_order=1 AND l_id IN ('header','footer')) THEN
-                UPDATE website 
-                   SET nav_updated_date=current_timestamp
-                 WHERE id=pWebsiteId;
-            END IF;
-        END LOOP;
-        */
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
