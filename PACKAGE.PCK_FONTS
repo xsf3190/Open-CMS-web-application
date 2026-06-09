@@ -183,7 +183,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 l_axes2 || '@' || l_tuple ||
                 '&display=swap' || 
                 '&text=' || utl_url.escape(pText,TRUE,'UTF-8');
-
+        -- pck_core.log(l_api_url);
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
 
         /* E.g. called for Codepen */
@@ -866,6 +866,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     l_api_url:='1,' || l_closest_700_i;
                 END IF;
                 updateFontAxisValue(pWebsiteid, pContext, 'wght', NVL(l_closest_700,l_closest_700_i));
+                updateFontAxisValue(pWebsiteid, pContext, 'slnt', null);
                 
             WHEN 'text' THEN
                 l_closest_400:=closestWght(pFontid,'normal',400);
