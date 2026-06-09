@@ -170,8 +170,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type) IS
-    BEGIN        
-        UPDATE website SET netlify_deploy_id=NULL WHERE id=pWebsiteId;
+    BEGIN
         lockDeployment;
 
         FOR C IN (
@@ -649,7 +648,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         pBody:=null;
         FOR C IN (
-            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, 
+            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, a.fonts_used,
                     w.max_width, 
                     wa.page_title, wa.page_description, w.domain_name
               FROM website_article wa, article a, website w
@@ -736,42 +735,41 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END IF;
 
             /*
-            ** Build font preloads to minimise CLS
+            ** Build font preload directives from fonts_used bitmap
             */
-            FOR C1 IN (
-                SELECT context, SUM(chars_normal) chars_normal, SUM(chars_italic) chars_italic, SUM(chars_bold_normal) chars_bold_normal, SUM(chars_bold_italic) chars_bold_italic
-                  FROM
-                    (
-                    SELECT context, NVL2(chars_normal, 1, 0) chars_normal, NVL2(chars_italic, 1, 0) chars_italic, NVL2(chars_bold_normal, 1, 0)  chars_bold_normal, NVL2(chars_bold_italic, 0, 1) chars_bold_italic
-                      FROM article_chars
-                     WHERE article_id=pArticleid
-                     UNION ALL
-                    SELECT 'logo', 1, 0, 0, 0
-                      FROM website 
-                     WHERE id=pWebsiteid 
-                       AND logo_type='font' 
-                       AND logo_font_text IS NOT NULL
-                    )
-                GROUP BY context
-                ORDER BY context 
-            ) LOOP
-                IF (C1.chars_normal>0) THEN
-                    l_preload_fonts:=l_preload_fonts ||
-                    REPLACE(l_preload,'#FONT#',C1.context || '.normal.woff2');
-                END IF;
-                IF (C1.chars_italic>0) THEN
-                    l_preload_fonts:=l_preload_fonts ||
-                    REPLACE(l_preload,'#FONT#',C1.context || '.italic.woff2');
-                END IF;
-                IF (C1.chars_bold_normal>0) THEN
-                    l_preload_fonts:=l_preload_fonts ||
-                    REPLACE(l_preload,'#FONT#',C1.context || '.bold.woff2');
-                END IF;
-                IF (C1.chars_bold_italic>0) THEN
-                    l_preload_fonts:=l_preload_fonts ||
-                    REPLACE(l_preload,'#FONT#',C1.context || '.bold.italic.woff2');
-                END IF;
-            END LOOP;
+            IF (BITAND(C.fonts_used,1)=1) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','headings.normal.woff2');
+            END IF;
+            IF (BITAND(C.fonts_used,2)=2) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','headings.italic.woff2');
+            END IF;
+            IF (BITAND(C.fonts_used,4)=4) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','text.normal.woff2');
+            END IF;
+            IF (BITAND(C.fonts_used,8)=8) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','text.italic.woff2');
+            END IF;
+            IF (BITAND(C.fonts_used,16)=16) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','text.bold.woff2');
+            END IF;
+            IF (BITAND(C.fonts_used,32)=32) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','text.bold.italic.woff2');
+            END IF;
+            IF (BITAND(C.fonts_used,64)=64) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','code.normal.woff2');
+            END IF;
+            IF (BITAND(C.fonts_used,128)=128) THEN
+                l_preload_fonts:=l_preload_fonts ||
+                REPLACE(l_preload,'#FONT#','logo.normal.woff2');
+            END IF;
+
 
             IF (pCollectionType='BLOG') THEN
                 buildPageCollection(pCollectionType, pArticleid, l_collection, l_collection_css);
@@ -900,9 +898,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_json.put('files',l_files);
 
             pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || pSiteId || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
-
-            /* NEED THIS FOR ASYNC DEPLOYMENT STATUS MONITORING */
-            UPDATE website SET netlify_deploy_id=(SELECT id FROM JSON_TABLE(l_clob, '$' COLUMNS (id))) WHERE id=pWebsiteId;
 
             FOR C IN (
                 SELECT id, sha1 
@@ -1109,7 +1104,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                    AND wa.article_id=NVL(a.parent_id,a.id)
             )
             SELECT s.article_id, s.collection_type, s.path, s.article_updated_date, s.website_article_updated_date, wf.deployed_date, wf.sha1,
-                    CASE WHEN s.article_updated_date>wf.deployed_date THEN 1 WHEN s.website_article_updated_date>wf.deployed_date THEN 1 ELSE 0 END build
+                    CASE 
+                        WHEN wf.deployed_date IS NULL THEN 1
+                        WHEN s.article_updated_date>wf.deployed_date THEN 1 
+                        WHEN s.website_article_updated_date>wf.deployed_date THEN 1 
+                        ELSE 0 
+                    END build
               FROM source s, website_files wf
              WHERE wf.website_id(+)=pWebsiteid
                AND wf.path(+)=s.path
