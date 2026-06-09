@@ -207,8 +207,8 @@ export const init = async (element) => {
     }
 
     const headerConfig = {
-        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Heading, Italic, Underline, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
-        toolbar: [ 'heading', '|', 'undo', 'redo',  '|', 'italic', 'bold', 'underline','|', 'fontSize', 'fontColor', '|', 'alignment', '|', 'insertTable'],
+        plugins: [ Essentials, Alignment, Autosave, Bold, FontSize, FontColor, Heading, Italic, SelectAll, Underline, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
+        toolbar: [ 'selectAll', '|', 'heading', '|', 'undo', 'redo', '|', 'italic', 'bold', 'underline','|', 'fontSize', 'fontColor', '|', 'alignment', '|', 'insertTable'],
         // licenseKey: "GPL",
         heading: {
             options: [
@@ -364,8 +364,8 @@ export const init = async (element) => {
     };
 
     const footerConfig = {
-        plugins: [ Essentials, Autosave, Paragraph, Heading, List, FontSize, FontColor, FontBackgroundColor, Bold, Italic, Link, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
-        toolbar: [ 'heading', '|', 'undo', 'redo',  '|', 'bold', 'italic', '|', 'fontSize', 'fontColor', 'fontBackgroundColor','|', 'insertTable', '|', 'link' ],
+        plugins: [ Essentials, Autosave, Paragraph, List, FontSize, FontColor, FontBackgroundColor, Bold, Italic, Link, SelectAll, Table, TableCaption, TableCellProperties, TableColumnResize, TableProperties, TableToolbar ],
+        toolbar: [ 'selectAll', '|', 'undo', 'redo',  '|', 'bold', 'italic', '|', 'fontSize', 'fontColor', 'fontBackgroundColor','|', 'insertTable', '|', 'link' ],
         table: {
             tableCaption: {
                 useCaptionElement: true
