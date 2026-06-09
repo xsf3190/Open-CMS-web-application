@@ -539,10 +539,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_session_data pck_sec.t_session_data;
         l_netlify_last_published website.netlify_last_published%type;
         l_datetime_format VARCHAR2(30):='fmdd Mon yy, hh24:fmmipm';
+        l_a11y_alt_fails PLS_INTEGER;
+        l_update_count PLS_INTEGER;
         l_header LONG;
         l_article LONG;
         l_footer LONG;
-        n PLS_INTEGER;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -565,32 +566,40 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '<tr>' ||
                     '<th>Page</th>' ||
                     '<th>Last Update</th>' ||
+                    '<th>Accessibility Status</th>' ||
                 '</tr>' ||
             '</thead>' ||
             '<tbody>';
 
-        n:=0;
+        l_update_count:=0;
+        l_a11y_alt_fails:=0;
         FOR C IN (
-            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, a.updated_date, wa.header_html_updated, wa.footer_html_updated
+            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, a.updated_date, wa.updated_date wa_updated_date, a.a11y_alt_fails
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteid
                AND wa.article_id=NVL(a.parent_id,a.id)
             ORDER BY wa.display_order, a.title nulls FIRST
         ) LOOP
+            IF (C.a11y_alt_fails>0) THEN
+                l_a11y_alt_fails:=l_a11y_alt_fails+1;
+            END IF;
+
             IF (C.updated_date>l_netlify_last_published) THEN
-                n:=n+1;
+                l_update_count:=l_update_count+1;
                 l_article:=l_article || 
-                '<tr><td>' || C.page || ' (main content)</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+                '<tr>' ||
+                    '<td>' || C.page || ' (main content)</td>' || 
+                    '<td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td>' ||
+                    '<td>' || CASE 
+                                WHEN C.a11y_alt_fails>0  THEN '<span style="color:red">NOK - images missing ALT text</span></td>'
+                                ELSE 'OK' 
+                              END || '</td>' ||
+                '</tr>';
             END IF;
-            IF (C.header_html_updated>l_netlify_last_published) THEN
-                n:=n+1;
+            IF (C.wa_updated_date>l_netlify_last_published) THEN
+                l_update_count:=l_update_count+1;
                 l_article:=l_article || 
-                '<tr><td>' || C.page || ' (header)</td><td>' || TO_CHAR(C.header_html_updated at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
-            END IF;
-            IF (C.footer_html_updated>l_netlify_last_published) THEN
-                n:=n+1;
-                l_article:=l_article || 
-                '<tr><td>' || C.page || ' (footer)</td><td>' || TO_CHAR(C.footer_html_updated at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+                '<tr><td>' || C.page || ' (header | footer)</td><td>' || TO_CHAR(C.wa_updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
             END IF;
         END LOOP;
 
@@ -602,30 +611,30 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             ORDER BY wf.context
         ) LOOP
             IF (C.updated_date>l_netlify_last_published) THEN
-                n:=n+1;
+                l_update_count:=l_update_count+1;
                 l_article:=l_article || 
                 '<tr><td>ALL PAGES - ' || C.context || ' font changed to ' || C.family || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
             END IF;
         END LOOP;
 
-        IF (n=0) THEN
+        IF (l_update_count=0) THEN
             l_article:=l_article || 
-            '<tr><td>ALL PAGES</td><td>PUBLISHED</td></tr>';
+            '<tr><td>ALL PAGES</td><td>ALREADY PUBLISHED</td></tr>';
         END IF;
 
         l_article:=l_article || 
         '</tbody></table></div>';
 
-        IF (n>0) THEN    
+        IF (l_update_count>0 AND l_a11y_alt_fails=0) THEN    
             l_footer:=
             '<div class="flex-items space-apart">' ||
                 '<button type="button" class="button publish-editor-site">PUBLISH</button>' ||
                 '<span aria-live="polite"></span>' ||
                 '<span class="loader icon"></span>' ||
             '</div>';
-        ELSE
+        ELSIF (l_a11y_alt_fails>0) THEN
             l_footer:=
-            '<span>NOTHING TO DO</span>';
+            '<span style="color:red">CORRECT FAILURES IN ORDER TO PUBLISH</span>';
         END IF;
 
         l_json:= new JSON_OBJECT_T;
@@ -649,6 +658,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_header LONG;
         l_article LONG;
         l_footer LONG;
+        n PLS_INTEGER;
+        l_a11y_alt_fails NUMBER;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -662,39 +673,39 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
-        '<table>' ||
-            '<caption id="table-caption">Last Published Dates</caption>' ||
-            '<thead>' ||
+            '<table>' ||
+                '<caption id="table-caption">Editor site must be the most recently published</caption>' ||
+                '<thead>' ||
+                    '<tr>' ||
+                        '<th>Editor Site Last Published</th>' ||
+                        '<th>Live Site Last Published</th>' ||
+                    '</tr>' ||
+                '</thead>' ||
+                '<tbody>';
+
+            FOR C IN (
+                SELECT netlify_last_published, netlify_last_published_custom
+                  FROM website
+                 WHERE id=pWebsiteid
+            ) LOOP
+                l_article:=l_article ||
                 '<tr>' ||
-                    '<th>Editor Site</th>' ||
-                    '<th>Live Site</th>' ||
-                '</tr>' ||
-            '</thead>' ||
-            '<tbody>';
+                    '<td>' || TO_CHAR(C.netlify_last_published at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
+                    '<td>' || TO_CHAR(C.netlify_last_published_custom at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
+                '</tr>';
 
-        FOR C IN (
-            SELECT netlify_last_published, netlify_last_published_custom
-              FROM website
-             WHERE id=pWebsiteid
-        ) LOOP
-            l_article:=l_article ||
-            '<tr>' ||
-                '<td>' || TO_CHAR(C.netlify_last_published at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
-                '<td>' || TO_CHAR(C.netlify_last_published_custom at time zone l_session_data.timeZone,'dd-mm-yy fmhh24:fmmipm') || '</td>' ||
-            '</tr>';
-
-            IF (C.netlify_last_published>C.netlify_last_published_custom) THEN            
-                l_footer:=
-                '<div class="flex-items space-apart">' ||
-                    '<button type="button" class="button go-live">GO LIVE</button>' ||
-                    '<span aria-live="polite"></span>' ||
-                    '<span class="loader icon"></span>' ||
-                '</div>';
-            ELSE
-                l_footer:=
-                '<span>LIVE site already published</span>';
-            END IF;
-        END LOOP;
+                IF (C.netlify_last_published>C.netlify_last_published_custom) THEN            
+                    l_footer:=
+                    '<div class="flex-items space-apart">' ||
+                        '<button type="button" class="button go-live">GO LIVE</button>' ||
+                        '<span aria-live="polite"></span>' ||
+                        '<span class="loader icon"></span>' ||
+                    '</div>';
+                ELSE
+                    l_footer:=
+                    '<span>LIVE site already published</span>';
+                END IF;
+            END LOOP;
 
         l_article:=l_article ||
         '</tbody></table></div>';
@@ -893,8 +904,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
        -- Create ARTICLE and WEBSITE_ARTICLE rows for new pages.
         FOR i IN 1..l_arr.COUNT LOOP
             IF (l_arr(i).article_id<=0) THEN
-                INSERT INTO article (id, author_user_id) 
-                    VALUES (seq_article.nextval, l_session_data.user_id);
+                INSERT INTO article (id, author_user_id, updated_date) 
+                    VALUES (seq_article.nextval, l_session_data.user_id, current_timestamp);
                 INSERT INTO website_article (website_id, article_id, navigation_label, collection_type, user_id, display_order)
                     VALUES (pWebsiteId, seq_article.currval, l_arr(i).navigation_label, l_arr(i).collection_type, l_session_data.user_id, l_arr(i).display_order);
             END IF;
@@ -920,6 +931,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_do_deploy:=NVL(l_new_nav,'x') <> NVL(l_old_nav,'x');
 
         IF (l_do_deploy) THEN
+            /* Force all pages to be rebuilt */
+            DELETE website_files WHERE website_id=pWebsiteid AND mime_type='html';
             pck_deploy.deployEditorSite(pWebsiteid);
         END IF;
 
@@ -1029,6 +1042,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_bodytext CLOB:=pBodyText;
         l_id VARCHAR2(6);
         l_parent_id article.parent_id%type;
+        l_display_order website_article.display_order%type;
         l_cld_cloud_name asset.cld_cloud_name%type;
         l_public_id asset.public_id%type;
         n1 PLS_INTEGER;
@@ -1037,6 +1051,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json JSON_OBJECT_T;
         TYPE t_asset_id IS TABLE OF asset.id%type;
         l_asset_id t_asset_id:=t_asset_id();
+        l_fonts_used NUMBER;
 
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -1076,22 +1091,44 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 INSERT (article_id, context, page_id, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic)
                 VALUES (pArticleid, s.context, s.page_id, s.chars_normal, s.chars_italic, s.chars_bold_normal, s.chars_bold_italic);
 
-        /* Identify any font changes required when rebuilding page */
+        /* Identify all fonts used on the page */
+        SELECT SUM(
+                CASE WHEN context='headings' AND normal>0 THEN 1 ELSE 0 END +
+                CASE WHEN context='headings' AND italic>0 THEN 2 ELSE 0 END +
+                CASE WHEN context='text' AND normal>0 THEN 4 ELSE 0 END +
+                CASE WHEN context='text' AND italic>0 THEN 8 ELSE 0 END +
+                CASE WHEN context='text' AND bold>0 THEN 16 ELSE 0 END +
+                CASE WHEN context='text' AND bolditalic>0 THEN 32 ELSE 0 END +
+                CASE WHEN context='code' AND normal>0 THEN 64 ELSE 0 END)
+          INTO l_fonts_used
+          FROM
+            (
+                SELECT context,
+                        SUM(NVL2(chars_normal, 1, 0)) normal, 
+                        SUM(NVL2(chars_italic, 1, 0)) italic, 
+                        SUM(NVL2(chars_bold_normal, 1, 0)) bold, 
+                        SUM(NVL2(chars_bold_italic, 1, 0)) bolditalic
+                  FROM article_chars
+                 WHERE article_id=pArticleid
+                 GROUP BY context
+                 ORDER BY DECODE(context,'headings',1,'text',2,'code',3)
+            );
         
-        
-    
         CASE l_id
             WHEN 'header' THEN
                 FOR C IN (
-                    SELECT body_html
-                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB))
+                    SELECT body_html, elements_used
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB, elements_used))
                 ) LOOP
                     UPDATE website_article 
                        SET header_html=C.body_html,
+                           elements_used_header=C.elements_used,
                            updated_date = current_timestamp
                      WHERE website_id=pWebsiteid
-                       AND article_id=pArticleId;
+                       AND article_id=pArticleId
+                       RETURNING display_order INTO l_display_order;
                 END LOOP;
+                UPDATE article SET fonts_used=l_fonts_used WHERE id=pArticleid;
 
             WHEN 'main' THEN
                 FOR C IN (
@@ -1105,6 +1142,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                            body_html=C.body_html,
                            elements_used=C.elements_used,
                            a11y_alt_fails=C.a11y_alt_fails,
+                           fonts_used=l_fonts_used,
                            updated_date = current_timestamp
                      WHERE id=pArticleId
                      RETURNING parent_id INTO l_parent_id;
@@ -1143,16 +1181,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
             WHEN 'footer' THEN
                 FOR C IN (
-                    SELECT body_html
-                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB))
+                    SELECT body_html, elements_used
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB, elements_used))
                 ) LOOP
                     UPDATE website_article 
                        SET footer_html=C.body_html,
+                           elements_used_footer=C.elements_used,
                            updated_date = current_timestamp
                      WHERE website_id=pWebsiteid
-                       AND article_id=pArticleId;
+                       AND article_id=pArticleId
+                       RETURNING display_order INTO l_display_order;
                 END LOOP;
+                UPDATE article SET fonts_used=l_fonts_used WHERE id=pArticleid;
         END CASE;
+
+        IF (l_display_order=1) THEN
+            UPDATE article SET updated_date=current_timestamp
+             WHERE id IN 
+             (
+                SELECT article_id 
+                  FROM website_article 
+                 WHERE website_id=pWebsiteid
+                   AND display_order<>l_display_order
+                   AND (header_html IS NULL OR footer_html IS NULL)
+             );
+        END IF;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
