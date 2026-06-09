@@ -36,8 +36,8 @@ export const inputHandler = (e) => {
 */
 export const changeHandler = (e) => {
     if (e.target.matches("[name='page']")) {
-        console.log(e.target);
         navigation_label.value = e.target.nextSibling.textContent;
+        setCollectionType(e.target.dataset.collection);
     }
     if (e.target.matches("[name='collection_type']")) {
         pages.querySelector("[name='page']:checked").dataset.collection = e.target.value;
