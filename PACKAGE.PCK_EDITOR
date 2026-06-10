@@ -821,15 +821,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             END IF;
         END LOOP;
         l_article:=l_article ||
-        '</fieldset>';
-
-        l_article:=l_article ||
-        '<div>' ||
-            '<label for="navigation-label" class="block">Selected Page Name</label>' ||
-            '<input type="text" id="navigation-label" name="navigation-label" value="' || l_navigation_label || '">' ||
+        '</fieldset>' || 
+        '<div class="flex-items space-between">' ||
+            '<div>' ||
+                '<label for="navigation-label" class="block">Edit name</label>' ||
+                '<input type="text" id="navigation-label" name="navigation-label" value="' || l_navigation_label || '">' ||
+            '</div>' ||
+            '<button type="button" class="button add-page" style="align-self:flex-end;--button-bg:crimson">New Page</button>' ||
+            '<button type="button" class="button delete-page" style="align-self:flex-end;--button-bg:crimson">Delete Page</button>' ||
         '</div>' ||
         '<fieldset class="collection-type show-controls flex-items">' ||
-            '<legend>Selected Page Type</legend>' ||
+            '<legend>Page Type</legend>' ||
             '<div>' ||            
                 '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"' || CASE WHEN l_collection_type='N/A' THEN ' checked' END || '>' ||
                 '<label for="collection_type-normal">Normal</label>' ||
@@ -842,11 +844,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '<input type="radio" id="collection_type-portfolio" name="collection_type" value="PORTFOLIO"' || CASE WHEN l_collection_type='PORTFOLIO' THEN ' checked' END || '>' ||
                 '<label for="collection_type-portfolio">Portfolio</label>' ||
             '</div>' ||
-        '</fieldset>' ||
-        '<div class="flex-items">' ||
-            '<button type="button" class="button add-page">Add Page</button>' ||
-            '<button type="button" class="button delete-page">Delete Page</button>' ||
-        '</div>';
+        '</fieldset>';
 
         l_footer:=
         '<div class="flex-items">' ||
@@ -955,7 +953,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  ENSURE OWNERS GET LATEST CONTENT WHEN LOGGED IN
+    **  GET LATEST EDITED CONTENT
     */
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -966,57 +964,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        /* RETURN NULL HTML UNLESS UPDATED AFTER LAST DEPLOYMENT */
         FOR C IN (
-            SELECT body_html
-              FROM article
-             WHERE id=pArticleId
-               AND updated_date>deployed_date
-        ) LOOP
-            l_main_html:=C.body_html;
-        END LOOP;
-
-        FOR C IN (
-            SELECT wa.header_html, wa.header_html_updated, w.netlify_last_published
-              FROM website_article wa, website w
+            SELECT a.body_html, a.updated_date, wa.header_html, wa.footer_html, wa.updated_date wa_updated_date, wa.display_order, w.netlify_last_published
+              FROM website w, website_article wa, article a
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
-               AND wa.article_id=pArticleid
+               AND a.id=pArticleId
+               AND wa.article_id=NVL(a.parent_id,a.id)
         ) LOOP
-            IF (C.header_html IS NULL) THEN
-                FOR C1 IN (
-                    SELECT header_html 
-                      FROM website_article 
-                     WHERE website_id=pWebsiteId
-                       AND display_order=1
-                       AND header_html_updated>C.netlify_last_published
-                ) LOOP
-                    l_header_html:=C1.header_html;
-                END LOOP;
-            ELSIF (C.header_html_updated>C.netlify_last_published) THEN
+            IF (C.updated_date>C.netlify_last_published) THEN
+                l_main_html:=C.body_html;
+            END IF;
+            IF (C.header_html IS NOT NULL AND C.wa_updated_date>C.netlify_last_published) THEN
                 l_header_html:=C.header_html;
             END IF;
-        END LOOP;
-
-        FOR C IN (
-            SELECT wa.footer_html, wa.footer_html_updated, w.netlify_last_published
-              FROM website_article wa, website w
-             WHERE w.id=pWebsiteId
-               AND wa.website_id=w.id
-               AND wa.article_id=pArticleid
-        ) LOOP
-            IF (C.footer_html IS NULL) THEN
+            IF (C.footer_html IS NOT NULL AND C.wa_updated_date>C.netlify_last_published) THEN
+                l_footer_html:=C.footer_html;
+            END IF;
+            IF (l_header_html IS NULL OR l_footer_html IS NULL) THEN
                 FOR C1 IN (
-                    SELECT footer_html 
+                    SELECT header_html, footer_html 
                       FROM website_article 
                      WHERE website_id=pWebsiteId
                        AND display_order=1
-                       AND footer_html_updated>C.netlify_last_published
+                       AND NVL(updated_date,C.netlify_last_published)>C.netlify_last_published
                 ) LOOP
-                    l_footer_html:=C1.footer_html;
+                    l_header_html:=C.header_html;
+                    l_footer_html:=C.footer_html;
                 END LOOP;
-            ELSIF (C.footer_html_updated>C.netlify_last_published) THEN
-                l_footer_html:=C.footer_html;
             END IF;
         END LOOP;
 
