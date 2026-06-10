@@ -42,6 +42,9 @@ export const changeHandler = (e) => {
     if (e.target.matches("[name='collection_type']")) {
         pages.querySelector("[name='page']:checked").dataset.collection = e.target.value;
     }
+    if (e.target.matches("[name='cta']")) {
+        pages.querySelector("[name='page']:checked").dataset.cta = e.target.value;
+    }
 }
 
 const setCollectionType = (data) => {
@@ -108,6 +111,7 @@ export const clickHandler = async (e) => {
             obj.article_id = item.getAttribute("id");
             obj.collection_type = item.dataset.collection;
             obj.navigation_label = item.nextSibling.textContent;
+            obj.cta = item.dataset.cta;
             arr.push(obj);
         });
 
