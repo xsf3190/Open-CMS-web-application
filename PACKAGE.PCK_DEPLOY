@@ -405,7 +405,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         '<nav aria-label="Main">' ||
             '<ul>';
         FOR C IN (
-            SELECT navigation_label, collection_type, article_id, ROW_NUMBER() OVER (ORDER BY display_order) rn
+            SELECT navigation_label, collection_type, cta, article_id, ROW_NUMBER() OVER (ORDER BY display_order) rn
               FROM website_article 
              WHERE website_id=pWebsiteId
              ORDER BY display_order
@@ -414,7 +414,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_nav:=l_nav ||
             '<li>' ||
                 '<a href="/' || CASE WHEN C.rn>1 THEN apex_string_util.get_slug(C.navigation_label) END || '"' ||
-                ' data-id="' || C.article_id || '" data-collection="' || C.collection_type || '"' ||
+                ' data-id="' || C.article_id || '" data-collection="' || C.collection_type || '" data-cta="' || C.cta || '"' ||
                 CASE WHEN pArticleid=C.article_id THEN ' aria-current="page"' END || '>' ||
                 C.navigation_label || 
                 '</a>' ||
@@ -613,6 +613,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
+    ** Build CALL TO ACTION form
+    */
+    PROCEDURE buildCta(pCta IN website_article.cta%type, pHtml IN OUT LONG) IS
+    BEGIN
+        pHtml:=
+        '<form>' ||
+            '<fieldset class="flow" style="inline-size:fit-content;border-radius: 12px">';
+        CASE pCta 
+            WHEN 'create-website' THEN
+                pHtml:=pHtml ||
+                '<legend>Get free website sent to your inbox</legend>' ||
+                '<div>' ||
+                    '<label for="email" style="margin-right:1em">Enter Email address</label>' ||
+                    '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on">' ||
+                '</div>';
+                
+            WHEN 'contact-form' THEN
+                null;
+        END CASE;
+        pHtml:=pHtml || 
+                '<div class="flex-items">' ||
+                    '<button class="button ' || pCta || '" type="button">FREE WEBSITE</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                '</div>' ||
+            '</fieldset>' || 
+        '</form>';
+    END;
+
+    /*
     **  <nav>
     **  <header>
     **  <main>
@@ -627,6 +656,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pDropdown in VARCHAR2, 
         pIntegrity IN VARCHAR2, 
         pCollectionType IN website_article.collection_type%type, 
+        pCta IN website_article.cta%type, 
         pCommonHeader IN website_article.header_html%type, 
         pCommonFooter IN website_article.footer_html%type,
         pBody IN OUT NOCOPY CLOB
@@ -641,6 +671,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_collection CLOB;
         l_collection_css CLOB;
         l_article_links LONG;
+        l_cta LONG;
         l_preload VARCHAR2(200):='<link rel="preload" href="/fonts/#FONT#" as="font" type="font/woff2" crossorigin>';
         l_preload_fonts LONG;
         n PLS_INTEGER;
@@ -700,8 +731,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '</section>';
                 END IF;
             END IF;
+
+            IF (pCta IS NOT NULL) THEN
+                buildCta(pCta, l_cta);
+            END IF;
             
-            l_main:='<main id="main" class="flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
+            l_main:='<main id="main" class="flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || l_cta || '</main>';
             
             setImgSrcset(pArticleId, regexp_substr(C.max_width,'\d+'), l_main);
 
@@ -769,7 +804,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_preload_fonts:=l_preload_fonts ||
                 REPLACE(l_preload,'#FONT#','logo.normal.woff2');
             END IF;
-
 
             IF (pCollectionType='BLOG') THEN
                 buildPageCollection(pCollectionType, pArticleid, l_collection, l_collection_css);
@@ -1093,7 +1127,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             WITH source AS
             (
-                SELECT a.id article_id, wa.collection_type, a.updated_date article_updated_date, wa.updated_date website_article_updated_date,
+                SELECT a.id article_id, wa.collection_type, wa.cta, a.updated_date article_updated_date, wa.updated_date website_article_updated_date,
                         '/' || 
                         CASE WHEN wa.display_order=1 THEN 'index'
                              WHEN a.parent_id IS NULL THEN apex_string_util.get_slug(wa.navigation_label) 
@@ -1103,7 +1137,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                  WHERE wa.website_id=pWebsiteid
                    AND wa.article_id=NVL(a.parent_id,a.id)
             )
-            SELECT s.article_id, s.collection_type, s.path, s.article_updated_date, s.website_article_updated_date, wf.deployed_date, wf.sha1,
+            SELECT s.article_id, s.collection_type, s.cta, s.path, s.article_updated_date, s.website_article_updated_date, wf.deployed_date, wf.sha1,
                     CASE 
                         WHEN wf.deployed_date IS NULL THEN 1
                         WHEN s.article_updated_date>wf.deployed_date THEN 1 
@@ -1131,7 +1165,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     SELECT logo_font_text INTO l_logo FROM website WHERE id=pWebsiteid;
                 END IF;
             END IF;
-            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, l_common_header, l_common_footer, l_clob);
+            buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, C.cta, l_common_header, l_common_footer, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
         END LOOP;
 
