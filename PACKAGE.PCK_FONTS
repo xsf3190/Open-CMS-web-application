@@ -259,8 +259,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_chars_used('logo').normal:=distinct_chars(l_chars_used('logo').normal || C.logo_font_text);
         END LOOP;
 
+        DELETE website_chars WHERE website_id=pWebsiteid;
+        
+
         l_context:=l_chars_used.FIRST;
         WHILE l_context IS NOT NULL LOOP
+            INSERT INTO website_chars (
+                website_id, context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic
+            )
+            VALUES (
+                pWebsiteid, l_context, l_chars_used(l_context).normal, l_chars_used(l_context).italic, l_chars_used(l_context).bold_normal, l_chars_used(l_context).bold_italic
+            );
+
             IF (l_chars_used(l_context).normal IS NOT NULL) THEN
                 downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).normal, 'normal', pArticleid);
             END IF;
@@ -576,7 +586,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_header:=
             '<a class="icon-with-text" href="https://fonts.google.com" target="a_blank" aria-label="Search on Google Fonts">' ||
 				'<svg width="1em" height="1em" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376C296.3 401.1 253.9 416 208 416 93.1 416 0 322.9 0 208S93.1 0 208 0 416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>' ||
-				'<small>View all ' || C.total || ' Google fonts. Latest addition on '|| TO_CHAR(C.last_created, 'dd Mon yyyy') || '</small>' ||
+				'<small>View all ' || C.total || ' Google fonts - last font added on '|| TO_CHAR(C.last_created, 'dd Mon yyyy') || '</small>' ||
 			'</a>';
         END LOOP;
 
@@ -596,25 +606,23 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             l_json:= new JSON_OBJECT_T;
             l_json.put('options',getFontOptions(pWebsiteid,C.category,C.capabilities,C.font_id));
 
+            -- Contexts
             l_article:=
-            '<div class="flex-items">' ||
-                -- Contexts
-                '<fieldset class="show-controls flex-items">' ||
-                    '<legend>Context</legend>';
-                FOR i IN 1..l_contexts.COUNT LOOP
-                    l_article:=l_article || 
-                    '<span>' ||
-        		        '<input type="radio" name="context" id="' || l_contexts(i) || '"' || CASE WHEN l_contexts(i)=C.context THEN ' checked' END || '>' ||
-        		        '<label for="' || l_contexts(i) || '">' || INITCAP(l_contexts(i)) || '</label>' ||
-        			'</span>';
-                END LOOP;
+            '<fieldset class="show-controls flex-items">' ||
+                '<legend>Context</legend>';
+            FOR i IN 1..l_contexts.COUNT LOOP
                 l_article:=l_article || 
-                '</fieldset>' ||
-            '</div>';
+                '<span>' ||
+    		        '<input type="radio" name="context" id="' || l_contexts(i) || '"' || CASE WHEN l_contexts(i)=C.context THEN ' checked' END || '>' ||
+    		        '<label for="' || l_contexts(i) || '">' || INITCAP(l_contexts(i)) || '</label>' ||
+    			'</span>';
+            END LOOP;
+            l_article:=l_article || 
+            '</fieldset>';
 
             -- Font categories and capabilities
             l_article:=l_article || 
-            '<fieldset class="flex-items">' ||
+            '<fieldset class="flex-items" style="--flex-gap:var(--space-xs)">' ||
                 '<legend>Design capabilities</legend>' ||
                 -- Categories
                 '<div>' ||
@@ -640,7 +648,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 -- Capabilities
                 FOR i IN 1..G_CAPABILITIES.COUNT LOOP
                     l_article:=l_article || 
-                    '<button type="button" class="toggle capability" id="' || G_CAPABILITIES(i) || '-btn" aria-pressed="' || 
+                    '<button type="button" class="toggle capability" id="' || G_CAPABILITIES(i) || '-btn" style="margin-top:1.5em" aria-pressed="' || 
                         isCapability(G_CAPABILITIES.COUNT-i,C.capabilities) || '">' || INITCAP(G_CAPABILITIES(i)) || 
                     '</button>';
                 END LOOP;
