@@ -720,8 +720,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         IF (pPage=1) THEN
             l_header:=
             '<div>' ||
-                '<label for="report">Select Report</label>' ||
-                '<select id="report" class="select-analytics">' ||
+                '<label for="report" style="margin-right:1em">Select Report:</label>' ||
+                '<select id="report">' ||
                     '<button>' ||
                       '<selectedcontent></selectedcontent>' ||
                       '<span class="arrow"></span>' ||
