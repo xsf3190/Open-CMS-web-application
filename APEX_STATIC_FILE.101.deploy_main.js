@@ -28,14 +28,22 @@ if (narrow_viewport.matches) {
 let aud = "";
 const jwt = localStorage.getItem("refresh");
 
-if (is_editor) {
-    document.getElementById("menulist-btn").style.visibility = "visible";
-    set_controls();
-    console.warn("IGNORE FONT LOADING ERRORS AND WARNINGS ON EDITOR WEBSITE");
+const ctaHandler = async (e) => {
+    const module = await import("deploy_cta")
+    .catch((error) => {
+        console.error(error);
+        console.error("Failed to load deploy_cta");
+        return;
+    });
+    module.init(e.target);
 }
 
 async function load_modules() {
     if (is_editor) {
+        document.getElementById("menulist-btn").style.visibility = "visible";
+        set_controls();
+        console.warn("IGNORE FONT LOADING ERRORS AND WARNINGS ON EDITOR WEBSITE");
+
         const menu = await import("deploy_menulist")
         .catch((error) => {
             console.error(error);
@@ -44,6 +52,12 @@ async function load_modules() {
         });
         new menu.MenuNavigationHandler(dropdown);
     }
+    /* Set clickHandler for any call to action button */
+    const cta = document.getElementById("cta");
+    if (cta) {
+        cta.querySelector("button").addEventListener("click",ctaHandler);
+    }
+
     const cwv = await import("deploy_web_vitals5")
     .catch((error) => {
         console.error(error);
