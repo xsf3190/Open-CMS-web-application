@@ -18,6 +18,15 @@ export const init = (e) => {
         });;
 }
 
+const clearStorage = () => {
+    for (let i in localStorage) {
+        const key = localStorage.key(i);
+        if (key.endsWith("properties") || key.endsWith("urls")) {
+            localStorage.removeItem(key);
+        }
+    }
+}
+
 let isSending = false;
 
 export const clickHandler = (e) => {
@@ -39,6 +48,7 @@ export const clickHandler = (e) => {
                 loader.style.opacity=0;        
                 live.replaceChildren();
                 live.textContent = data.message;
+                clearStorage();
                 setTimeout(() => {
                     window.location.reload();
                 }, 1500);
