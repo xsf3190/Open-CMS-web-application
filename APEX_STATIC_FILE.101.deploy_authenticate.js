@@ -5,8 +5,6 @@
 import { dropdown, output_dialog, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError, replaceTokens } from "deploy_callAPI";
 
-const form = output_dialog.querySelector("form");
-
 let endpoint, summary, intervalId, live, loader, userid;
 
 export const init = (element) => {
@@ -81,6 +79,7 @@ export const clickHandler = (e) => {
     loader.style.opacity=1;
 
     if (request_type!=="verify") {
+        const form = e.target.closest("form");
         form.querySelector("[name='url']").value = window.location.hostname;
         form.querySelector("[name='request_type']").value = request_type;
         const formData = new FormData(form);
