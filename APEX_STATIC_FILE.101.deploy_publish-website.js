@@ -19,10 +19,13 @@ export const init = (e) => {
 }
 
 const clearStorage = () => {
-    for (let i in localStorage) {
-        const key = localStorage.key(i);
-        if (key.endsWith("properties") || key.endsWith("urls")) {
-            localStorage.removeItem(key);
+    console.log("starting clearStorage of any font properties")
+    const keys = Object.keys(localStorage);
+    let i = keys.length;
+
+    while ( i-- ) {
+        if (keys[i].includes("font")) {
+            localStorage.removeItem(keys[i]);
         }
     }
 }
