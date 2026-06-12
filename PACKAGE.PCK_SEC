@@ -24,6 +24,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    FUNCTION getJWTIssuer(pWebsiteId IN website.id%type) RETURN VARCHAR2;
+    --
     PROCEDURE getLoginForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data;
