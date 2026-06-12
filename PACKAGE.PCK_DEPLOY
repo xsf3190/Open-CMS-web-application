@@ -618,14 +618,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     PROCEDURE buildCta(pCta IN website_article.cta%type, pHtml IN OUT LONG) IS
     BEGIN
         pHtml:=
-        '<form>' ||
-            '<fieldset class="flow" style="inline-size:fit-content;border-radius: 12px">';
+        '<form id="cta" style="display:grid;place-items:center">' ||
+            '<fieldset class="flow flex-items" style="--flex-direction:column;inline-size:fit-content;border-radius:12px">';
         CASE pCta 
             WHEN 'create-website' THEN
                 pHtml:=pHtml ||
-                '<legend>Get free website sent to your inbox</legend>' ||
+                '<legend></legend>' ||
                 '<div>' ||
-                    '<label for="email" style="margin-right:1em">Enter Email address</label>' ||
+                    '<label for="email" style="display:block;margin-right:1em">Email address</label>' ||
                     '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on">' ||
                 '</div>';
                 
@@ -634,7 +634,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END CASE;
         pHtml:=pHtml || 
                 '<div class="flex-items">' ||
-                    '<button class="button ' || pCta || '" type="button">FREE WEBSITE</button>' ||
+                    '<button class="button" data-action="' || pCta || '" type="button">FREE WEBSITE</button>' ||
                     '<span aria-live="polite"></span>' ||
                 '</div>' ||
             '</fieldset>' || 
@@ -731,12 +731,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '</section>';
                 END IF;
             END IF;
-
-            IF (pCta IS NOT NULL) THEN
-                buildCta(pCta, l_cta);
-            END IF;
             
-            l_main:='<main id="main" class="flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || l_cta || '</main>';
+            l_main:='<main id="main" class="flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
             setImgSrcset(pArticleId, regexp_substr(C.max_width,'\d+'), l_main);
 
@@ -814,6 +810,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             */
             l_logo:='<span class="logo">' || pLogo || '</span>';
 
+            /*
+            ** GET HTML FOR ANY CALL TO ACTION
+            */
+             IF (pCta IS NOT NULL) THEN
+                buildCta(pCta, l_cta);
+            END IF;
+
             pBody:=
             '<!DOCTYPE HTML>' ||
             '<html lang="en">' ||
@@ -838,7 +841,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<div class="topnav flex-items space-between">' ||
                         l_logo || l_nav || pColorScheme || 
                     '</div>' ||    
-                    l_header || l_main || l_collection || l_article_links || l_footer || buildContentDialog ||
+                    l_header || l_main || l_collection || l_cta || l_article_links || l_footer || buildContentDialog ||
                 '</body>' ||
                 '<form action="https://codepen.io/pen/define" method="POST" target="_blank"><input type="hidden" name="data" value=""></form>' ||
                 '</html>';
