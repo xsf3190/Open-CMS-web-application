@@ -1,0 +1,92 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CTA" as
+    --
+    PROCEDURE handleCta(pWebsiteid IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
+    --
+end "PCK_CTA";
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" as
+
+    PROCEDURE createWebsite(pEmail IN users.email%type) IS
+    BEGIN
+    null;
+    END;
+
+    PROCEDURE sendContactMessage(pEmail IN users.email%type) IS
+    BEGIN
+    null;
+    END;
+
+    /*
+    *  ALL CALL TO ACTION REQUESTS ARE AUTHENTICATED BY EMAIL
+    */
+    PROCEDURE handleCta(pWebsiteid IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_user_id users.id%type;
+        l_ords_user_id user_ords_clients.id%type;
+        l_jwt_enc_key user_ords_clients.client_secret%type;
+        l_token VARCHAR2(4000);
+        l_sendmail_subject VARCHAR2(200);
+        l_sendmail_body LONG;
+        l_sendmail_link VARCHAR2(500);
+        l_json JSON_OBJECT_T;
+    BEGIN
+        FOR C IN (
+            SELECT LOWER(email) email, action
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS(email, action))
+        ) LOOP
+            CASE C.action
+                WHEN 'create-website' THEN
+                    createWebsite(C.email);
+                WHEN 'contact' THEN
+                    sendContactMessage(C.email);
+            END CASE;
+
+            SELECT o.client_secret, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id
+              INTO l_jwt_enc_key, l_user_id, l_ords_user_id
+              FROM user_ords_clients o, users u
+             WHERE o.name(+)=C.email
+               AND u.email(+)=C.email;
+
+            IF (l_ords_user_id=0) THEN
+                OAUTH.create_client(
+                    p_name            => C.email,
+                    p_grant_type      => 'client_credentials',
+                    p_owner           => 'mark.russellbrown@gmail.com',
+                    p_support_email   => 'mark.russellbrown@gmail.com',
+                    p_description     => 'Provide secure secret in order to encrypt JWT tokens',
+                    p_privilege_names => 'api_priv'
+                );
+                SELECT client_secret INTO l_jwt_enc_key FROM user_ords_clients WHERE name=C.email;
+            END IF;
+
+            l_token:=apex_jwt.ENCODE (
+                p_iss       => pck_sec.getJWTIssuer(pWebsiteid),
+                p_sub       => C.email,
+                p_aud       => 'xxx',
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => pck_sec.ACCESS_TOKEN_EXP,
+                p_signature_key => UTL_RAW.cast_to_raw (l_jwt_enc_key)
+            );
+            
+            IF (l_user_id=0) THEN
+                INSERT INTO users (email, login_status, token) VALUES (l_email, 'AUTH WAITING', l_token_hash) RETURNING id INTO l_user_id;
+            ELSE
+                UPDATE users SET login_status='AUTH WAITING', token=l_token_hash, updated_date=current_timestamp WHERE id=l_user_id;
+            END IF;
+            
+            l_sendmail_link:=pck_core.getRestUrl || 'auth-verify/' || pWebsiteId || '?request=magic&user=' || l_user_id || '&verify=' || l_token;
+            l_sendmail_body:=pck_email.emailTemplate(l_request_type, l_url, l_sendmail_link);
+        END LOOP;
+        
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('message','handleCta returned ok');
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        EXCEPTION WHEN OTHERS THEN
+            pck_core.log_error(pStatus);
+    END;
+
+end "PCK_CTA";
+/
