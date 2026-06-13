@@ -29,13 +29,13 @@ let aud = "";
 const jwt = localStorage.getItem("refresh");
 
 const ctaHandler = async (e) => {
-    const module = await import("deploy_cta")
+    const module = await import("deploy_authenticate")
     .catch((error) => {
         console.error(error);
-        console.error("Failed to load deploy_cta");
+        console.error("Failed to load deploy_authenticate");
         return;
     });
-    module.init(e.target);
+    module.clickHandler(e);
 }
 
 async function load_modules() {
@@ -53,10 +53,7 @@ async function load_modules() {
         new menu.MenuNavigationHandler(dropdown);
     }
     /* Set clickHandler for any call to action button */
-    const cta = document.getElementById("cta");
-    if (cta) {
-        cta.querySelector("button").addEventListener("click",ctaHandler);
-    }
+    document.querySelector("button[data-action]")?.addEventListener("click",ctaHandler);
 
     const cwv = await import("deploy_web_vitals5")
     .catch((error) => {
