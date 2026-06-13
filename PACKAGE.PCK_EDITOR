@@ -566,7 +566,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 '<tr>' ||
                     '<th>Page</th>' ||
                     '<th>Last Update</th>' ||
-                    '<th>Accessibility Status</th>' ||
+                    '<th>Accessibility</th>' ||
                 '</tr>' ||
             '</thead>' ||
             '<tbody>';
@@ -614,6 +614,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_update_count:=l_update_count+1;
                 l_article:=l_article || 
                 '<tr><td>ALL PAGES - ' || C.context || ' font changed to ' || C.family || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+            ELSE
+                FOR C1 IN (
+                    SELECT fav.axis, fav.value, NVL(fav.updated_date,l_netlify_last_published) updated_date
+                      FROM font_axes_value fav
+                     WHERE fav.website_id=pWebsiteid
+                       AND fav.context=C.context
+                ) LOOP
+                    IF (C1.updated_date>l_netlify_last_published) THEN
+                        l_update_count:=l_update_count+1;
+                        l_article:=l_article || 
+                        '<tr><td>' || C.context || ' font ' || C1.axis || ' changed to ' || C1.value || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+                    END IF;
+                END LOOP;
             END IF;
         END LOOP;
 
@@ -634,7 +647,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             '</div>';
         ELSIF (l_a11y_alt_fails>0) THEN
             l_footer:=
-            '<span style="color:red">CORRECT FAILURES IN ORDER TO PUBLISH</span>';
+            '<span aria-live="polite" style="color:red">CORRECT FAILURES IN ORDER TO PUBLISH</span>';
+        ELSE
+            l_footer:=
+            '<span aria-live="polite"></span>';
         END IF;
 
         l_json:= new JSON_OBJECT_T;
