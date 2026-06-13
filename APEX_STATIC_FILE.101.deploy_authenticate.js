@@ -35,6 +35,14 @@ export const clickHandler = (e) => {
     }
     console.log("start form validation")
 
+    /* If call to action wes origin need to set these variables */
+    if (e.target.dataset.action) {
+        endpoint = e.target.dataset.endpoint;
+        live = document.querySelector("[aria-live]");
+        loader = document.querySelector(".loader");
+        summary = document.getElementById("error-summary");
+    }
+
     const errors = [];
         
     /* Email is required */
@@ -84,6 +92,7 @@ export const clickHandler = (e) => {
         form.querySelector("[name='request_type']").value = request_type;
         const formData = new FormData(form);
         const formObj = Object.fromEntries(formData);
+        formObj.action = e.target.dataset.action;
         callAPI(endpoint, "POST", formObj)
             .then((data) => {
                 isSending = false;
