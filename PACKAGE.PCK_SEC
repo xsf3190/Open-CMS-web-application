@@ -26,6 +26,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     FUNCTION getJWTIssuer(pWebsiteId IN website.id%type) RETURN VARCHAR2;
     --
+    FUNCTION getCtaForm(pWebsiteId IN website_article.website_id%type, pArticleid IN website_article.article_id%type) RETURN VARCHAR2;
+    --
     PROCEDURE getLoginForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data;
@@ -235,6 +237,48 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             INSERT INTO website_cpu (website_id, period_start, calling_procedure, user_id, cpu_used)
                 VALUES (pWebsiteid, TRUNC(current_timestamp,'mm'), l_calling_procedure, pUserid, l_cpu_used_session);
         END IF;
+    END;
+
+    /*
+    ** GET CALL-TO-ACTION FORM (EMAIL ADDRESS SAME AS "getLoginForm")
+    */
+    FUNCTION getCtaForm(pWebsiteId IN website_article.website_id%type, pArticleid IN website_article.article_id%type) RETURN VARCHAR2 IS
+        l_html LONG;
+    BEGIN
+        FOR C IN (
+            SELECT cta 
+              FROM website_article 
+             WHERE website_id=pWebsiteId
+               AND article_id=pArticleid
+        ) LOOP
+            l_html:=
+            '<form style="display:grid;place-items:center">' ||
+                '<fieldset class="flow flex-items" style="--flex-direction:column;inline-size:fit-content;border-radius:12px">' ||
+                    '<legend>' || C.cta || '</legend>' ||
+                    '<input type="hidden" name="url" value="">' ||
+                    '<input type="hidden" name="request_type" value="">' ||
+                    '<div id="error-summary" tabindex="-1" class="error-summary" hidden>' ||
+                        '<h4 id="error-heading">' ||
+                            '<span aria-hidden="true">⚠️</span>Errors in Form' ||
+                        '</h4>' ||
+                        '<ul></ul>' ||
+                    '</div>' ||
+                    '<p>Required fields are marked with an <span style="color:red">*</span></p>' ||
+                    '<div>' ||
+                        '<label for="email">Email <span style="color:red">*</span></label>' ||
+                        '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
+                        '<div id="email-error" class="inline-error"></div>' ||
+                    '</div>' ||
+                    '<div class="flex-items">' ||
+                        '<button class="button sendmail-magic" type="button" data-endpoint="authenticate/:ID" data-processing="Click link sent to your inbox" data-action="' || C.cta || '">' || C.cta || '</button>' ||
+                        '<span aria-live="polite"></span>' ||
+                        '<span class="loader icon"></span>' ||
+                    '</div>' ||
+                '</fieldset>' ||
+            '</form>';
+        END LOOP;
+
+        RETURN (l_html);
     END;
 
     /*
