@@ -613,35 +613,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
-    ** Build CALL TO ACTION form
-    */
-    PROCEDURE buildCta(pCta IN website_article.cta%type, pHtml IN OUT LONG) IS
-    BEGIN
-        pHtml:=
-        '<form id="cta" style="display:grid;place-items:center">' ||
-            '<fieldset class="flow flex-items" style="--flex-direction:column;inline-size:fit-content;border-radius:12px">';
-        CASE pCta 
-            WHEN 'create-website' THEN
-                pHtml:=pHtml ||
-                '<legend></legend>' ||
-                '<div>' ||
-                    '<label for="email" style="display:block;margin-right:1em">Email address</label>' ||
-                    '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on">' ||
-                '</div>';
-                
-            WHEN 'contact-form' THEN
-                null;
-        END CASE;
-        pHtml:=pHtml || 
-                '<div class="flex-items">' ||
-                    '<button class="button" data-action="' || pCta || '" type="button">FREE WEBSITE</button>' ||
-                    '<span aria-live="polite"></span>' ||
-                '</div>' ||
-            '</fieldset>' || 
-        '</form>';
-    END;
-
-    /*
     **  <nav>
     **  <header>
     **  <main>
@@ -814,7 +785,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             ** GET HTML FOR ANY CALL TO ACTION
             */
              IF (pCta IS NOT NULL) THEN
-                buildCta(pCta, l_cta);
+                l_cta:=pck_sec.getCtaForm(pWebsiteid, pArticleid);
             END IF;
 
             pBody:=
