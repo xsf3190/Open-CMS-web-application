@@ -811,6 +811,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json JSON_OBJECT_T;
         l_navigation_label website_article.navigation_label%type;
         l_collection_type website_article.collection_type%type;
+        l_cta website_article.cta%type;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
         
@@ -821,7 +822,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             '<legend>Select page</legend>';
 
         FOR C IN (
-            SELECT wa.article_id, wa.collection_type, wa.navigation_label
+            SELECT wa.article_id, wa.collection_type, wa.navigation_label, wa.cta
               FROM website_article wa
              WHERE wa.website_id=pWebsiteId
              ORDER BY wa.display_order
@@ -834,6 +835,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             IF (C.article_id=pArticleId) THEN
                 l_navigation_label:=C.navigation_label;
                 l_collection_type:=C.collection_type;
+                l_cta:=C.cta;
             END IF;
         END LOOP;
         l_article:=l_article ||
@@ -869,7 +871,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                   '<span class="arrow"></span>' ||
                 '</button>' ||
                 '<option value="">--Choose Call to Action--</option>' ||
-                '<option value="create-website">' ||
+                '<option value="create-website"' || CASE WHEN l_cta='create-website' THEN ' selected' END || '>' ||
                     '<div class="chip" aria-hidden="true">Website</div>' ||
                     '<div>' ||
                         '<div class="heading">Create Website</div>' ||
