@@ -341,12 +341,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
     /*
     ** USER SUBMITS EMAIL ADDRESS TO BE AUTHENTICATED
-    ** - CREATE RANDOM PASSCODE OR MAGIC LINK AND SEND TO EMAIL ADDRESS
+    ** WORKFLOW DEPENDS ON ACTION:
+    **
+    ** null - SEND PASSCODE OR MAGIC LINK TO EMAIL ADDRESS
+    ** create-website - send link to editor website to email address 
     */
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_email users.email%type;
         l_url varchar2(100);
         l_request_type VARCHAR2(10);
+        l_cta website_article.cta%type;
         l_user_id users.id%type;
         l_ords_user_id user_ords_clients.id%type;
         l_jwt_enc_key user_ords_clients.client_secret%type;
@@ -361,13 +365,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_return_message VARCHAR2(100);
         l_json JSON_OBJECT_T;
     BEGIN
-    -- pck_core.log('createAuthRequest:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
-        SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id
-          INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id
-          FROM user_ords_clients o, users u, JSON_TABLE(pBodyText, '$' COLUMNS email, url, request_type) j
+        SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id, j.action
+          INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id, l_cta
+          FROM user_ords_clients o, users u, JSON_TABLE(pBodyText, '$' COLUMNS email, url, request_type, action) j
          WHERE o.name(+)=LOWER(j.email)
            AND u.email(+)=LOWER(j.email);
 
+        pck_core.log('action:'||NVL(l_cta,'login'));
         IF (l_ords_user_id=0) THEN
             OAUTH.create_client(
                 p_name            => l_email,
