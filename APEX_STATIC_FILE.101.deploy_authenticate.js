@@ -2,7 +2,7 @@
 /* LOGIN HANDLER - AUTHENTICATION BY EMAIL USING LINK OR PASSCODE */
 /* ************************************************************** */
 
-import { dropdown, output_dialog, dialog_footer, initDialog } from "deploy_elements";
+import { dropdown, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError, replaceTokens } from "deploy_callAPI";
 
 let endpoint, summary, intervalId, live, loader, userid;
@@ -33,10 +33,14 @@ export const clickHandler = (e) => {
         !e.target.classList.contains("validate-passcode")) {
         return;
     }
-    console.log("start form validation")
 
-    /* If call to action wes origin need to set these variables */
-    if (e.target.dataset.action) {
+    /* Set variables according to value of button data-action */
+    const action = e.target.dataset.action;
+    const storeTokens = e.target.dataset.storeTokens;
+    console.log("action",action,"storeTokens",storeTokens);
+    
+    /* Application Log In button sets "login" action else is Call to Action */
+    if (action !== "login") {
         endpoint = e.target.dataset.endpoint;
         live = document.querySelector("[aria-live]");
         loader = document.querySelector(".loader");
@@ -101,7 +105,7 @@ export const clickHandler = (e) => {
                 live.replaceChildren();
                 live.insertAdjacentHTML('beforeend',data.message);
                 live.style.color = "red";
-                if (request_type==="magic") {
+                if (request_type==="magic" && storeTokens) {
                     clearInterval(intervalId);
                     intervalId = setInterval(checkAuthStatus,3000, formObj);
                 } else if (request_type==="passcode") {
@@ -127,7 +131,6 @@ export const clickHandler = (e) => {
                     live.textContent = data.message;
                     live.style.color = "red";
                 }
-                
             })
             .catch((error) => {
                 loader.style.opacity=0;
@@ -148,8 +151,6 @@ export const changeHandler = (e) => {
 ** USER LOGGED IN. SET NEW TOKENS IN STORAGE AND MEMORY. UPDATE DROPDOWN MENULIST.
 */
 const setTokens = async (data) => {
-    // localStorage.setItem("refresh",data.refresh);
-    // sessionStorage.setItem("token",data.token);
     replaceTokens(data);
 
     localStorage.setItem("menulist",data.menulist);  
