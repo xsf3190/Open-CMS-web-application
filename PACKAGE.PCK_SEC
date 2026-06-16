@@ -270,7 +270,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                         '<div id="email-error" class="inline-error"></div>' ||
                     '</div>' ||
                     '<div class="flex-items">' ||
-                        '<button class="button sendmail-magic" type="button" data-endpoint="authenticate/:ID" data-processing="Click link sent to your inbox" data-action="' || C.cta || '">' || C.cta || '</button>' ||
+                        '<button class="button sendmail-magic" type="button" data-endpoint="authenticate/:ID" data-processing="Click link sent to your inbox" ' ||
+                            'data-action="' || C.cta || '" data-store-tokens="false">' || C.cta || 
+                        '</button>' ||
                         '<span aria-live="polite"></span>' ||
                         '<span class="loader icon"></span>' ||
                     '</div>' ||
@@ -310,7 +312,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<div id="email-error" class="inline-error"></div>' ||
                 '</div>' ||
                 '<div class="flex-items">' ||
-                    '<button class="button sendmail-magic" type="button" data-processing="Sent a log-in link to your inbox">Send Link</button>' ||
+                    '<button class="button sendmail-magic" type="button" data-action="login" data-store-tokens="true" data-processing="Sent a log-in link to your inbox">Send Link</button>' ||
                     '<div><hr><span>OR</span><hr></div>' ||
                     '<button class="button sendmail-passcode" type="button" aria-expanded="false" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
                     '<div id="passcode-submit" class="to-be-revealed">' ||
@@ -371,7 +373,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
          WHERE o.name(+)=LOWER(j.email)
            AND u.email(+)=LOWER(j.email);
 
-        pck_core.log('action:'||NVL(l_cta,'login'));
+        pck_core.log('action:'||l_cta);
+        
         IF (l_ords_user_id=0) THEN
             OAUTH.create_client(
                 p_name            => l_email,
