@@ -5,16 +5,13 @@
 import { dropdown, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError, replaceTokens } from "deploy_callAPI";
 
-let endpoint, summary, intervalId, live, loader, userid;
+let endpoint, intervalId, userid, live, loader, summary;
 
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
     callAPI(endpoint, "GET")
         .then((data) => {
             initDialog(data);
-            live = dialog_footer.querySelector("[aria-live]");
-            loader = dialog_footer.querySelector(".loader");
-            summary = document.getElementById("error-summary");
         })
         .catch((error) => {
                 handleError(error);
@@ -37,35 +34,38 @@ export const clickHandler = (e) => {
     /* Set variables according to value of button data-action */
     const action = e.target.dataset.action;
     const storeTokens = e.target.dataset.storeTokens;
+
     console.log("action",action,"storeTokens",storeTokens);
     
     /* Application Log In button sets "login" action else is Call to Action */
     if (action !== "login") {
         endpoint = e.target.dataset.endpoint;
-        live = document.querySelector("[aria-live]");
-        loader = document.querySelector(".loader");
-        summary = document.getElementById("error-summary");
     }
 
-    const errors = [];
-        
-    /* Email is required */
-    const email = document.getElementById("email");
+    const form = e.target.closest("form");
+    const inputs = form.querySelectorAll("input:not([type='hidden'], #passcode), textarea");
+    live = form.querySelector("[aria-live]");
+    loader = form.querySelector(".loader");
+    summary = form.querySelector(".error-summary");
+    let i;
 
     /* Reset inline errors */
-    [email].forEach((field) => {
-        field.removeAttribute("aria-invalid");
-        field.removeAttribute("aria-describedby");
-        document.getElementById(`${field.id}-error`).innerHTML = "";
-    });
+    for (i = 0; i < inputs.length; i++) {
+        inputs[i].removeAttribute("aria-invalid");
+        inputs[i].removeAttribute("aria-describedby");
+        document.getElementById(`${inputs[i].id}-error`).innerHTML = "";
+    }
 
-    /* Validate email */
-    if (!email.value.trim()) {
-        errors.push({
-            field: email,                    // Reference to the input field itself
-            message: "Enter email address",  // The specific error message to display
-            errorId: "email-error"           // The ID of the inline error container
-        });
+    /* Validate input fields */
+    const errors = [];
+    for (i = 0; i < inputs.length; i++) {
+        if (!inputs[i].value.trim()) {
+            errors.push({
+                field: inputs[i],                // Reference to the input field itself
+                message: "Missing value",        // The specific error message to display
+                errorId: `${inputs[i].id}-error` // The ID of the inline error container
+            });
+        }
     }
 
     showErrors(errors);
@@ -91,7 +91,6 @@ export const clickHandler = (e) => {
     loader.style.opacity=1;
 
     if (request_type!=="verify") {
-        const form = e.target.closest("form");
         form.querySelector("[name='url']").value = window.location.hostname;
         form.querySelector("[name='request_type']").value = request_type;
         const formData = new FormData(form);
@@ -105,7 +104,7 @@ export const clickHandler = (e) => {
                 live.replaceChildren();
                 live.insertAdjacentHTML('beforeend',data.message);
                 live.style.color = "red";
-                if (request_type==="magic" && storeTokens) {
+                if (request_type==="magic" && storeTokens==="true") {
                     clearInterval(intervalId);
                     intervalId = setInterval(checkAuthStatus,3000, formObj);
                 } else if (request_type==="passcode") {
