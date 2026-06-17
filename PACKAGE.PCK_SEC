@@ -257,17 +257,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<legend>' || C.cta || '</legend>' ||
                     '<input type="hidden" name="url" value="">' ||
                     '<input type="hidden" name="request_type" value="">' ||
-                    '<div id="error-summary" tabindex="-1" class="error-summary" hidden>' ||
-                        '<h4 id="error-heading">' ||
+                    '<div class="error-summary" tabindex="-1" hidden>' ||
+                        '<h4>' ||
                             '<span aria-hidden="true">⚠️</span>Errors in Form' ||
                         '</h4>' ||
                         '<ul></ul>' ||
                     '</div>' ||
                     '<p>Required fields are marked with an <span style="color:red">*</span></p>' ||
                     '<div>' ||
-                        '<label for="email">Email <span style="color:red">*</span></label>' ||
-                        '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
-                        '<div id="email-error" class="inline-error"></div>' ||
+                        '<label for="cta-email">Email <span style="color:red">*</span></label>' ||
+                        '<input type="email" id="cta-email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
+                        '<div id="cta-email-error" class="inline-error"></div>' ||
                     '</div>' ||
                     '<div class="flex-items">' ||
                         '<button class="button sendmail-magic" type="button" data-endpoint="authenticate/:ID" data-processing="Click link sent to your inbox" ' ||
@@ -314,7 +314,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 '<div class="flex-items">' ||
                     '<button class="button sendmail-magic" type="button" data-action="login" data-store-tokens="true" data-processing="Sent a log-in link to your inbox">Send Link</button>' ||
                     '<div><hr><span>OR</span><hr></div>' ||
-                    '<button class="button sendmail-passcode" type="button" aria-expanded="false" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
+                    '<button class="button sendmail-passcode" type="button" aria-expanded="false" data-action="login" data-store-tokens="true" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
                     '<div id="passcode-submit" class="to-be-revealed">' ||
                         '<label>Submit the code sent to your inbox</label>' ||
                         '<input type="text" id="passcode" name="passcode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
@@ -349,98 +349,40 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     ** create-website - send link to editor website to email address 
     */
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
-        l_email users.email%type;
-        l_url varchar2(100);
-        l_request_type VARCHAR2(10);
-        l_cta website_article.cta%type;
-        l_user_id users.id%type;
+
         l_ords_user_id user_ords_clients.id%type;
         l_jwt_enc_key user_ords_clients.client_secret%type;
-        l_token VARCHAR2(4000);
-        l_digits   CONSTANT VARCHAR2(10) := '0123456789';
-        l_passcode VARCHAR2(6);
-        l_passcode_hash raw(32);
-        l_token_hash raw(32);
-        l_sendmail_subject VARCHAR2(200);
-        l_sendmail_body LONG;
-        l_sendmail_link VARCHAR2(500);
-        l_return_message VARCHAR2(100);
-        l_json JSON_OBJECT_T;
+
     BEGIN
-        SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id, j.action
-          INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id, l_cta
-          FROM user_ords_clients o, users u, JSON_TABLE(pBodyText, '$' COLUMNS email, url, request_type, action) j
-         WHERE o.name(+)=LOWER(j.email)
-           AND u.email(+)=LOWER(j.email);
+        FOR C IN (
+            SELECT o.client_secret, LOWER(j.email) email, j.url, j.request_type, NVL(u.id,0) user_id, NVL(o.id,0) ords_user_id, j.action
+            --   INTO l_jwt_enc_key, l_email, l_url, l_request_type, l_user_id, l_ords_user_id, l_cta
+              FROM user_ords_clients o, users u, JSON_TABLE(pBodyText, '$' COLUMNS email, url, request_type, action) j
+             WHERE o.name(+)=LOWER(j.email)
+               AND u.email(+)=LOWER(j.email)
+        ) LOOP
 
-        pck_core.log('action:'||l_cta);
-        
-        IF (l_ords_user_id=0) THEN
-            OAUTH.create_client(
-                p_name            => l_email,
-                p_grant_type      => 'client_credentials',
-                p_owner           => 'mark.russellbrown@gmail.com',
-                p_support_email   => 'mark.russellbrown@gmail.com',
-                p_description     => 'Provide secure secret in order to encrypt JWT tokens',
-                p_privilege_names => 'api_priv'
-            );
-            SELECT client_secret INTO l_jwt_enc_key FROM user_ords_clients WHERE name=l_email;
-        END IF;
-        
-
-        CASE l_request_type
-            WHEN 'magic' THEN
-                l_token:=apex_jwt.ENCODE (
-                    p_iss       => getJWTIssuer(pWebsiteid),
-                    p_sub       => l_email,
-                    p_aud       => 'xxx',
-                    p_iat_ts    => current_timestamp,
-                    p_exp_sec   => ACCESS_TOKEN_EXP,
-                    p_signature_key => UTL_RAW.cast_to_raw (l_jwt_enc_key)
+            pck_core.log('action:'||C.action);
+            
+            IF (l_ords_user_id=0) THEN
+                OAUTH.create_client(
+                    p_name            => C.email,
+                    p_grant_type      => 'client_credentials',
+                    p_owner           => 'mark.russellbrown@gmail.com',
+                    p_support_email   => 'mark.russellbrown@gmail.com',
+                    p_description     => 'Provide secure secret in order to encrypt JWT tokens',
+                    p_privilege_names => 'api_priv'
                 );
-                l_token_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+                SELECT client_secret INTO l_jwt_enc_key FROM user_ords_clients WHERE name=C.email;
+            END IF;
 
-                IF (l_user_id=0) THEN
-                    INSERT INTO users (email, login_status, token) VALUES (l_email, 'AUTH WAITING', l_token_hash) RETURNING id INTO l_user_id;
-                ELSE
-                    UPDATE users SET login_status='AUTH WAITING', token=l_token_hash, updated_date=current_timestamp WHERE id=l_user_id;
-                END IF;
-                
-                l_sendmail_link:=pck_core.getRestUrl || 'auth-verify/' || pWebsiteId || '?request=magic&user=' || l_user_id || '&verify=' || l_token;
-                l_sendmail_body:=pck_email.emailTemplate(l_request_type, l_url, l_sendmail_link);
-
-            WHEN 'passcode' THEN
-                FOR i IN 1..6 LOOP
-                    l_passcode:=l_passcode || SUBSTR(l_digits,FLOOR(DBMS_RANDOM.VALUE(1, LENGTH(l_digits) + 1)),1);
-                END LOOP;
-
-                /* Store passcode as hash for later comparison with user-entered value */
-                l_passcode_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_passcode,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
-
-                IF (l_user_id=0) THEN
-                    INSERT INTO users (email, login_status, passcode) 
-                    VALUES (l_email, 'AUTH WAITING', l_passcode_hash)
-                    RETURNING id INTO l_user_id;
-                ELSE
-                    UPDATE users SET login_status='AUTH WAITING', passcode=l_passcode_hash, updated_date=current_timestamp WHERE id=l_user_id;
-                END IF;
-
-                l_sendmail_body:=pck_email.emailTemplate(l_request_type, l_url, l_passcode);
-        END CASE;
-
-        pck_email.sendmail(l_email, 'Login to ' || l_url, l_sendmail_body);
-
-        IF (l_request_type='passcode') THEN
-            l_return_message:='Passcode sent to your inbox';
-        ELSE
-            l_return_message:='Link sent to your inbox';
-        END IF;
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('message',l_return_message);
-        l_json.put('userid',l_user_id);
-        apex_util.prn(l_json.to_clob,false);
+            CASE C.action
+                WHEN 'login' THEN
+                    pck_cta.login(pWebsiteid, C.request_type, C.url, C.email, NVL(C.client_secret, l_jwt_enc_key), C.user_id);
+                WHEN 'create-website' THEN
+                    pck_cta.createWebsite(pWebsiteid, C.email, NVL(C.client_secret, l_jwt_enc_key));
+            END CASE;
+        END LOOP;
 
         pStatus:=200;
 
