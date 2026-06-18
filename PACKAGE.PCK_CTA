@@ -2,16 +2,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CTA" is
     --
     PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2);
     --
-    PROCEDURE login(pWebsiteid IN NUMBER, pRequestType IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN OUT NUMBER);
+    PROCEDURE login(pWebsiteid IN NUMBER, pRequestType IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER);
     --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
 
-    PROCEDURE login(pWebsiteid IN NUMBER, pRequestType IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN OUT NUMBER) IS
+    PROCEDURE login(pWebsiteid IN NUMBER, pRequestType IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER) IS
+        l_user_id users.id%type;
         l_token VARCHAR2(4000);
         l_token_hash raw(32);
-        l_user_id users.id%type;
         l_sendmail_link VARCHAR2(500);
         l_sendmail_body LONG;
         l_digits   CONSTANT VARCHAR2(10) := '0123456789';
@@ -33,7 +33,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                 l_token_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
 
                 IF (pUserid=0) THEN
-                    INSERT INTO users (email, login_status, token) VALUES (pEmail, 'AUTH WAITING', l_token_hash) RETURNING id INTO pUserid;
+                    INSERT INTO users (email, login_status, token) 
+                    VALUES (pEmail, 'AUTH WAITING', l_token_hash) 
+                    RETURNING id INTO l_user_id;
                 ELSE
                     UPDATE users SET login_status='AUTH WAITING', token=l_token_hash, updated_date=current_timestamp WHERE id=pUserid;
                 END IF;
@@ -52,7 +54,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                 IF (pUserid=0) THEN
                     INSERT INTO users (email, login_status, passcode) 
                     VALUES (pEmail, 'AUTH WAITING', l_passcode_hash)
-                    RETURNING id INTO pUserid;
+                    RETURNING id INTO l_user_id;
                 ELSE
                     UPDATE users SET login_status='AUTH WAITING', passcode=l_passcode_hash, updated_date=current_timestamp WHERE id=pUserid;
                 END IF;
@@ -71,7 +73,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('message',l_return_message);
-        l_json.put('userid',l_user_id);
+        l_json.put('userid',NVL(l_user_id,pUserid));
         apex_util.prn(l_json.to_clob,false);
     END;
 
