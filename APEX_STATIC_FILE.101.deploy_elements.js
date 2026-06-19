@@ -1,15 +1,12 @@
 /* COMMON ELEMENTS AND FUNCTIONS  USED IN APPLICATION */
-import { callAPI, handleError } from "deploy_callAPI";
-
 export const bodydata = document.body.dataset;
 
 export const dropdown = document.getElementById("menulist");
-export const email = dropdown.querySelector(".email");
-export const login_dialog = document.querySelector("dialog.login-email");
 export const output_dialog = document.querySelector("dialog.output");
-export const dialog_header = output_dialog.querySelector("header");
-export const dialog_article = output_dialog.querySelector("article");
-export const dialog_footer = output_dialog.querySelector("footer");
+export const form = output_dialog.querySelector("form");
+export const dialog_header = form.querySelector("header");
+export const dialog_article = form.querySelector("article");
+export const dialog_footer = form.querySelector("footer");
 
 export const nav = document.querySelector(".topnav");
 export const header = document.getElementById("header");
