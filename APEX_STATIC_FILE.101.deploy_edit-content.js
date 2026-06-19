@@ -192,6 +192,8 @@ export const init = async (element) => {
                     withText: false
                 } );
                 button.on('execute', (_) => {
+                    const form = document.querySelector("dialog.output form");
+                    form.dataset.module = "deploy_select-media";
                     import("deploy_select-media")
                     .then((module) => {
                         module.init();
