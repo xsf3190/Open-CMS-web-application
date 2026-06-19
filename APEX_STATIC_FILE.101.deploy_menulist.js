@@ -1,10 +1,8 @@
-import { getJWTClaim, initDialog } from "deploy_elements";
+import { getJWTClaim, initDialog, form } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-const form = document.querySelector("dialog.output form");
-
 const eventHandler = async (e) => {
-    /* Common controls */
+    /* "publish" button occurs in multiple forms */
 
     if (e.target.classList.contains("close")) {
         e.target.closest("dialog").close();
@@ -22,7 +20,14 @@ const eventHandler = async (e) => {
         return;
     }
 
-    /* Function specific - module name is data property of dialog form */
+    /* 
+    ** module is data attribute of the common dialog form to which
+    ** the click, change and input events are attached.
+    ** Dialog content is replaced when menu buttons are clicked.
+    ** Form events bubble up to the attached handlers which load
+    ** the module and invoke its event handler - means that individual modules
+    ** must export its "clickHandler" function to be invoked here.
+    */
     const module = await import(e.currentTarget.dataset.module)
     .catch((error) => {
         console.error(error);
@@ -39,6 +44,7 @@ const eventHandler = async (e) => {
 }
 
 /* Event handlers on common dialog */
+
 form.addEventListener("input",eventHandler);
 form.addEventListener("click",eventHandler);
 form.addEventListener("change",eventHandler);
