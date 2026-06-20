@@ -13,6 +13,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     FUNCTION getLanguage(pLanguageCode IN VARCHAR2) RETURN CLOB;
     --
+    FUNCTION getUnicodeRange(pCharacters IN VARCHAR2) RETURN VARCHAR2;
+    --
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
 end "PCK_FONTS";
@@ -52,6 +54,52 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_urlencoded:=utl_url.escape(l_chars,TRUE,'UTF-8');
         UPDATE language SET urlencoded=l_urlencoded, characters=l_chars WHERE code=pLanguageCode;
         RETURN (l_urlencoded);
+    END;
+
+    /* 
+    ** RETURN UNICODE RANGE FOR SORTED PARAMETER pCharacters
+    */
+    FUNCTION getUnicodeRange(pCharacters IN VARCHAR2) RETURN VARCHAR2 IS
+        i PLS_INTEGER;
+        j PLS_INTEGER;
+        n PLS_INTEGER;
+        l_decimals dbms_sql.number_table; 
+        l_unicode_range VARCHAR2(4000); 
+
+        FUNCTION printUnicode(pIndex IN PLS_INTEGER, pChars IN VARCHAR2) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN (
+                CASE 
+                    WHEN l_decimals(pIndex) <= 127 THEN LTRIM(UPPER(TO_CHAR(l_decimals(pIndex),'xxxx')))
+                    ELSE LTRIM(asciistr(SUBSTR(pChars,pIndex,1)),'\0')
+                END
+            );
+        END;
+    BEGIN
+        /* Convert characters to decimal */
+        n:=LENGTH(pCharacters);
+        FOR i IN 1..n LOOP
+            l_decimals(i):=ASCII(SUBSTR(pCharacters,i,1));
+        END LOOP;
+
+        i:=1;
+        WHILE (i<=n) LOOP
+            j:=i;
+            WHILE (j+1<n AND l_decimals(j+1)=l_decimals(j)+1) LOOP
+                j:=j+1;
+            END LOOP;
+
+            IF (i=j) THEN
+                l_unicode_range:=l_unicode_range ||
+                'U+' || printUnicode(i,pCharacters) || ', ';
+            ELSE
+                l_unicode_range:=l_unicode_range ||
+                'U+' || printUnicode(i,pCharacters) || '-' || printUnicode(j,pCharacters) || ', ';
+            END IF;
+            i:=j+1;
+        END LOOP;
+        
+        RETURN (RTRIM(l_unicode_range,', '));
     END;
 
     /* 
