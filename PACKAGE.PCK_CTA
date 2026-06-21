@@ -41,7 +41,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                 END IF;
                 
                 l_sendmail_link:=pck_core.getRestUrl || 'auth-verify/' || pWebsiteId || '?request=magic&user=' || pUserid || '&verify=' || l_token;
-                l_sendmail_body:=pck_email.emailTemplate(pRequestType, pUrl, l_sendmail_link);
+                l_sendmail_body:=pck_email.loginTemplate(pRequestType, pUrl, l_sendmail_link);
 
             WHEN 'passcode' THEN
                 FOR i IN 1..6 LOOP
@@ -59,7 +59,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                     UPDATE users SET login_status='AUTH WAITING', passcode=l_passcode_hash, updated_date=current_timestamp WHERE id=pUserid;
                 END IF;
 
-                l_sendmail_body:=pck_email.emailTemplate(pRequestType, pUrl, l_passcode);
+                l_sendmail_body:=pck_email.loginTemplate(pRequestType, pUrl, l_passcode);
         END CASE;
 
         pck_email.sendmail(pEmail, 'Login to ' || pUrl, l_sendmail_body);
