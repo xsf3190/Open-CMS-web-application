@@ -640,16 +640,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         /* Get the font which was last updated */
         FOR C IN (
-            SELECT font_id, context, category, family, capabilities
-            FROM
-            (
-                SELECT wf.font_id, wf.context, wf.updated_date, MAX(wf.updated_date) OVER () max_updated_date, 
-                        f.category, f.family, f.capabilities
-                  FROM website_font wf, font f
-                 WHERE wf.website_id=pWebsiteId
-                   AND wf.font_id=f.id
-            )
-            WHERE updated_date=max_updated_date
+            SELECT wf.font_id, wf.context, f.category, f.family, f.capabilities
+              FROM website_font wf, font f
+             WHERE wf.website_id=pWebsiteId
+               AND wf.font_id=f.id
+             ORDER BY NVL(wf.updated_date,wf.created_date) DESC
+             FETCH FIRST ROW ONLY
         ) LOOP
             l_json:= new JSON_OBJECT_T;
             l_json.put('options',getFontOptions(pWebsiteid,C.category,C.capabilities,C.font_id));
