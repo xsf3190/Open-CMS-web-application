@@ -1,6 +1,10 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EMAIL" is
     --
-    FUNCTION emailTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2;
+    FUNCTION DNSTemplate(pDomainName IN VARCHAR2) RETURN VARCHAR2;
+    --
+    FUNCTION SSLTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2 ;
+    --
+    FUNCTION loginTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2;
     --
     PROCEDURE getMessageForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
@@ -154,6 +158,44 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
     END;
 
     /*
+     *  CALL MJML API TO CONVERT REQUEST INTO HTML
+    */
+    FUNCTION renderHTML(pMjmlRequest IN VARCHAR2) RETURN CLOB IS
+        l_mjml_response CLOB;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('mjml',pMjmlRequest);
+
+        apex_web_service.clear_request_headers;
+        apex_web_service.g_request_headers(1).name := 'Content-Type';
+        apex_web_service.g_request_headers(1).value := 'application/json';
+
+        FOR C IN (
+            SELECT url,key,secret FROM api_credential WHERE name='MJML'
+        ) LOOP
+            l_mjml_response:=apex_web_service.make_rest_request(
+                p_url=>C.url||'/render', 
+                p_http_method=>'POST', 
+                p_username=>C.key, 
+                p_password=>C.secret,
+                p_body=>l_json.stringify);
+
+            pck_core.log('HTTPS status from ' || C.url || ':' || apex_web_service.g_status_code);
+
+            IF (apex_web_service.g_status_code=200) THEN
+                FOR C1 IN (
+                    SELECT errors, html 
+                      FROM JSON_TABLE(l_mjml_response,'$' COLUMNS (errors, html CLOB))
+                ) LOOP
+                    pck_core.log(C1.errors);
+                    RETURN (C1.html);
+                END LOOP;
+            END IF;
+        END LOOP;
+    END;
+
+    /*
     ** pAuthMethod :
     **    "website"  -  sending message to confirm new website has been created 
     **    "magic"    -  sending message prompting recipient to click magic link to authenticate
@@ -166,12 +208,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
     **     for "magic" authentication this is the href of the anchor element that calls REST endpoint to complete the authentication process
     **     for "passcode" authentication this is the 6-digit passcode randomly generated on the server
     */
-    FUNCTION emailTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+    FUNCTION loginTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
         l_mjml_request LONG;
-        l_mjml_response CLOB;
-        l_json JSON_OBJECT_T;
-        l_errors LONG;
-        l_html CLOB;
     BEGIN
         l_mjml_request:=
         '<mjml>' ||
@@ -195,40 +233,87 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
             '</mj-body>' ||
         '</mjml>';
 
-        l_json:= new JSON_OBJECT_T;
         CASE pAuthMethod
             WHEN 'magic' THEN
-            l_json.put('mjml',REPLACE(l_mjml_request,'#URL#',pAuthData));
+                l_mjml_request:=REPLACE(l_mjml_request,'#URL#',pAuthData);
             WHEN 'passcode' THEN
-            l_json.put('mjml',REPLACE(l_mjml_request,'#PASSCODE#',pAuthData));
+                l_mjml_request:=REPLACE(l_mjml_request,'#PASSCODE#',pAuthData);
         END CASE;
-        
-        apex_web_service.clear_request_headers;
-        apex_web_service.g_request_headers(1).name := 'Content-Type';
-        apex_web_service.g_request_headers(1).value := 'application/json';
 
-        FOR C IN (
-            SELECT url,key,secret FROM api_credential WHERE name='MJML'
-        ) LOOP
-            l_mjml_response:=apex_web_service.make_rest_request(
-                p_url=>C.url||'/render', 
-                p_http_method=>'POST', 
-                p_username=>C.key, 
-                p_password=>C.secret,
-                p_body=>l_json.stringify);
-
-            pck_core.log('HTTPS status from ' || C.url || ':' || apex_web_service.g_status_code);
-
-            IF (apex_web_service.g_status_code=200) THEN
-                SELECT errors, html 
-                  INTO l_errors, l_html
-                  FROM JSON_TABLE(l_mjml_response,'$' COLUMNS (errors,html CLOB)); 
-            END IF;
-
-        END LOOP;
-
-        RETURN (l_html);
+        RETURN (renderHTML(l_mjml_request));
     END;
 
+    /*
+    ** USER RECEIVES THIS EMAIL EXPLAINING HOW TO CONFIGURE DNS WHEN LINKING THEIR SITE TO CUSTOM DOMAIN
+    */
+    FUNCTION DNSTemplate(pDomainName IN VARCHAR2) RETURN VARCHAR2 IS
+        l_mjml_request LONG;
+    BEGIN
+        l_mjml_request:=
+        '<mjml>' ||
+            '<mj-body>' ||
+                '<mj-section>' ||
+                    '<mj-column>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 Configure DNS records for ' || pDomainName || '</mj-text>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-spacer height="50px" />' ||
+
+                        '<mj-table>' ||
+                            '<tr style="border-bottom:4px solid #ecedee;text-align:left;padding:15px 0;">' ||
+                                '<th style="padding: 0 15px 0 0;">Record Type</th>' ||
+                                '<th style="padding: 0 15px;">Name</th>' ||
+                                '<th style="padding: 0 0 0 15px;">Value from</th>' ||
+                            '</tr>' ||
+                            '<tr>' ||
+                                '<td style="padding: 0 15px 0 0;">A</td>' ||
+                                '<td style="padding: 0 15px;">@</td>' ||
+                                '<td style="padding: 0 0 0 15px;">75.2.60.5</td>' ||
+                            '</tr>' ||
+                            '<tr>' ||
+                                '<td style="padding: 0 15px 0 0;">CNAME</td>' ||
+                                '<td style="padding: 0 15px;">editor</td>' ||
+                                '<td style="padding: 0 0 0 15px;">' || pDomainName || '-editor.netlify.app' || '</td>' ||
+                            '</tr>' ||
+                            '<tr>' ||
+                                '<td style="padding: 0 15px 0 0;">CNAME</td>' ||
+                                '<td style="padding: 0 15px;">www</td>' ||
+                                '<td style="padding: 0 0 0 15px;">' || pDomainName || '-custom.netlify.app' || '</td>' ||
+                            '</tr>' ||
+                        '</mj-table>' ||
+
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700"></mj-text>' ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-text font-size="14px" color="#020617" align="center" font-family="system-ui" font-weight="300">Engineered by Florent Meijer & Mark Brown</mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+            '</mj-body>' ||
+        '</mjml>';
+
+        RETURN (renderHTML(l_mjml_request));
+    END;
+
+    FUNCTION SSLTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2 IS
+        l_mjml_request LONG;
+    BEGIN
+        l_mjml_request:=
+        '<mjml>' ||
+            '<mj-body>' ||
+                '<mj-section>' ||
+                    '<mj-column>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 SSL Certificate Status</mj-text>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">' || pUrl || '</mj-text>' ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-text font-size="14px" color="#020617" align="center" font-family="system-ui" font-weight="300">Engineered by Florent Meijer & Mark Brown</mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+            '</mj-body>' ||
+        '</mjml>';
+
+        RETURN (renderHTML(l_mjml_request));
+    END;
 end;
 /
