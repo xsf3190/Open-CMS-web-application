@@ -13,7 +13,7 @@ const set_controls = () => {
     document.querySelector(".topnav").style.top = "3rem";
 }
 /* 
-** cOPY NAV ITEMS TO DROPDOWN ON NARROW VIEWPORTS
+** COPY NAV ITEMS TO DROPDOWN ON NARROW VIEWPORTS
 */
 const narrow_viewport = window.matchMedia("(width <= 600px)");
 if (narrow_viewport.matches) {
@@ -23,6 +23,20 @@ if (narrow_viewport.matches) {
         document.getElementById("navlist-btn").style.visibility = "visible";
         set_controls();
     }
+}
+
+/*
+** URL FOR NEW WEBSITE EMAIL LINKS INCLUDE TOKENS AND MENULIST
+*/
+const url = new URL(window.location.href);
+if (url.searchParams.has("refresh")) {
+    localStorage.setItem("refresh", url.searchParams.get("refresh"));
+    localStorage.setItem("menulist", url.searchParams.get("menulist"));
+    sessionStorage.setItem("token", url.searchParams.get("token"));
+    url.searchParams.delete('token');
+    url.searchParams.delete('refresh');
+    url.searchParams.delete('menulist');
+    history.replaceState(history.state, '', url.href);
 }
 
 let aud = "";
