@@ -21,6 +21,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     g_session_user_id NUMBER;
     g_website_id NUMBER;
     --
+    FUNCTION buildMenulist(pWebsiteid IN NUMBER, pScope IN VARCHAR2, pEmail IN VARCHAR2) RETURN VARCHAR2;
+    --
     PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
@@ -28,6 +30,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     FUNCTION getJWTIssuer(pWebsiteId IN website.id%type) RETURN VARCHAR2;
     --
     FUNCTION getCtaForm(pWebsiteId IN website_article.website_id%type, pArticleid IN website_article.article_id%type) RETURN VARCHAR2;
+    --
+    FUNCTION getFingerprint(pRemoteAddr IN OUT VARCHAR2, pUserAgent IN OUT VARCHAR2, pTimezone IN OUT VARCHAR2) RETURN RAW;
     --
     PROCEDURE getLoginForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
@@ -381,7 +385,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 WHEN 'login' THEN
                     pck_cta.login(pWebsiteid, C.request_type, C.url, C.email, l_client_secret, C.user_id);
                 WHEN 'create-website' THEN
-                    pck_cta.createWebsite(pWebsiteid, C.email, l_client_secret);
+                    pck_cta.createWebsite(pWebsiteid, C.email, l_client_secret, C.user_id);
             END CASE;
         END LOOP;
 
