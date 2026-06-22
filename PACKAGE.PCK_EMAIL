@@ -6,6 +6,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EMAIL" is
     --
     FUNCTION loginTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2;
     --
+    FUNCTION WebsiteTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2;
+    --
     PROCEDURE getMessageForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE insertMessage(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NuMBER);
@@ -293,6 +295,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
         RETURN (renderHTML(l_mjml_request));
     END;
 
+    /*
+    ** USER WAITING FOR SECURITY CERTIFICATE TO BE ISSUED AFTER LINKING THEIR SITE TO CUSTOM DOMAIN
+    */
     FUNCTION SSLTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2 IS
         l_mjml_request LONG;
     BEGIN
@@ -312,6 +317,34 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
                 '</mj-section>' ||
             '</mj-body>' ||
         '</mjml>';
+
+        RETURN (renderHTML(l_mjml_request));
+    END;
+
+    /*
+    ** USER RECEIVES THIS EMAIL CONTAINING LINK TO THEIR EDITOR WEBSITE 
+    */
+    FUNCTION WebsiteTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2 IS
+        l_mjml_request LONG;
+    BEGIN
+        l_mjml_request:=
+        '<mjml>' ||
+            '<mj-body>' ||
+                '<mj-section>' ||
+                    '<mj-column>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 New Website Link</mj-text>' ||
+                        '<mj-divider border-color="#020617"></mj-divider>' ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-button href="#URL#" font-family="system-ui" font-size="40px" background-color="#f45e43" color="white" inner-padding="20px" font-weight="750"  border-radius="10px" letter-spacing="5px">OPEN WEBSITE</mj-button>' ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-text font-size="14px" color="#020617" align="center" font-family="system-ui" font-weight="300">Engineered by Florent Meijer & Mark Brown</mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+            '</mj-body>' ||
+        '</mjml>';
+
+        l_mjml_request:=REPLACE(l_mjml_request,'#URL#',pUrl);
 
         RETURN (renderHTML(l_mjml_request));
     END;
