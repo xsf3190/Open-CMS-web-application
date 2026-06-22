@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CTA" is
     --
-    PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2);
+    PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER);
     --
     PROCEDURE login(pWebsiteid IN NUMBER, pRequestType IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER);
     --
@@ -8,6 +8,9 @@ end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
 
+    /*
+    **  BASIC LOGIN 
+    */
     PROCEDURE login(pWebsiteid IN NUMBER, pRequestType IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER) IS
         l_user_id users.id%type;
         l_token VARCHAR2(4000);
@@ -77,25 +80,98 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         apex_util.prn(l_json.to_clob,false);
     END;
 
-    PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2) IS
-        l_netlify_site_id website.netlify_site_id%type;
-        l_ssl_url VARCHAR2(100);
-        l_domain_name website.domain_name%type;
-        l_clob CLOB;
-        l_new_website_id website.id%type:=seq_website.nextval;
-        
-        l_token VARCHAR2(4000);
-        l_sendmail_link VARCHAR2(500);
-        l_sendmail_body LONG;
-        l_return_message VARCHAR2(100);
-        l_json JSON_OBJECT_T;
-    BEGIN
-        pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites', pMethod=>'POST', pData=>l_clob);
-        SELECT id, ssl_url, name INTO l_netlify_site_id, l_ssl_url, l_domain_name FROM JSON_TABLE(l_clob, '$' COLUMNS (id, ssl_url, name));
+    /*
+    **  USER CLICKS "CREATE WEBSITE" BUTTON
+    **  1. Get first unassigned pre-deployed editor website
+    **  2. Send email to requestor with link to website
+    */
+    PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER) IS
+        l_user_id users.id%type;
+        l_fingerprint fingerprint.fingerprint%type;
+        l_remote_addr fingerprint.remote_addr%type;
+        l_user_agent  fingerprint.user_agent%type;
+        l_timezone fingerprint.timezone%type;
+        l_cld_cloud_name users.cld_cloud_name%type;
+        l_cld_upload_preset users.cld_upload_preset%type;
+        l_new_token VARCHAR2 (4000);
+        l_new_refresh VARCHAR2 (4000);
+        l_new_refresh_hash refresh_token.token_issued%type;
 
+        l_url VARCHAR2(4000);
+        l_json JSON_OBJECT_T;
+        n PLS_INTEGER;
+    BEGIN
+        FOR C IN (
+            SELECT id, domain_name FROM website WHERE contact_email IS NULL ORDER BY id FETCH FIRST ROW ONLY
+        ) LOOP
+            IF (pUserid=0) THEN
+                INSERT INTO users (email, login_status) 
+                VALUES (pEmail, 'AUTO')
+                RETURNING id INTO l_user_id;
+            ELSE
+                l_user_id:=pUserid;
+            END IF;
+
+            UPDATE website SET contact_email=pEmail, user_id=l_user_id WHERE id=C.id;
+
+            l_fingerprint:=pck_sec.getFingerprint(l_remote_addr, l_user_agent, l_timezone);
+            UPDATE fingerprint 
+               SET last_used_date=current_timestamp
+             WHERE user_id=l_user_id
+               AND fingerprint=l_fingerprint;
+            n:=sql%rowcount;
+            IF (n=0) THEN
+                INSERT INTO fingerprint(user_id, fingerprint, last_used_date, remote_addr, user_agent, timezone)
+                VALUES (l_user_id, l_fingerprint, current_timestamp, l_remote_addr, l_user_agent, l_timezone);
+            END IF;
+
+            SELECT u.cld_cloud_name, u.cld_upload_preset
+              INTO l_cld_cloud_name, l_cld_upload_preset
+              FROM users u, apex_workspace_apex_users w
+             WHERE w.email=u.email
+               AND w.is_admin='Yes'
+             ORDER BY date_created
+             FETCH FIRST ROW ONLY;
+
+            l_new_refresh:=apex_jwt.ENCODE (
+                p_iss       => pck_sec.getJWTIssuer(C.id),
+                p_sub       => pEmail,
+                p_aud       => 'owner',
+                p_jti       => l_user_id,
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => pck_sec.REFRESH_TOKEN_EXP,
+                p_other_claims => '"cld_cloud_name":' || apex_json.stringify(l_cld_cloud_name) || ',"cld_upload_preset":' || apex_json.stringify(l_cld_upload_preset),
+                p_signature_key => UTL_RAW.cast_to_raw (pEncKey)
+            );
+
+            l_new_token:=apex_jwt.ENCODE (
+                p_iss       => pck_sec.getJWTIssuer(C.id),
+                p_sub       => pEmail,
+                p_aud       => 'owner',
+                p_jti       => l_user_id,
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => pck_sec.ACCESS_TOKEN_EXP,
+                p_signature_key => UTL_RAW.cast_to_raw (pEncKey)
+            );
+
+            l_new_refresh_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+
+            DELETE refresh_token WHERE website_id=C.id AND user_id=l_user_id;
+        
+            INSERT INTO refresh_token(user_id, website_id, token_issued) VALUES (l_user_id, C.id, l_new_refresh_hash);
+
+            l_url:='https://' || C.domain_name || '.netlify.app' || 
+                '?refresh=' || l_new_refresh ||
+                '&token=' || l_new_token ||
+                '&menulist=' || utl_url.escape(pck_sec.buildMenulist(C.id, 'owner', pEmail),TRUE,'UTF-8');
+
+            pck_email.sendmail(pEmail, 'Link to editor website', pck_email.websiteTemplate(l_url));
+
+        END LOOP;
+        
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('message','Emailed link to your website');
+        l_json.put('message','Sent email with link to your starter website');
         apex_util.prn(l_json.to_clob,false);
     END;
 end;
