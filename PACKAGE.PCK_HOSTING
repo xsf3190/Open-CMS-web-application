@@ -137,8 +137,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
                AND w.is_admin='Yes'
                FETCH FIRST ROW ONLY;
 
-            INSERT INTO website (id, domain_name, netlify_site_id, user_id, logo_type, logo_font_text, logo_font_id, max_width, min_font_size, min_width_px, min_scale, max_font_size, max_width_px, max_scale)
-            VALUES (l_new_website_id, C.domain_name, C.netlify_site_id, l_admin_user_id, 'font', 'LOGO', C.logo_font_id, C.max_width, C.min_font_size, C.min_width_px, C.min_scale, C.max_font_size, C.max_width_px, C.max_scale);
+            INSERT INTO website (id, domain_name, netlify_site_id, user_id, esm_library, logo_type, logo_font_text, logo_font_id, max_width, min_font_size, min_width_px, min_scale, max_font_size, max_width_px, max_scale)
+            VALUES (l_new_website_id, C.domain_name, C.netlify_site_id, l_admin_user_id, 'TEST', 'font', 'LOGO', C.logo_font_id, C.max_width, C.min_font_size, C.min_width_px, C.min_scale, C.max_font_size, C.max_width_px, C.max_scale);
              
             INSERT INTO website_font(website_id, font_id, context, editor_fontfaces)
             SELECT l_new_website_id, font_id, context, editor_fontfaces
