@@ -5,11 +5,11 @@
 import { callAPI, handleError } from "deploy_callAPI";
 import { initDialog, dialog_footer } from "deploy_elements";
 
-let endpoint;
-
+/* 
+** WHEN CALLED FROM MAIN APPLICATION MENU
+*/
 export const init = (e) => {
-    endpoint = e.dataset.endpoint;
-    callAPI(endpoint,"GET")
+    callAPI(e.dataset.endpoint,"GET")
         .then( (data) => {
             initDialog(data);
         })
@@ -18,6 +18,9 @@ export const init = (e) => {
         });;
 }
 
+/*
+**  REMOVE ANY "font" properties from localStorage
+*/
 const clearStorage = () => {
     console.log("starting clearStorage of any font properties")
     const keys = Object.keys(localStorage);
@@ -33,7 +36,9 @@ const clearStorage = () => {
 let isSending = false;
 
 export const clickHandler = (e) => {
-    if (e.target.classList.contains("publish-editor-site")) {
+    if (e.target.classList.contains("publish-editor-site") ||
+        e.target.classList.contains("publish-live-site")) {
+        const endpoint = e.target.dataset.endpoint;
         if (isSending) {
             console.log("Prevent double sends");
             return;
@@ -45,7 +50,7 @@ export const clickHandler = (e) => {
         live.textContent = e.target.dataset.processing;
         loader.style.opacity=1;
 
-        callAPI("publish-website/:ID", "POST", {})
+        callAPI(endpoint, "POST", {})
             .then((data) => {
                 isSending = false;
                 loader.style.opacity=0;        
@@ -53,7 +58,11 @@ export const clickHandler = (e) => {
                 live.textContent = data.message;
                 clearStorage();
                 setTimeout(() => {
-                    window.location.reload();
+                    if (endpoint.includes("go-live")) {
+                        window.location.href = data.live_url;
+                    } else {
+                        window.location.reload();
+                    }
                 }, 1500);
             })
             .catch((error) => {
