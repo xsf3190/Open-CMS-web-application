@@ -26,6 +26,22 @@ if (narrow_viewport.matches) {
 }
 
 /*
+** If document has <pre> element(s) add PRISM JS AND CSS to document <head>
+*/
+if (document.querySelector("pre") !== null) {
+    /*
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', "https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-twilight.min.css");
+    document.head.appendChild(link);
+    */
+    const script = document.createElement('script');
+    script.src = "https://cdn.jsdelivr.net/npm/prismjs@1.30.0/prism.min.js";
+    script.type = "module";
+    document.body.appendChild(script);
+}
+
+/*
 ** URL FOR NEW WEBSITE EMAIL LINKS INCLUDE TOKENS AND MENULIST
 */
 const url = new URL(window.location.href);
