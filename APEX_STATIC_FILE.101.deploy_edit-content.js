@@ -279,10 +279,9 @@ export const init = async (element) => {
         },
         codeBlock: {
             languages: [
-            { language: 'css', label: 'CSS' },
-            { language: 'html', label: 'HTML' },
+            { language: 'css', label: 'CSS', class: 'language-css' },
+            { language: 'html', label: 'HTML', class: 'language-markup' },
             { language: 'javascript', label: 'Javascript' },
-            { language: 'sql', label: 'SQL' },
             { language: 'plsql', label: 'PL/SQL' },
             { language: 'shell', label: 'shell' }
             ]
