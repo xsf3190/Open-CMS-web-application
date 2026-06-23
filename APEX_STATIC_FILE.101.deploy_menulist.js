@@ -13,6 +13,7 @@ const eventHandler = async (e) => {
         callAPI("publish-website/:ID")
             .then((data) => {
                 initDialog(data);
+                form.dataset.module = "deploy_publish-website";
             })
             .catch((error) => {
                 handleError(error);
