@@ -556,6 +556,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
           FROM website
          WHERE id=pWebsiteid;
 
+        /* Change this if GO LIVE */
         l_header:='<h4>PUBLISH EDITOR SITE</h4>';
 
         l_article:=
@@ -632,26 +633,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         IF (l_update_count=0) THEN
             l_article:=l_article || 
-            '<tr><td>ALL PAGES</td><td>ALREADY PUBLISHED</td></tr>';
+            '<tr><td>ALL PAGES EDITOR SITE</td><td>PUBLISHED</td><td>OK</td></tr>';
         END IF;
 
         l_article:=l_article || 
         '</tbody></table></div>';
 
-        IF (l_update_count>0 AND l_a11y_alt_fails=0) THEN    
-            l_footer:=
-            '<div class="flex-items space-apart">' ||
-                '<button type="button" class="button publish-editor-site">PUBLISH</button>' ||
-                '<span aria-live="polite"></span>' ||
-                '<span class="loader icon"></span>' ||
-            '</div>';
-        ELSIF (l_a11y_alt_fails>0) THEN
-            l_footer:=
-            '<span aria-live="polite" style="color:red">CORRECT FAILURES IN ORDER TO PUBLISH</span>';
-        ELSE
-            l_footer:=
-            '<span aria-live="polite"></span>';
-        END IF;
+        CASE
+            WHEN (l_update_count>0 AND l_a11y_alt_fails=0) THEN    
+                l_footer:=
+                '<div class="flex-items space-apart">' ||
+                    '<button type="button" class="button publish-editor-site" data-endpoint="publish-website/:ID">PUBLISH</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                    '<span class="loader icon"></span>' ||
+                '</div>';
+            WHEN (l_a11y_alt_fails>0) THEN
+                l_footer:=
+                '<span aria-live="polite" style="color:red">CORRECT FAILURES IN ORDER TO PUBLISH</span>';
+            WHEN (l_update_count=0) THEN
+                l_header:='<h4>PUBLISH LIVE SITE</h4>';
+                l_footer:=
+                '<div class="flex-items space-apart">' ||
+                    '<button type="button" class="button publish-live-site" data-endpoint="go-live/:ID/:PAGE">GO LIVE</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                    '<span class="loader icon"></span>' ||
+                '</div>';
+        END CASE;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
@@ -766,7 +773,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /*
-    **   PUBLISH LIVE SITE AND RETURNING URL OF SENDING PAGE THAT JAVASCRIPT WILL LOAD
+    **   PUBLISH LIVE SITE.
+    **   RETURN LIVE URL OF PAGE THAT SENT THE REQUEST.
     */
     PROCEDURE deployLiveWebsite(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
