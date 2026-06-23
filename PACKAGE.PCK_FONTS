@@ -11,9 +11,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pStatus IN OUT NUMBER);
     --
-    FUNCTION getLanguage(pLanguageCode IN VARCHAR2) RETURN CLOB;
+    PROCEDURE unicode2Text(pLanguageCode IN VARCHAR2);
     --
-    FUNCTION getUnicodeRange(pCharacters IN VARCHAR2) RETURN VARCHAR2;
+    FUNCTION text2Unicode(pCharacters IN VARCHAR2) RETURN VARCHAR2;
     --
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -22,21 +22,17 @@ end "PCK_FONTS";
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
     /*
-    **  LANGUAGE SUPPORT
+    **  CONVERT unicode_range IN LANGUAGE TABLE TO TEXT CHARACTERS
     */
-    FUNCTION getLanguage(pLanguageCode IN VARCHAR2) RETURN CLOB IS
+    PROCEDURE unicode2Text(pLanguageCode IN VARCHAR2) IS
         l_unicode_range language.unicode_range%type;
-        l_urlencoded language.urlencoded%type;
         l_range_split pls_integer;
         r1 pls_integer;
         r2 pls_integer;
         l_text CLOB;
         l_chars CLOB;
     BEGIN
-        SELECT unicode_range, urlencoded INTO l_unicode_range, l_urlencoded FROM language WHERE code=pLanguageCode;
-        IF (l_urlencoded IS NOT NULL) THEN
-            RETURN (l_urlencoded);
-        END IF;
+        SELECT unicode_range INTO l_unicode_range FROM language WHERE code=pLanguageCode;
         FOR C IN (SELECT LTRIM(column_value,'U+') AS range FROM TABLE(apex_string.split(l_unicode_range,', '))) 
         LOOP
             l_range_split:=INSTR(C.range,'-');
@@ -51,15 +47,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             END IF;
         END LOOP;
         l_chars:=UNISTR(l_text);
-        l_urlencoded:=utl_url.escape(l_chars,TRUE,'UTF-8');
-        UPDATE language SET urlencoded=l_urlencoded, characters=l_chars WHERE code=pLanguageCode;
-        RETURN (l_urlencoded);
+        UPDATE language SET text=l_chars WHERE code=pLanguageCode;
     END;
 
     /* 
     ** RETURN UNICODE RANGE FOR SORTED PARAMETER pCharacters
     */
-    FUNCTION getUnicodeRange(pCharacters IN VARCHAR2) RETURN VARCHAR2 IS
+    FUNCTION text2Unicode(pCharacters IN VARCHAR2) RETURN VARCHAR2 IS
         i PLS_INTEGER;
         j PLS_INTEGER;
         n PLS_INTEGER;
@@ -115,16 +109,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN(l_chars);
     END;
 
-    FUNCTION combineLanguages(pWebsiteid IN website.id%type) RETURN VARCHAR2 IS
+    FUNCTION combineLanguages RETURN VARCHAR2 IS
         l_chars LONG;
     BEGIN
         FOR C IN (
-            SELECT wl.language_code, l.characters
-              FROM website_language wl, language l
-             WHERE wl.website_id=pWebsiteid
-               AND wl.language_code=l.code
+            SELECT text
+              FROM language
+             WHERE code IN ('en','fr')
         ) LOOP
-            l_chars:=distinct_chars(l_chars || C.characters);
+            l_chars:=distinct_chars(l_chars || C.text);
         END LOOP;
         RETURN (l_chars);
     END;
@@ -763,7 +756,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     IS 
         l_fontfaces CLOB;
         l_api_url VARCHAR2(1000);
-        l_characters language.characters%type;
+        l_characters language.text%type;
         l_fontfaces_json JSON_ARRAY_T;
         l_fontface JSON_OBJECT_T;
         n PLS_INTEGER;
@@ -771,7 +764,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         /*
         ** Build characters from union of all website language characters 
         */
-        l_characters:=utl_url.escape(combineLanguages(pWebsiteid),TRUE,'UTF-8');
+        l_characters:=utl_url.escape(combineLanguages(),TRUE,'UTF-8');
        
         l_api_url:='https://fonts.googleapis.com/css2?family=' || 
                 pFamily || ':' || 
