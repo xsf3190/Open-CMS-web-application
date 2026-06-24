@@ -10,8 +10,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DEPLOY" as
     --
     PROCEDURE buildPageCollection(pCollectionType IN website_article.collection_type%type, pArticleid website_article.article_id%type, pHtml IN OUT NOCOPY CLOB, pCss IN OUT NOCOPY CLOB);
     --
-    FUNCTION canDeploy(pWebsiteid IN website.id%type) RETURN BOOLEAN;
-    --
     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type);
      --
     PROCEDURE deployLiveSite(pWebsiteid IN website.id%type);
@@ -270,6 +268,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     /*
     **  Determine whether the editor website can be deployed based on relevant source data last update dates
     */  
+    /*
     FUNCTION canDeploy(pWebsiteid IN website.id%type) RETURN BOOLEAN IS
         l_netlify_last_published TIMESTAMP WITH LOCAL TIME ZONE;
         l_last_updated_date TIMESTAMP WITH LOCAL TIME ZONE;
@@ -290,6 +289,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
         RETURN (l_last_updated_date>l_netlify_last_published);
     END;
+    */
 
     /*
      **  Build Content Dialog - include pagination button
@@ -650,7 +650,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     BEGIN
         pBody:=null;
         FOR C IN (
-            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, a.fonts_used,
+            SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, a.fonts_used, 
                     w.max_width, 
                     wa.page_title, wa.page_description, w.domain_name
               FROM website_article wa, article a, website w
@@ -801,7 +801,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     l_preload_fonts ||
                     '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '" media="all">' ||
                     '<link rel="stylesheet" href="' || pck_css.PATH_NAME_CORE || '" media="all">' ||
-                    --'<link rel="stylesheet" href="/css/ckeditor.min.css">' ||
                     '<link rel="icon" href="/images/favicon.svg">' ||
                     '<script src="/javascript/deploy_start.min.js" integrity="' || pIntegrity || '" defer></script>' ||
                 '</head>' ||
@@ -1077,7 +1076,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     CASE WHEN wf.deployed_date IS NULL OR s.updated_date>wf.deployed_date THEN 1 ELSE 0 END build
               FROM source s, website_files wf, asset a
              WHERE wf.website_id(+)=pWebsiteid
-               AND wf.site_id(+)=pSiteid
                AND wf.path(+)=s.deploy_filename
                AND wf.mime_type(+)='avif'
                AND a.id=s.logo_img_id
@@ -1222,7 +1220,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             ),
             source AS
             (
-                SELECT '/sitemap.xml' AS deploy_filename, sitemap, nav_updated_date updated_date 
+                SELECT '/sitemap.xml' AS deploy_filename, sitemap, updated_date 
                   FROM website, xml
                  WHERE id=pWebsiteid
             )
