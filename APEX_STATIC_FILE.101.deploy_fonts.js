@@ -232,14 +232,6 @@ export const inputHandler = (e) => {
             }
         })    
     }
-
-    if (id==="logo-font-text") {
-        document.querySelector(".logo").textContent = e.target.textContent;
-        callAPI(endpoint,"PUT",{context:getContext(), id:id, value:e.target.textContent})
-        .then((data) => {
-            liveRegion(data);
-        })    
-    }
     
     const context = getContext();
     
