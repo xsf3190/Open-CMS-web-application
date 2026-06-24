@@ -62,7 +62,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
 
         l_footer:=
         '<div class="flex-items">' ||
-            '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' || 'PUBLISH' || '</button>' ||
+            '<button type="button" class="button publish">' || 'PUBLISH' || '</button>' ||
             '<span aria-live="polite"></span>' ||
             '<span class="loader icon"></span>' ||
         '</div>';
@@ -115,7 +115,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
                 l_message:='Favicon updated as svg';
             ELSIF (ASCII(C.favicon)<=122 AND LENGTH(C.favicon)<=2) THEN
                 l_href:='data:image/svg+xml,' || utl_url.escape(REPLACE(SVG_LETTERS,'#FAVICON#',C.favicon),TRUE,'UTF-8');
-                l_message:='Favicon updated as ' || CASE LENGTH(C.favicon) WHEN 1 THEN 'one letter' ELSE 'two letters' END || ' from english alphabet';
+                l_message:='Favicon updated as ' || CASE LENGTH(C.favicon) WHEN 1 THEN 'one letter' ELSE 'two letters' END;
             ELSIF (LENGTH(C.favicon)<=2) THEN /* Consider it an Emoji */
                 l_href:='data:image/svg+xml,' || utl_url.escape(REPLACE(SVG_EMOJI,'#FAVICON#',C.favicon),TRUE,'UTF-8');
                 l_message:='Updated favicon as an emoji';
