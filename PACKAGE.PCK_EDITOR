@@ -538,6 +538,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_netlify_last_published website.netlify_last_published%type;
+        l_netlify_site_id_custom website.netlify_site_id_custom%type;
         l_datetime_format VARCHAR2(30):='fmdd Mon yy, hh24:fmmipm';
         l_a11y_alt_fails PLS_INTEGER;
         l_update_count PLS_INTEGER;
@@ -549,10 +550,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         /*
-        ** LIST PAGES THAT HAVE CHANGED CONTENT SINCE PREVIOUS DEPLOYMENT
+        ** LIST CONTENT CHANGES SINCE PREVIOUS DEPLOYMENT
         */
-        SELECT netlify_last_published
-          INTO l_netlify_last_published
+        SELECT netlify_last_published, netlify_site_id_custom
+          INTO l_netlify_last_published, l_netlify_site_id_custom
           FROM website
          WHERE id=pWebsiteid;
 
@@ -574,8 +575,36 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
         l_update_count:=0;
         l_a11y_alt_fails:=0;
+
+        /* FAVICON OR LOGO CHANGE */
         FOR C IN (
-            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, a.updated_date, wa.updated_date wa_updated_date, a.a11y_alt_fails
+            SELECT w.favicon_updated_date, w.logo_updated_date
+              FROM website w
+             WHERE id=pWebsiteid
+        ) LOOP
+            IF (C.favicon_updated_date>l_netlify_last_published) THEN
+                l_update_count:=l_update_count+1;
+                l_article:=l_article || 
+                '<tr>' ||
+                    '<td>Favicon (all pages)</td>' || 
+                    '<td>' || TO_CHAR(C.favicon_updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td>' ||
+                    '<td>OK</td>' ||
+                '</tr>';
+            END IF;
+            IF (C.logo_updated_date>l_netlify_last_published) THEN
+                l_update_count:=l_update_count+1;
+                l_article:=l_article || 
+                '<tr>' ||
+                    '<td>Logo (all pages)</td>' || 
+                    '<td>' || TO_CHAR(C.logo_updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td>' ||
+                    '<td>OK</td>' ||
+                '</tr>';
+            END IF;
+        END LOOP;
+
+        FOR C IN (
+            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, 
+                    a.updated_date, wa.updated_date wa_updated_date, a.a11y_alt_fails 
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteid
                AND wa.article_id=NVL(a.parent_id,a.id)
@@ -650,7 +679,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             WHEN (l_a11y_alt_fails>0) THEN
                 l_footer:=
                 '<span aria-live="polite" style="color:red">CORRECT FAILURES IN ORDER TO PUBLISH</span>';
-            WHEN (l_update_count=0) THEN
+            WHEN (l_update_count=0 AND l_netlify_site_id_custom IS NOT NULL) THEN
                 l_header:='<h4>PUBLISH LIVE SITE</h4>';
                 l_footer:=
                 '<div class="flex-items space-apart">' ||
@@ -983,6 +1012,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         IF (l_do_deploy) THEN
             /* Force all pages to be rebuilt */
             DELETE website_files WHERE website_id=pWebsiteid AND mime_type='html';
+            UPDATE website SET updated_date=current_timestamp WHERE id=pWebsiteid;
             pck_deploy.deployEditorSite(pWebsiteid);
         END IF;
 
