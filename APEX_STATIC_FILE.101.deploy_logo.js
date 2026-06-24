@@ -51,6 +51,10 @@ export const changeHandler = async (e) => {
                 logo.replaceChildren();
                 logo.insertAdjacentHTML('beforeend',value);
             }
+            else if (id === "logo-type" && value === "none") {
+                logo.replaceChildren();
+                logoform.replaceChildren();
+            }
 
             liveRegion(data);
         })
@@ -63,7 +67,7 @@ export const changeHandler = async (e) => {
 **  BUTTON HANDLER
 */
 export const clickHandler = (e) => {
-    if (!e.target.id === "apply-svg") return;
+    if (e.target.tagName !== "BUTTON") return;
 
     const logo_svg = document.getElementById("logo-svg");
 
@@ -92,6 +96,13 @@ export const inputHandler = (e) => {
         const vhValue = `${e.target.value}vh`;
         document.documentElement.style.setProperty('--logo-img-block-size', vhValue); 
     }
+    else if (id==="logo-font-text") {
+        logo.textContent = e.target.value;
+    }
+    else if (id==="logo-font-size") {
+        const vwValue = `${e.target.value}vw`;
+        document.documentElement.style.setProperty('--logo-font-size', vwValue);
+    }
 }
 
 export const init = (element) => {
@@ -100,7 +111,6 @@ export const init = (element) => {
     callAPI(endpoint,"GET")
         .then((data) => {
             initDialog(data);
-            // dialog_footer.addEventListener("click", footerHandler);
         })
         .catch((error) => {
             handleError(error);
