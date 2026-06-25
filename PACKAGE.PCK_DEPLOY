@@ -168,18 +168,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type) IS
+        l_logo_deploy_hash website.logo_deployed_hash%type;
     BEGIN
         lockDeployment;
-
         FOR C IN (
-            SELECT netlify_site_id
+            SELECT netlify_site_id, TO_CLOB(NVL(logo_type||logo_font_text,'null')) AS logo, NVL(logo_deployed_hash,'null') AS logo_deployed_hash
               FROM website
              WHERE id=pWebsiteid
         ) LOOP
-            
+            /* Force deployment of html files when logo has materially changed */
+            l_logo_deploy_hash:=dbms_crypto.hash(src => C.logo, typ => dbms_crypto.hash_sh1);
+            IF (l_logo_deploy_hash <> C.logo_deployed_hash) THEN
+                DELETE website_files WHERE website_id=pWebsiteid AND mime_type='html';
+            END IF;
             pck_css.buildEditorCSS(pWebsiteid);
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
+            IF (l_logo_deploy_hash <> C.logo_deployed_hash) THEN
+                UPDATE website SET logo_deployed_hash=l_logo_deploy_hash WHERE id=pWebsiteid;
+            END IF;
         END LOOP;
 
         releaseDeployment;
