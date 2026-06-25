@@ -59,6 +59,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         RETURN(l_html);
     END;
 
+    FUNCTION buildFontLogoForm(pWebsiteId IN NUMBER, pLogoFontText IN VARCHAR2, pLogoFontSize IN VARCHAR2) RETURN VARCHAR2 IS
+        l_form LONG;
+    BEGIN
+        l_form:=
+        '<fieldset class="flow">' ||
+            '<legend>Configure text logo</legend>' ||
+            '<div>' ||
+                '<label for="logo-font-text">Text</label>' ||
+                '<input type="text" id="logo-font-text" value="' || pLogoFontText || '">' ||
+            '</div>' ||
+            '<div>' ||
+                '<label for="logo-font-size">Adjust size:</label>' ||
+                '<input type="range" id="logo-font-size" min="1" value="' || pLogoFontSize || '" max="10" step="0.1" />' ||
+            '</div>' ||
+            '<hr>' ||
+            '<span>&#9432; Change font in Fonts menu</span>' ||
+        '</fieldset>';
+
+        RETURN(l_form);
+    END;
+
     FUNCTION buildImageLogoForm(pWebsiteId IN NUMBER, pLogoImgBlockSize IN VARCHAR2) RETURN VARCHAR2 IS
         l_logo_img_id website.logo_img_id%type;
         l_logo_img_block_size website.logo_img_block_size%type;
@@ -150,32 +171,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        l_header:='<span>Note that Logo can be set to text from Fonts menu</span>';
+        l_header:='<h4>Set logo for web site</h4>';
 
         FOR C IN (
-            SELECT w.logo_type, w.logo_img_id, w.logo_img_block_size, w.logo_svg
+            SELECT w.logo_type, w.logo_img_id, w.logo_img_block_size, w.logo_svg, w.logo_font_text, w.logo_font_size
               FROM website w
              WHERE w.id=pWebsiteId
         ) LOOP
             l_article:=
-            '<div class="flex-items">' ||
                 '<fieldset class="flex-items show-controls">' ||
                     '<legend>Type of Logo</legend>' ||
                     '<span>' ||
+        		        '<input type="radio" name="logo_type" id="font"' || CASE WHEN C.logo_type='font' THEN ' checked' END || '>' ||
+        		        '<label for="font">Text</label>' ||
+        			'</span>' ||
+                    '<span>' ||
         		        '<input type="radio" name="logo_type" id="img"' || CASE WHEN C.logo_type='img' THEN ' checked' END || '>' ||
-        		        '<label for="img">Image Logo</label>' ||
+        		        '<label for="img">Image</label>' ||
         			'</span>' ||
                     '<span>' ||
         		        '<input type="radio" name="logo_type" id="svg"' || CASE WHEN C.logo_type='svg' THEN ' checked' END || '>' ||
-        		        '<label for="svg">SVG Logo</label>' ||
+        		        '<label for="svg">SVG</label>' ||
+        			'</span>' ||
+                    '<span>' ||
+        		        '<input type="radio" name="logo_type" id="none"' || CASE WHEN C.logo_type IS NULL THEN ' checked' END || '>' ||
+        		        '<label for="none">None</label>' ||
         			'</span>' ||
                 '</fieldset>' ||
                 '<div id="logoform">' ||
                     CASE C.logo_type
+                        WHEN 'font' THEN 
+                            buildFontLogoForm(pWebsiteId, C.logo_font_text, C.logo_font_size)
                         WHEN 'img' THEN 
                             buildImageLogoForm(pWebsiteId, C.logo_img_block_size)
                         WHEN 'svg' THEN 
                             buildSvgLogoForm(pWebsiteId, C.logo_svg, C.logo_img_block_size)
+                        ELSE
+                            null
                     END ||
                 '</div>';
         END LOOP;
@@ -201,8 +233,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
     END;
 
     /*
-    ** UPDATE WEBSITE LOGO. 
-    ** IMAGE | SVG  ARE MUTUALLY EXCLUSIVE.
+    ** UPDATE WEBSITE LOGO
     */
     PROCEDURE updateLogo(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -226,21 +257,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                     END AS value
               FROM JSON_TABLE(pBodyText, '$' COLUMNS (column_name, column_value))
         ) LOOP
+            pck_core.log(C.name||':'||C.value);
             /* Get logo details if user wants to change logo type */
             IF (C.name='logo_type') THEN
                 FOR C1 IN (
-                    SELECT w.logo_img_block_size, w.logo_svg, w.logo_svg_inline_size
+                    SELECT w.logo_img_block_size, w.logo_svg, w.logo_svg_inline_size, w.logo_font_text, w.logo_font_size
                       FROM website w
                      WHERE w.id=pWebsiteId
                 ) LOOP
                     l_logo_form:=
                     CASE C.value
+                        WHEN 'font' THEN 
+                                buildFontLogoForm(pWebsiteId, C1.logo_font_text, C1.logo_font_size)
                         WHEN 'img' THEN 
                                 buildImageLogoForm(pWebsiteId, C1.logo_img_block_size)
                         WHEN 'svg' THEN 
                                 buildSvgLogoForm(pWebsiteId, C1.logo_svg, C1.logo_svg_inline_size)
                     END;
                     l_json.put('logoform',l_logo_form);
+                    l_message:=
+                    CASE C.value
+                        WHEN 'font' THEN 'Change to text logo'                         
+                        WHEN 'img' THEN 'Change to image logo'
+                        WHEN 'svg' THEN 'Change to SVG logo'
+                        WHEN 'none' THEN 'Remove logo'
+                    END;
                 END LOOP;
                 CONTINUE;
             END IF;
@@ -250,6 +291,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 l_logo_type:='img';
             ELSIF (INSTR(C.name,'svg')>0) THEN
                 l_logo_type:='svg';
+            ELSIF (INSTR(C.name,'font')>0) THEN
+                l_logo_type:='font';
+            ELSIF (INSTR(C.name,'none')>0) THEN
+                l_logo_type:=null;
             END IF;
 
             SELECT COUNT(*) INTO n FROM user_tab_columns WHERE table_name='WEBSITE' AND column_name=UPPER(C.name);
