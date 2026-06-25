@@ -454,7 +454,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_html_bi VARCHAR2(500);
     BEGIN
         FOR C IN (
-            SELECT wf.context, f.family, f.bold, f.italic, NVL(w.logo_font_text,'Logo') logo_font_text
+            SELECT wf.context, f.family, f.bold, f.italic
               FROM website_font wf, font f, website w
              WHERE w.id=pWebsiteid
                AND wf.website_id=w.id
@@ -464,9 +464,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             CASE C.context
                 WHEN 'logo' THEN
                     l_html:=l_html ||
-                    '<div class="topnav flex-items">' ||
-                        '<span class="logo" id="logo-font-text" contenteditable>' || C.logo_font_text || '</span>' ||
-                    '</div>';
+                    null;
 
                 WHEN 'headings' THEN
                     l_html:=l_html ||
@@ -502,8 +500,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         l_html_bi ||
                         ' characters.</p>';
                     END IF;
-                    l_html:=l_html ||
-                    '<p>Nb. To change Logo text just click on it and type</p>';
 
                 WHEN 'code' THEN
                     l_html:=l_html ||
@@ -1107,17 +1103,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /* 
-    **  USER REQUESTS NEW LANGUAGE
-    */
-    PROCEDURE addLanguage(pWebsiteId IN NUMBER, pLanguageCode IN language.code%type) IS
-    BEGIN
-        INSERT INTO website_language(website_id, language_code)
-        VALUES (pWebsiteId,pLanguageCode);
-        EXCEPTION
-            WHEN DUP_VAL_ON_INDEX THEN null;
-    END;
-
-    /* 
     **  CALLED WHENEVER USER MAKES CHANGE IN THE UI
     */
     PROCEDURE updateFont(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
@@ -1169,13 +1154,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                         pStatus:=200;
                         RETURN;
                     END IF;
-                WHEN 'logo-font-text' THEN
-                    UPDATE website 
-                       SET logo_type='font', 
-                           logo_font_text=C.value,
-                           logo_updated_date=current_timestamp
-                     WHERE id=pWebsiteid;
-                    l_message:='Changed logo text';
                 ELSE
                     l_message:='Change ' || C.id || ' - new value ' || C.value;
                     updateFontAxisValue(pWebsiteid, C.context, C.id, C.value);
