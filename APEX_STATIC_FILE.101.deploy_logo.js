@@ -1,7 +1,7 @@
 /*
 **  WEBSITE LOGO
 */
-import { initDialog, liveRegion } from "deploy_elements";
+import { initDialog, form, liveRegion } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 let endpoint;
@@ -24,43 +24,27 @@ const loadImg = (src) => {
 }
 
 /*
-** UPDATE DATABASE ON ALL CHANGE EVENTS
+** GET FORM IF USER SELECTS "logo-type"
 */
 export const changeHandler = async (e) => {
-    let id, value; 
-
-    if (e.target.getAttribute("type")==="radio") {
-        id=e.target.getAttribute("name");
-        value=e.target.id;
-    } else {
-        id = e.target.getAttribute("id");
-        value = (e.target.tagName === "SELECT") ? e.target.options[e.target.selectedIndex].value : e.target.value;
-    }
-
-    callAPI(endpoint,"PUT",{column_name:id,column_value:value})
-        .then((data) => {
-            if (data.logoform) {
+    const id = e.target.getAttribute("id");
+    if (e.target.getAttribute("name") === "logo-type") {
+        callAPI(endpoint,"GET",`?logotype=${id}`)
+            .then((data) => {
                 const logoform = document.getElementById("logoform");
                 logoform.replaceChildren();
                 logoform.insertAdjacentHTML('beforeend',data.logoform);
-            } 
-            else if (id === "logo-img-id") {
-                loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
-            }
-            else if (id === "logo-svg") {
-                logo.replaceChildren();
-                logo.insertAdjacentHTML('beforeend',value);
-            }
-            else if (id === "logo-type" && value === "none") {
-                logo.replaceChildren();
-                logoform.replaceChildren();
-            }
-
-            liveRegion(data);
-        })
-        .catch((error) => {
-            handleError(error);
-        });
+                liveRegion(data);
+            })
+            .catch((error) => {
+                handleError(error);
+            });
+    } else if (id === "logo-img-id") {
+        loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
+    } else if (id === "logo-svg") {
+        logo.replaceChildren();
+        logo.insertAdjacentHTML('beforeend',e.target.value);
+    }
 }
 
 /*
@@ -69,13 +53,25 @@ export const changeHandler = async (e) => {
 export const clickHandler = (e) => {
     if (e.target.tagName !== "BUTTON") return;
 
-    const logo_svg = document.getElementById("logo-svg");
+    const formData = new FormData(form);
+    const formObj = Object.fromEntries(formData);
+    const logo_type = form.querySelector("[name='logo-type']:checked").getAttribute("id");
+    formObj.logo_type = logo_type;
+    if (formObj.logo_type === "img") {
+        const img = form.querySelector("[name='logo_img_id']")
+        formObj.logo_img_id = img.options[img.selectedIndex].value;
+    }
 
-    callAPI(endpoint,"PUT",{column_name:"logo-svg",column_value:logo_svg.value})
-        .then(() => {
-            logo.replaceChildren();
-            logo.insertAdjacentHTML('beforeend',logo_svg.value);
+    callAPI(endpoint,"PUT",formObj)
+        .then((data) => {
+            if (logo_type === "null") {
+                logo.textContent = "";
+            }
+            liveRegion(data);
         })
+        .catch((error) => {
+            handleError(error);
+        });
 }
 
 /*
@@ -108,7 +104,7 @@ export const inputHandler = (e) => {
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
 
-    callAPI(endpoint,"GET")
+    callAPI(endpoint,"GET","?logotype=")
         .then((data) => {
             initDialog(data);
         })
