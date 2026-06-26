@@ -24,7 +24,7 @@ const loadImg = (src) => {
 }
 
 /*
-** GET FORM IF USER SELECTS "logo-type"
+** GET NEW FORM IF USER SELECTS "logo-type"
 */
 export const changeHandler = async (e) => {
     const id = e.target.getAttribute("id");
@@ -34,6 +34,26 @@ export const changeHandler = async (e) => {
                 const logoform = document.getElementById("logoform");
                 logoform.replaceChildren();
                 logoform.insertAdjacentHTML('beforeend',data.logoform);
+                switch (id) {
+                    case "font":
+                        logo.textContent = logoform.querySelector("[name='logo_font_text']").value;
+                        document.documentElement.style.setProperty('--logo-font-size', logoform.querySelector("[name='logo_font_size']").value + "vw");
+                        break;
+                    case "img":
+                        loadImg(logoform.querySelector("selectedcontent>img").getAttribute("src"));
+                        document.documentElement.style.setProperty('--logo-img-corner-shape', "superellipse(" + logoform.querySelector("[name='logo_img_corner_shape']").value + ")");
+                        document.documentElement.style.setProperty('--logo-img-border-radius', logoform.querySelector("[name='logo_img_border_radius']").value + "px");
+                        document.documentElement.style.setProperty('--logo-img-block-size', logoform.querySelector("[name='logo_img_block_size']").value + "vh");
+                        break;
+                    case "svg":
+                        logo.replaceChildren();
+                        logo.insertAdjacentHTML('beforeend',logoform.querySelector("[name='logo_svg']").value);
+                        document.documentElement.style.setProperty('--logo-img-block-size', logoform.querySelector("[name='logo_img_block_size']").value + "vh");
+                        break;
+                    case "null":
+                        logo.textContent = "";
+                        break;
+                }
                 liveRegion(data);
             })
             .catch((error) => {
@@ -41,7 +61,7 @@ export const changeHandler = async (e) => {
             });
     } else if (id === "logo-img-id") {
         loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
-    } else if (id === "logo-svg") {
+    } else if (id === "svg") {
         logo.replaceChildren();
         logo.insertAdjacentHTML('beforeend',e.target.value);
     }
@@ -98,6 +118,10 @@ export const inputHandler = (e) => {
     else if (id==="logo-font-size") {
         const vwValue = `${e.target.value}vw`;
         document.documentElement.style.setProperty('--logo-font-size', vwValue);
+    }
+    else if (id==="logo-svg") {
+        logo.replaceChildren();
+        logo.insertAdjacentHTML('beforeend',e.target.value);
     }
 }
 
