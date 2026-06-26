@@ -540,12 +540,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_netlify_last_published website.netlify_last_published%type;
         l_netlify_site_id_custom website.netlify_site_id_custom%type;
         l_datetime_format VARCHAR2(30):='fmdd Mon yy, hh24:fmmipm';
-        l_a11y_alt_fails PLS_INTEGER;
+        l_a11y_fails PLS_INTEGER;
         l_update_count PLS_INTEGER;
         l_header LONG;
         l_article LONG;
         l_footer LONG;
         l_json JSON_OBJECT_T;
+        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -563,7 +564,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article:=
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
         '<table>' ||
-            '<caption id="table-caption">' || 'Changes since last published on ' || TO_CHAR(l_netlify_last_published at time zone l_session_data.timeZone,l_datetime_format) || '</caption>' ||
+            '<caption id="table-caption">' || 'Changes since last published ' || apex_util.get_since(l_netlify_last_published, false)  || '</caption>' ||
             '<thead>' ||
                 '<tr>' ||
                     '<th>Page</th>' ||
@@ -574,7 +575,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             '<tbody>';
 
         l_update_count:=0;
-        l_a11y_alt_fails:=0;
+        l_a11y_fails:=0;
 
         /* FAVICON OR LOGO CHANGE */
         FOR C IN (
@@ -587,7 +588,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_article:=l_article || 
                 '<tr>' ||
                     '<td>Favicon (all pages)</td>' || 
-                    '<td>' || TO_CHAR(C.favicon_updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td>' ||
+                    '<td>' || apex_util.get_since(C.favicon_updated_date, false) || '</td>' ||
                     '<td>OK</td>' ||
                 '</tr>';
             END IF;
@@ -596,22 +597,83 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_article:=l_article || 
                 '<tr>' ||
                     '<td>Logo (all pages)</td>' || 
-                    '<td>' || TO_CHAR(C.logo_updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td>' ||
+                    '<td>' || apex_util.get_since(C.logo_updated_date, false) || '</td>' ||
                     '<td>OK</td>' ||
                 '</tr>';
             END IF;
         END LOOP;
 
+        /* Check each page */
         FOR C IN (
-            SELECT wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, 
+            SELECT a.id, wa.navigation_label || NVL2(a.parent_id,'/'||a.title,null) page, 
                     a.updated_date, wa.updated_date wa_updated_date, a.a11y_alt_fails 
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteid
                AND wa.article_id=NVL(a.parent_id,a.id)
             ORDER BY wa.display_order, a.title nulls FIRST
         ) LOOP
+            n:=0;
             IF (C.a11y_alt_fails>0) THEN
-                l_a11y_alt_fails:=l_a11y_alt_fails+1;
+                n:=n+1;
+                l_a11y_fails:=l_a11y_fails+1;
+                l_article:=l_article || 
+                '<tr>' ||
+                    '<td>' || C.page || ' (main content)</td>' || 
+                    '<td>' || apex_util.get_since(C.updated_date,false) || '</td>' ||
+                    '<td><span style="color:red">NOK - images missing ALT text</span></td>' ||
+                '</tr>';
+            END IF;
+
+            /* Check italic text supported by font */
+            FOR C1 IN (
+                SELECT f.family, COUNT(*) AS a11y_fails
+                  FROM article_chars ac, website_font wf, font f 
+                 WHERE ac.article_id=C.id 
+                   AND wf.website_id=pWebsiteid
+                   AND wf.context=ac.context 
+                   AND f.id=wf.font_id
+                   AND f.italic=0
+                   AND COALESCE(ac.chars_italic,ac.chars_bold_italic) IS NOT NULL
+                 GROUP BY f.family
+            ) LOOP
+                IF (C1.a11y_fails>0) THEN
+                    n:=n+1;
+                    l_a11y_fails:=l_a11y_fails+1;
+                    l_article:=l_article || 
+                    '<tr>' ||
+                        '<td>' || C.page || ' (main content)</td>' || 
+                        '<td>' || apex_util.get_since(C.updated_date,false) || '</td>' ||
+                        '<td><span style="color:red">NOK - italics not supported by ' || C1.family || '</span></td>' ||
+                    '</tr>';
+                END IF;
+            END LOOP;
+
+            /* Check bold text supported by font */
+            FOR C1 IN (
+                SELECT f.family, COUNT(*) AS a11y_fails
+                  FROM article_chars ac, website_font wf, font f 
+                 WHERE ac.article_id=C.id 
+                   AND wf.website_id=pWebsiteid
+                   AND wf.context=ac.context 
+                   AND f.id=wf.font_id
+                   AND f.bold=0
+                   AND COALESCE(ac.chars_bold_normal,ac.chars_bold_italic) IS NOT NULL
+                 GROUP BY f.family  
+            ) LOOP
+                IF (C1.a11y_fails>0) THEN
+                    n:=n+1;
+                    l_a11y_fails:=l_a11y_fails+1;
+                    l_article:=l_article || 
+                    '<tr>' ||
+                        '<td>' || C.page || ' (main content)</td>' || 
+                        '<td>' || apex_util.get_since(C.updated_date,false) || '</td>' ||
+                        '<td><span style="color:red">NOK - bold not supported by ' || C1.family || '</span></td>' ||
+                    '</tr>';
+                END IF;
+            END LOOP;
+
+            IF (n>0) THEN
+                CONTINUE;
             END IF;
 
             IF (C.updated_date>l_netlify_last_published) THEN
@@ -619,18 +681,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_article:=l_article || 
                 '<tr>' ||
                     '<td>' || C.page || ' (main content)</td>' || 
-                    '<td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td>' ||
-                    '<td>' || CASE 
-                                WHEN C.a11y_alt_fails>0  THEN '<span style="color:red">NOK - images missing ALT text</span></td>'
-                                ELSE 'OK' 
-                              END || '</td>' ||
+                    '<td>' || apex_util.get_since(C.updated_date,false) || '</td>' ||
+                    '<td>OK</td>' ||
                 '</tr>';
             END IF;
             IF (C.wa_updated_date>l_netlify_last_published) THEN
                 l_update_count:=l_update_count+1;
                 l_article:=l_article || 
-                '<tr><td>' || C.page || ' (header | footer)</td><td>' || TO_CHAR(C.wa_updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+                '<tr>' ||
+                    '<td>' || C.page || ' (header | footer)</td>' ||
+                    '<td>' || apex_util.get_since(C.wa_updated_date,false) || '</td>' ||
+                    '<td>OK</td>' ||
+                '</tr>';
             END IF;
+            
         END LOOP;
 
         FOR C IN (
@@ -669,16 +733,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         '</tbody></table></div>';
 
         CASE
-            WHEN (l_update_count>0 AND l_a11y_alt_fails=0) THEN    
+            WHEN (l_update_count>0 AND l_a11y_fails=0) THEN    
                 l_footer:=
                 '<div class="flex-items space-apart">' ||
                     '<button type="button" class="button publish-editor-site" data-endpoint="publish-website/:ID">PUBLISH</button>' ||
                     '<span aria-live="polite"></span>' ||
                     '<span class="loader icon"></span>' ||
                 '</div>';
-            WHEN (l_a11y_alt_fails>0) THEN
+            WHEN (l_a11y_fails>0) THEN
                 l_footer:=
-                '<span aria-live="polite" style="color:red">CORRECT FAILURES IN ORDER TO PUBLISH</span>';
+                '<span aria-live="polite" style="color:red">CORRECT ACCESSIBILITY FAILURES TO PUBLISH</span>';
             WHEN (l_update_count=0 AND l_netlify_site_id_custom IS NOT NULL) THEN
                 l_header:='<h4>PUBLISH LIVE SITE</h4>';
                 l_footer:=
