@@ -248,11 +248,15 @@ body>footer>a {
   align-self: flex-start;
 }
 
-.logo > * {
-    border-radius: var(--logo-img-border-radius, 0);
-    corner-shape: var(--logo-img-corner-shape);
+/* Logo image is either avif or svg */
+.logo > img, .logo > svg {
     inline-size: fit-content;
     block-size: var(--logo-img-block-size);
+}
+
+.logo > [src$='avif'], .logo > [src*='cloudinary'] {
+    border-radius: var(--logo-img-border-radius, 0);
+    corner-shape: var(--logo-img-corner-shape);
     object-fit: contain;
     object-position: left bottom;
 }
