@@ -1098,6 +1098,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 addDeploy(pFilename=>C.deploy_filename, pFileContent=>l_blob_download);
             END IF;
         END LOOP;
+
+        /*
+        **  3.3 Build Text logo if defined else no logo
+        */
+        IF (l_logo IS NULL) THEN
+            /* I.E NEITHER IMG NOR SVG */
+            FOR C IN (
+                SELECT logo_font_text 
+                  FROM website 
+                 WHERE id=pWebsiteid 
+                   AND logo_type='font'
+            ) LOOP
+                l_logo:=C.logo_font_text;
+            END LOOP;
+        END IF;
         
         /*
         **  4. Build HTML files
@@ -1138,11 +1153,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 l_color_scheme:=buildColorscheme();
                 l_dropdown:=buildDropdown(pWebsiteId);
                 l_common_header:=buildCommonHeader(pWebsiteid);
-                l_common_footer:=buildCommonFooter(pWebsiteid);
-                -- logo is svg, img or text
-                IF (l_logo IS NULL) THEN
-                    SELECT logo_font_text INTO l_logo FROM website WHERE id=pWebsiteid;
-                END IF;
+                l_common_footer:=buildCommonFooter(pWebsiteid);            
             END IF;
             buildPageBody(pWebsiteId, C.article_id, l_logo, l_nav, l_color_scheme, l_dropdown, l_script_sha256, C.collection_type, C.cta, l_common_header, l_common_footer, l_clob);
             addDeploy(pFilename=>C.path, pFileContent=>l_clob);
