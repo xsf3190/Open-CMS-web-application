@@ -270,9 +270,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         LOOP
             l_css:=l_css || 
             '--logo-img-block-size: ' || C.logo_img_block_size || 'vh;' ||
-            '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
-            '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';' ||
-            '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');' ||
+            '--logo-img-border-radius: ' || C.logo_img_border_radius || 'px;' ||
+            '--logo-img-corner-shape: superellipse(' || C.logo_img_corner_shape || ');' ||
+            '--logo-font-size: ' ||  C.logo_font_size || 'vw;' ||
             '--img-border-radius: ' || NVL(C.img_border_radius,0) || ';' ||
             '--img-corner-shape: ' || C.img_corner_shape || ';';
         END LOOP;
@@ -391,14 +391,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                 WHEN 'img' THEN
                     l_root_css:=l_root_css || 
                     '--logo-img-block-size: ' || C.logo_img_block_size || 'vh;' ||
-                    '--logo-img-border-radius: ' || C.logo_img_border_radius || ';' ||
-                    '--logo-img-corner-shape: ' || C.logo_img_corner_shape || ';';
+                    '--logo-img-border-radius: ' || C.logo_img_border_radius || 'px;' ||
+                    '--logo-img-corner-shape: superellipse(' || C.logo_img_corner_shape || ');';
                 WHEN 'svg' THEN
                     l_root_css:=l_root_css || 
                     '--logo-img-block-size: ' || C.logo_img_block_size || 'vh;';
                 WHEN 'font' THEN
                     l_root_css:=l_root_css || 
-                    '--logo-font-size: ' ||  'var(--step-' || C.logo_font_size || ');';
+                    '--logo-font-size: ' || C.logo_font_size || 'vw;';
             END CASE;
         END LOOP;
 
