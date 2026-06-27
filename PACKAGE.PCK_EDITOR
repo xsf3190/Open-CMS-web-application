@@ -533,7 +533,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
     /* 
-    **  GET DEPLOY WEBSITE FORM DATA
+    **  SHOW SUMMARY OF CONTENT CHANGES TO BE DEPLOYED
     */
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
@@ -587,7 +587,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_update_count:=l_update_count+1;
                 l_article:=l_article || 
                 '<tr>' ||
-                    '<td>Favicon (all pages)</td>' || 
+                    '<td>Favicon</td>' || 
                     '<td>' || apex_util.get_since(C.favicon_updated_date, false) || '</td>' ||
                     '<td>OK</td>' ||
                 '</tr>';
@@ -596,7 +596,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 l_update_count:=l_update_count+1;
                 l_article:=l_article || 
                 '<tr>' ||
-                    '<td>Logo (all pages)</td>' || 
+                    '<td>Logo</td>' || 
                     '<td>' || apex_util.get_since(C.logo_updated_date, false) || '</td>' ||
                     '<td>OK</td>' ||
                 '</tr>';
@@ -697,6 +697,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             
         END LOOP;
 
+        /* Summarise font changes */
+        n:=0;
         FOR C IN (
             SELECT wf.context, wf.updated_date, f.family
               FROM website_font wf, font f
@@ -705,9 +707,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
             ORDER BY wf.context
         ) LOOP
             IF (C.updated_date>l_netlify_last_published) THEN
+                n:=n+1;
                 l_update_count:=l_update_count+1;
                 l_article:=l_article || 
-                '<tr><td>ALL PAGES - ' || C.context || ' font changed to ' || C.family || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+                '<tr><td>' || INITCAP(C.context) || ' font changed to ' || C.family || '</td><td>' || apex_util.get_since(C.updated_date,false) || '</td><td>OK</td></tr>';
             ELSE
                 FOR C1 IN (
                     SELECT fav.axis, fav.value, NVL(fav.updated_date,l_netlify_last_published) updated_date
@@ -716,6 +719,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                        AND fav.context=C.context
                 ) LOOP
                     IF (C1.updated_date>l_netlify_last_published) THEN
+                        n:=n+1;
                         l_update_count:=l_update_count+1;
                         l_article:=l_article || 
                         '<tr><td>' || C.context || ' font ' || C1.axis || ' changed to ' || C1.value || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
