@@ -167,6 +167,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pck_core.log('releaseDeployment status:'||l_lock_status);
     END;
 
+    /*
+    **  DEPLOY EDITOR SITE. BUILD OPTIMIZED FONT AND CSS FILES
+    */
     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type) IS
         l_logo_deploy_hash website.logo_deployed_hash%type;
     BEGIN
@@ -176,7 +179,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
               FROM website
              WHERE id=pWebsiteid
         ) LOOP
-            /* Force deployment of html files when logo has materially changed */
+            /* Force deployment of all html files when logo has materially changed */
             l_logo_deploy_hash:=dbms_crypto.hash(src => C.logo, typ => dbms_crypto.hash_sh1);
             IF (l_logo_deploy_hash <> C.logo_deployed_hash) THEN
                 DELETE website_files WHERE website_id=pWebsiteid AND mime_type='html';
@@ -890,10 +893,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content_b:=pFileContent;
             l_files.put(pFilename, l_sha1);
-            -- IF (pEsmLibrary='test') THEN
-            --     l_deploy_files(l_sha1).md5:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_md5));
-            --     l_deploy_files(l_sha1).content_length:=dbms_lob.getlength(pFileContent);
-            -- END IF;
         END;
 
         /* 
