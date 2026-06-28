@@ -78,7 +78,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 pck_deploy.buildContentDialog ||
             '</body>';
 
-            -- pck_fonts.getFontFiles(pWebsiteid, pArticleid);
             pck_css.buildEditorCSS(pWebsiteid);
 
             FOR C1 IN (
