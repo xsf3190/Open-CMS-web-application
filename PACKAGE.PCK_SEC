@@ -69,7 +69,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
             '<table>' ||
                 '<caption id="table-caption">Platform CPU Usage for current month</caption>' ||
-                '<tr><th>Domain Name</th><th>Last Activity</th><th class="align-right">Usage</th><th>Download Site</th><th>Fonts</th></tr>';
+                '<tr><th>Domain Name</th><th>Last Activity</th><th class="align-right">Usage</th><th>Download Site</th></tr>';
 
         FOR C IN (
             WITH cpu AS
@@ -91,10 +91,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<td>' || apex_util.get_since(C.last_activity, false) || '</td>' || 
                     '<td class="align-right">' || NVL(C.cpu_used_pct,0) || '%</td>' || 
                     '<td>' || 
-                        '<a href="' || pck_core.getRestURL() || 'download-website/' || C.id || '" download>' || SUBSTR(C.domain_name,1,INSTR(C.domain_name,'.')-1) || '.zip</a>' ||
-                    '</td>' || 
-                    '<td>' || 
-                        '<a href="' || pck_core.getRestURL() || 'download-website-fonts/' || C.id || '" download>fonts.zip</a>' ||
+                        '<a href="' || pck_core.getRestURL() || 'download-website/' || C.id || '" download>' || SUBSTR(C.domain_name,1,GREATEST(INSTR(C.domain_name,'.')-1,LENGTH(C.domain_name))) || '.zip</a>' ||
                     '</td>' || 
                 '</tr>';
             END IF;
