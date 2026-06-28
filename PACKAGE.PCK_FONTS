@@ -7,7 +7,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_FONTS" as
     --
    PROCEDURE getFontDatalist(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus IN OUT NUMBER);
     --
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pArticleid IN article.id%type DEFAULT null);
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type);
     --
     PROCEDURE getFonts(pWebsiteId IN website.id%type, pStatus IN OUT NUMBER);
     --
@@ -125,7 +125,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     /*
      *  DOWNLOAD OPTIMIZED @font-face RULES FROM GOOGLE
     */
-    PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2, pArticleid IN NUMBER DEFAULT null) IS
+    PROCEDURE downloadFontface(pWebsiteid IN website.id%type, pContext IN VARCHAR2, pText IN VARCHAR2, pStyles IN VARCHAR2) IS
         l_api_url VARCHAR2(500);
         l_api_axes VARCHAR2(100);
         l_api_values VARCHAR2(100);
@@ -227,13 +227,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         -- pck_core.log(l_api_url);
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
 
-        /* E.g. called for Codepen */
-        IF (pArticleid IS NOT NULL) THEN
-            INSERT INTO website_fontfiles_temp(fontface) 
-            VALUES (l_fontface);
-            RETURN;
-        END IF;
-
         /*
         **  DOWNLOAD FONT FILES FROM GOOGLE INTO TEMPORARY TABLE. 
         **  WILL BE SELF-HOSTED LATER IN DEPLOYMENT
@@ -258,11 +251,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     /* 
-    **  BUILD OPTIMIZED FONT FILES FOR EACH FONT USED IN A LIVE WEBSITE
-    **  NB. 1) EDITOR SITES LINK TO FULL LANGUAGE FONTS DIRECTLY FROM GOOGLE
-    **      2) PARAMETER "pArticleid" FOR A SINGLE ARTICLE
+    **  BUILD OPTIMIZED FONT FILES FOR EACH FONT USED IN A WEBSITE
     */
-    PROCEDURE getFontFiles(pWebsiteId IN website.id%type, pArticleid IN article.id%type DEFAULT null) IS
+    PROCEDURE getFontFiles(pWebsiteId IN website.id%type) IS
         TYPE tt_chars_used IS RECORD (
             normal article_chars.chars_normal%type,
             italic article_chars.chars_italic%type,
@@ -285,7 +276,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
              WHERE wa.website_id=pWebsiteId
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND ac.article_id=a.id
-               AND a.id=NVL(pArticleid,a.id)
         ) LOOP
             l_chars_used(C.context).bold_italic:=distinct_chars(l_chars_used(C.context).bold_italic || C.chars_bold_italic);
             l_chars_used(C.context).bold_normal:=distinct_chars(l_chars_used(C.context).bold_normal || C.chars_bold_normal);
@@ -309,27 +299,29 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
         l_context:=l_chars_used.FIRST;
         WHILE l_context IS NOT NULL LOOP
-            INSERT INTO website_chars (
-                website_id, context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic
-            )
-            VALUES (
-                pWebsiteid, l_context, l_chars_used(l_context).normal, l_chars_used(l_context).italic, l_chars_used(l_context).bold_normal, l_chars_used(l_context).bold_italic
-            );
+            IF (COALESCE(l_chars_used(l_context).normal, l_chars_used(l_context).italic, l_chars_used(l_context).bold_normal, l_chars_used(l_context).bold_italic) IS NOT NULL) THEN
+                INSERT INTO website_chars (
+                    website_id, context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic
+                )
+                VALUES (
+                    pWebsiteid, l_context, l_chars_used(l_context).normal, l_chars_used(l_context).italic, l_chars_used(l_context).bold_normal, l_chars_used(l_context).bold_italic
+                );
+            END IF;
 
             IF (l_chars_used(l_context).normal IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).normal, 'normal', pArticleid);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).normal, 'normal');
             END IF;
 
             IF (l_chars_used(l_context).italic IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).italic, 'italic', pArticleid);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).italic, 'italic');
             END IF;
 
             IF (l_chars_used(l_context).bold_normal IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_normal, 'bold', pArticleid);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_normal, 'bold');
             END IF;
             
             IF (l_chars_used(l_context).bold_italic IS NOT NULL) THEN
-                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_italic, 'bold.italic', pArticleid);
+                downloadFontface(pWebsiteid, l_context, l_chars_used(l_context).bold_italic, 'bold.italic');
             END IF;
             
             l_context:=l_chars_used.NEXT(l_context);
@@ -722,12 +714,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                     getFontSample(pWebsiteid) ||
                 '</div>' ||
             '</div>' ||
-            '</div>';
+            '<hr>' ||
+            '<p>&#9432; DOWNLOAD creates zip file of optimized site fonts</p>';
             
         END LOOP;
 
         l_footer:=
         '<div class="flex-items">' ||
+            '<a class="button" href="' || pck_core.getRestURL() || 'download-website-fonts/' || pWebsiteid || '" download>DOWNLOAD</a>' ||
             '<button type="button" class="button publish" data-processing="Publishing editor site, wait a few seconds...">' || 'PUBLISH' || '</button>' ||
             '<span aria-live="polite"></span>' ||
             '<span class="loader icon"></span>' ||
@@ -769,6 +763,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         l_api_url:='https://fonts.googleapis.com/css2?family=' || 
                 pFamily || ':' || 
                 pApiurl || 
+                '&display=swap' ||
                 '&text=' || l_characters;
             
         pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
