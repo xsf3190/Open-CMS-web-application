@@ -381,7 +381,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
                 WHEN netlify_last_published IS NOT NULL THEN
                     'https://' || REPLACE(w.domain_name,'.','-') || '.netlify.app'
                END,
-               SUBSTR(w.domain_name,1,INSTR(w.domain_name,'.')-1) || '.zip', 
+               SUBSTR(w.domain_name,1,GREATEST(INSTR(w.domain_name,'.')-1,LENGTH(w.domain_name))) || '.zip', 
                u.id 
           INTO l_url, l_zip_filename, l_user_id
           FROM website w, users u
@@ -429,7 +429,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
             pck_core.log_error(pStatus);
     END;
 
-        /*
+    /*
     ** DOWNLOAD WEBSITE ASSETS IN RESPONSE TO ANCHOR <a href="">
     */
     PROCEDURE downloadWebsiteFonts(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER) IS
@@ -438,10 +438,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         l_file BLOB;
         l_start_time NUMBER;
         l_user_id users.id%type;
+        l_css CLOB;
+        l_font_variation_settings LONG;
     BEGIN
         l_start_time:=dbms_utility.get_cpu_time();
 
-        SELECT SUBSTR(w.domain_name,1,INSTR(w.domain_name,'.')-1) || '.fonts.zip', 
+        SELECT SUBSTR(w.domain_name,1,GREATEST(INSTR(w.domain_name,'.')-1,LENGTH(w.domain_name))) || '.fonts.zip', 
                u.id 
           INTO l_zip_filename, l_user_id
           FROM website w, users u
@@ -450,15 +452,74 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
 
         /* Populate temporary tables with optimized font files */
         pck_fonts.getFontFiles(pWebsiteid);
+
         FOR C IN (
-            SELECT path, content
+            SELECT path, fontface, content
               FROM website_fontfiles_temp
         ) LOOP
             apex_zip.add_file(
                 p_zipped_blob => l_zip,
                 p_file_name   => C.path,
                 p_content     => C.content);
+
+            l_css:=l_css || C.fontface || chr(10);
         END LOOP;
+
+        l_css:=l_css ||
+        ':root {' || chr(10);
+
+        FOR C IN (
+            SELECT wf.context, f.family
+              FROM font f, website_font wf
+             WHERE f.id=wf.font_id
+               AND wf.website_id=pWebsiteId
+             ORDER BY DECODE(wf.context,'logo',1,'headings',2,'text',3)
+        ) LOOP
+            l_css:=l_css || 
+            '  --' || C.context || '-font-family:"' || C.family || '",system-ui;' || chr(10);
+        END LOOP;
+
+        FOR C IN (
+            SELECT wf.context, fav.axis, fav.value
+              FROM website_font wf, font_axes_value fav
+             WHERE wf.website_id=pWebsiteid
+               AND fav.website_id=wf.website_id
+               AND fav.context=wf.context
+               AND fav.axis IN ('wght','wght-bold','wdth','opsz','slnt')
+             ORDER BY DECODE(context,'logo',1,'headings',2,'text',3,'code',4), axis
+        ) LOOP
+            l_css:=l_css || '  ' || pck_css.writeToken(C.context, C.axis, C.value) || chr(10);
+        END LOOP;
+
+        l_css:=l_css || 
+        '}' || chr(10) ||
+        'body {' || chr(10) ||
+        '  font-family: var(--text-font-family);' || chr(10) ||
+        '  font-weight: var(--text-font-wght);' || chr(10) ||
+        '  font-stretch: var(--text-font-wdth);' || chr(10) ||
+        '  strong {' || chr(10) ||
+        '    font-weight: var(--text-font-wght-bold);' || chr(10) ||
+        '  }' || chr(10) ||
+        '  i {' || chr(10) ||
+        '    font-style: var(--text-font-slnt);' || chr(10) ||
+        '  }' || chr(10) ||
+        '}' || chr(10) ||
+        ':where(h1,h2,h3,h4) {' || chr(10) ||
+        '  font-family: var(--headings-font-family);' || chr(10) ||
+        '  font-weight: var(--headings-font-wght);' || chr(10) ||
+        '  font-stretch: var(--headings-font-wdth);' || chr(10) ||
+        '  strong {' || chr(10) ||
+        '    font-weight: var(--headings-font-wght-bold);' || chr(10) ||
+        '  }' || chr(10) ||
+        '  i {' || chr(10) ||
+        '    font-style: var(--headings-font-slnt);' || chr(10) ||
+        '  } ' || chr(10) ||
+        '}';
+
+        apex_zip.add_file(
+                p_zipped_blob => l_zip,
+                p_file_name   => 'styles.css',
+                p_content     => apex_util.clob_to_blob(l_css));
 
         apex_zip.finish(p_zipped_blob => l_zip);
 
