@@ -27,7 +27,7 @@ export const clickHandler = async (e) => {
 };
 
 export const init = () => {
-    callAPI("upload-media/:ID/:PAGE","GET","?request=image")
+    callAPI("upload-media/:ID/:PAGE","GET")
         .then((data) => {
             initDialog(data);
         })
