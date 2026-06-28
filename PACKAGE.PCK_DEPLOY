@@ -168,7 +168,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
     END;
 
     /*
-    **  DEPLOY EDITOR SITE. BUILD OPTIMIZED FONT AND CSS FILES
+    **  DEPLOY EDITOR SITE. 
     */
     PROCEDURE deployEditorSite(pWebsiteid IN website.id%type) IS
         l_logo_deploy_hash website.logo_deployed_hash%type;
@@ -184,6 +184,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             IF (l_logo_deploy_hash <> C.logo_deployed_hash) THEN
                 DELETE website_files WHERE website_id=pWebsiteid AND mime_type='html';
             END IF;
+            -- pck_fonts.getFontFiles(pWebsiteid);
             pck_css.buildEditorCSS(pWebsiteid);
             pck_deploy.runDeployment(pWebsiteid, C.netlify_site_id, pck_core.getRestURL);
             pck_deploy.runDelete(null,pWebsiteid,C.netlify_site_id);
@@ -873,7 +874,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY CLOB, pSha1 IN VARCHAR2 DEFAULT NULL) IS
             l_sha1 website_files.sha1%type;
         BEGIN
-            -- dbms_output.put_line('new version : '||pFilename);
             l_sha1:=NVL(pSha1,LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1)));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content:=pFileContent;
@@ -885,11 +885,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END;
 
         /* BLOB SIGNATURE */
-        PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY BLOB) IS
+        PROCEDURE addDeploy(pFilename IN VARCHAR2, pFileContent IN OUT NOCOPY BLOB, pSha1 IN VARCHAR2 DEFAULT NULL) IS
             l_sha1 website_files.sha1%type;
         BEGIN
-            -- dbms_output.put_line('new version: '||pFilename);
-            l_sha1:=LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1));
+            l_sha1:=NVL(pSha1,LOWER(dbms_crypto.hash(src => pFileContent, typ => dbms_crypto.hash_sh1)));
             l_deploy_files(l_sha1).file_name:=pFilename;
             l_deploy_files(l_sha1).file_content_b:=pFileContent;
             l_files.put(pFilename, l_sha1);
@@ -943,7 +942,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
 
     BEGIN
         /*
-        ** WEBSITE SHOULD ALWAYS HAVE ENTRIES IN TABLE WEBSITE_FILES FROM PREVIOUS DEPLOYMENT
+        ** WEBSITE WILL HAVE ENTRIES IN TABLE WEBSITE_FILES FROM PREVIOUS DEPLOYMENT
         **
         ** 1. submit all asset paths and their sha1 to hosting service
         ** 2. receive array of assets to upload - i.e new path or sha1
@@ -1159,7 +1158,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         END LOOP;
 
         /*
-        **  5. Build CSS files
+        **  5.1 Build CSS files
         */
         FOR C IN (
             SELECT s.path, s.sha1 source_sha1, s.content, wf.sha1 deployed_sha1
@@ -1173,6 +1172,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 addDeploy(pFilename=>C.path, pFileContent=>C.content, pSha1=>C.source_sha1);
             END IF;
         END LOOP;
+
+        /*
+        **  5.2 Build FONT files
+        */
+        /*
+        FOR C IN (
+            SELECT s.path, s.sha1 source_sha1, s.content, wf.sha1 deployed_sha1
+              FROM website_fontfiles_temp s, website_files wf
+             WHERE wf.website_id(+)=pWebsiteid
+               AND wf.path(+)=s.path
+        ) LOOP
+            IF (C.source_sha1=C.deployed_sha1) THEN
+                l_files.put(C.path, C.deployed_sha1);
+            ELSE
+                addDeploy(pFilename=>C.path, pFileContent=>C.content, pSha1=>C.source_sha1);
+            END IF;
+        END LOOP;
+        */
 
         /*
         **  6. BUILD _headers INCLUDING CONTENT SECURITY POLICY
