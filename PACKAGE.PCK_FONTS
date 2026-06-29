@@ -122,6 +122,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         RETURN (l_chars);
     END;
 
+    FUNCTION callGoogleAPI(pUrl IN VARCHAR2) RETURN CLOB
+    IS
+        l_clob CLOB; 
+    BEGIN
+        apex_web_service.clear_request_headers;
+        apex_web_service.g_request_headers(1).name := 'User-Agent';
+        apex_web_service.g_request_headers(1).value := 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
+
+        l_clob:=apex_web_service.make_rest_request(p_url=>pUrl, p_http_method=>'GET');
+
+        pck_core.log(apex_web_service.g_status_code || ' : GET - ' || pUrl);
+
+        IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
+            RETURN(l_clob);
+        END IF;
+
+        /* Google returns html document on error. 
+        ** Error details in <p></p> and <pre></pre> 
+        */
+
+        l_clob:=REPLACE(l_clob,chr(10));
+
+        RAISE_APPLICATION_ERROR(-20040,'Google Fonts API fail - ' || 
+            REGEXP_SUBSTR(l_clob, '<p>(.+?)</p>',1,2) || ':' || 
+            REGEXP_SUBSTR(l_clob, '<pre>(.+?)</pre>',1,1));
+    END;
+
     /*
      *  DOWNLOAD OPTIMIZED @font-face RULES FROM GOOGLE
     */
@@ -224,8 +251,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 l_axes2 || '@' || l_tuple ||
                 '&display=swap' || 
                 '&text=' || utl_url.escape(pText,TRUE,'UTF-8');
-        -- pck_core.log(l_api_url);
-        pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
+
+        -- pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontface);
+        l_fontface:=callGoogleAPI(pUrl=>l_api_url);
 
         /*
         **  DOWNLOAD FONT FILES FROM GOOGLE INTO TEMPORARY TABLE. 
@@ -749,7 +777,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     FUNCTION getFontfaces(pWebsiteid IN website.id%type, pFontid IN font.id%type, pFamily IN font.family%type, pApiurl IN VARCHAR2, pFontFamily IN VARCHAR2) RETURN JSON_ARRAY_T
     IS 
         l_fontfaces CLOB;
-        l_api_url VARCHAR2(1000);
+        l_api_url LONG;
         l_characters language.text%type;
         l_fontfaces_json JSON_ARRAY_T;
         l_fontface JSON_OBJECT_T;
@@ -766,7 +794,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 '&display=swap' ||
                 '&text=' || l_characters;
             
-        pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
+        -- pck_api.callGoogleAPI(pUrl=>l_api_url, pData=>l_fontfaces);
+        l_fontfaces:=callGoogleAPI(pUrl=>l_api_url);
 
         UPDATE website_font 
            SET editor_fontfaces=l_fontfaces 
