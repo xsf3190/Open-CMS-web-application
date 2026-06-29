@@ -42,7 +42,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
         l_capabilities VARCHAR2(200);
         
     BEGIN
-        pck_api.callGoogleAPI('https://www.googleapis.com/webfonts/v1/webfonts?capability=WOFF2&capability=VF',pData=>l_clob);
+        pck_api.callGoogleAPI(pData=>l_clob);
 
         /*
         ** ONLY PROCEED IF ANY CHANGE SINCE LAST UPLOAD
@@ -281,9 +281,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_GOOGLE" as
     */
     PROCEDURE loadGoogleFontMetadata IS 
         l_clob CLOB;
-        l_nb_fonts PLS_INTEGER;
     BEGIN
-        pck_api.callGoogleAPI('https://fonts.google.com/metadata/fonts',pData=>l_clob);
+        apex_web_service.clear_request_headers;
+        apex_web_service.g_request_headers(1).name := 'User-Agent';
+        apex_web_service.g_request_headers(1).value := 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
+
+        l_clob:=apex_web_service.make_rest_request(p_url=>'https://fonts.google.com/metadata/fonts', p_http_method=>'GET');
 
         DELETE font_metadata;
         
