@@ -84,6 +84,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
     **  USER CLICKS "CREATE WEBSITE" BUTTON
     **  1. Get first unassigned pre-deployed editor website
     **  2. Send email to requestor with link to website
+    **  3. Run background job to create a new unassigned editor website
     */
     PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER) IS
         l_user_id users.id%type;
@@ -96,11 +97,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         l_new_token VARCHAR2 (4000);
         l_new_refresh VARCHAR2 (4000);
         l_new_refresh_hash refresh_token.token_issued%type;
-
+        l_job_name VARCHAR2(30);
         l_url VARCHAR2(4000);
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
+        /* Validate request */
+        /* Only 1 editor website per email unless pEmail is owner of at least 1 domain linked site */
+
+        SELECT COUNT(*) INTO n FROM website WHERE contact_email=pEmail;
+
         FOR C IN (
             SELECT id, domain_name FROM website WHERE contact_email IS NULL ORDER BY id FETCH FIRST ROW ONLY
         ) LOOP
@@ -171,8 +177,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('message','Sent email with link to your starter website');
+        l_json.put('message','Sent email with link to your website');
         apex_util.prn(l_json.to_clob,false);
+
+        /* Submit job to create a new unassigned editor website */
+        l_job_name:=dbms_scheduler.generate_job_name('CREATE_WEBSITE_');
+        dbms_scheduler.create_job(
+            job_name   => l_job_name,
+            job_type   =>'STORED_PROCEDURE',
+            job_action =>'pck_hosting.createEditorWebsite',
+            number_of_arguments=>1,
+            start_date=>systimestamp
+        );
+        dbms_scheduler.set_job_argument_value(
+            job_name => l_job_name,
+            argument_position => 1,
+            argument_value => pWebsiteid
+        );
+        dbms_scheduler.enable(l_job_name);
     END;
 end;
 /
