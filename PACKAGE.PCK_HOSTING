@@ -117,7 +117,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     END;
 
     /* 
-    ** CREATE NEW UNASSIGNED EDITOR WEBSITE
+    ** CREATE NEW UNASSIGNED EDITOR WEBSITE - I.E CONTACT_EMAIL IS NULL
     */
     PROCEDURE createEditorWebsite(pTemplateWebsiteid IN website.id%type) IS
         l_clob CLOB;
