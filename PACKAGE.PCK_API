@@ -4,8 +4,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_API" IS
     --
     FUNCTION getCloudinaryAPISecret(pUserId IN users.id%type) RETURN users.cld_api_secret%type;
     --
-    PROCEDURE getCloudinaryData(pUserId IN users.id%type, pCloudName IN OUT users.cld_cloud_name%type, pCldApiKey IN OUT users.cld_api_key%type, pCldImageMaxSize IN OUT INTEGER, pCldVideoMaxSize IN OUT INTEGER, pGoogleApiKey IN OUT VARCHAR2);
-    --
     PROCEDURE callAWSemailAPI(pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB);
     --
     PROCEDURE callBrowserAPI(pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB);
@@ -14,13 +12,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_API" IS
     --
     PROCEDURE callCloudinaryAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
     --
-    PROCEDURE callGodaddyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB);
-    --
-    PROCEDURE callGoogleAPI(pUrl IN VARCHAR2, pData IN OUT NOCOPY CLOB);
+    PROCEDURE callGoogleAPI(pData IN OUT NOCOPY CLOB);
     --
     PROCEDURE callIpdataAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB);
-    --
-    PROCEDURE callMinifyCss(pFileContent IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB);
     --
     PROCEDURE callNetlifyAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
     --
@@ -44,37 +38,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
 
     IPDATA_APIKEY users.ipdata_api_key%type;
     
-    WHATISMYBROWSER_APIKEY users.whatismybrowser_api_key%type;
+    WHATISMYBROWSER_APIKEY api_credential.key%type;
+    WHATISMYBROWSER_URL api_credential.url%type;
 
     /*
     **  DOGFACE API CALLS
     */
     FUNCTION getDogfaceAPIToken(pUserid IN users.id%type) RETURN VARCHAR2 IS
-        l_dogface_api_key users.dogface_api_key%type;
-        l_dogface_api_secret users.dogface_api_secret%type;
+        l_dogface_api_key api_credential.key%type;
+        l_dogface_api_secret api_credential.secret%type;
         l_parm_names   apex_application_global.VC_ARR2; 
         l_parm_values  apex_application_global.VC_ARR2;
         l_url VARCHAR2(200);
         l_return CLOB;
         l_access_token VARCHAR2(2000);
     BEGIN
-        FOR C IN (
-            SELECT u.dogface_api_key, u.dogface_api_secret
-              FROM users u
-             WHERE id=pUserid
-        ) LOOP
-            l_dogface_api_key:=C.dogface_api_key;
-            l_dogface_api_secret:=C.dogface_api_secret;
-        END LOOP;
-        IF (l_dogface_api_key IS NULL) THEN
-            SELECT u.dogface_api_key, u.dogface_api_secret
-              INTO l_dogface_api_key, l_dogface_api_secret
-              FROM users u, apex_workspace_apex_users w
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-             ORDER BY date_created
-             FETCH FIRST ROW ONLY;
-        END IF;
+        SELECT url, key, secret
+          INTO l_url, l_dogface_api_key, l_dogface_api_secret
+          FROM api_credential
+         WHERE name='DOGFACE';
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name  := 'Content-Type';
@@ -88,7 +70,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
         l_parm_values(3):=l_dogface_api_secret;
 
         /* GET JWT TOKEN */
-        l_url:='https://b15.florentmeijer.com/login/protocol/openid-connect/token';
         l_return:=apex_web_service.make_rest_request(p_url=>l_url, p_http_method=>'POST', p_parm_name=>l_parm_names, p_parm_value=>l_parm_values);
 
         IF NOT (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
@@ -157,25 +138,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     **  WHATISMYBROWSER API
     */
     PROCEDURE callBrowserAPI(pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB) IS
-        l_whatismybrowser_url VARCHAR2(100):='https://api.whatismybrowser.com/api/v3/detect';
         l_error_message LONG;
     BEGIN
-        /* Get Admin user's terraform aws gateway url and api key */
         IF (WHATISMYBROWSER_APIKEY IS NULL) THEN
-            SELECT u.whatismybrowser_api_key
-              INTO WHATISMYBROWSER_APIKEY
-              FROM users u, apex_workspace_apex_users w
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-             ORDER BY date_created
-             FETCH FIRST ROW ONLY;
+            SELECT url, key
+              INTO WHATISMYBROWSER_URL, WHATISMYBROWSER_APIKEY
+              FROM api_credential
+             WHERE name='WHATISMYBROWSER';
         END IF;
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'x-api-key';
         apex_web_service.g_request_headers(1).value := WHATISMYBROWSER_APIKEY;
 
-        pData := apex_web_service.make_rest_request(p_url=>l_whatismybrowser_url, p_http_method=>'POST', p_body=>pBody);
+        pData := apex_web_service.make_rest_request(p_url=>WHATISMYBROWSER_URL, p_http_method=>'POST', p_body=>pBody);
 
         --pck_core.log(apex_web_service.g_status_code || ' : POST - ' || l_whatismybrowser_url);
 
@@ -193,15 +169,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     **  STRIPE API
     */
     PROCEDURE callStripeAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pParmNames IN apex_application_global.vc_arr2, pParmValues IN apex_application_global.vc_arr2, pData IN OUT NOCOPY CLOB) IS
-        l_stripe_secret_key_test users.stripe_secret_key_test%type;
-        l_stripe_url VARCHAR2(100):='https://api.stripe.com/v1/';
+        l_stripe_secret_key_test api_credential.key%type;
+        l_stripe_url api_credential.url%type;
         l_error_message LONG;
     BEGIN
-        /* Get Admin user's terraform aws gateway url and api key */
-        SELECT stripe_secret_key_test
-          INTO l_stripe_secret_key_test
-          FROM users
-         WHERE id=pUserId;
+        SELECT url, key
+          INTO l_stripe_url, l_stripe_secret_key_test
+          FROM api_credential
+         WHERE name='STRIPE_SECRET';
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'Authorization';
@@ -220,26 +195,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     **  AWS SES API
     */
     PROCEDURE callAWSemailAPI(pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB) IS
-        l_terraform_aws_gateway_url users.terraform_aws_gateway_url%type;
-        l_terraform_api_key users.terraform_api_key%type;
+        l_url api_credential.url%type;
+        l_key api_credential.key%type;
     BEGIN
-        /* Get Admin user's terraform aws gateway url and api key */
-        SELECT u.terraform_aws_gateway_url, u.terraform_api_key 
-          INTO l_terraform_aws_gateway_url, l_terraform_api_key
-          FROM users u, apex_workspace_apex_users w
-         WHERE w.email=u.email
-           AND w.is_admin='Yes'
-         ORDER BY date_created
-         FETCH FIRST ROW ONLY;
+        SELECT url, key
+          INTO l_url, l_key
+          FROM api_credential
+         WHERE name='AWSEMAIL';
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'x-api-key';
-        --apex_web_service.g_request_headers(1).value := l_terraform_api_key;
-        apex_web_service.g_request_headers(1).value := '27svfB8H3c0cKYYWVC4Y3quRSVPo6dH5tNq0wEt4';
+        apex_web_service.g_request_headers(1).value := l_key;
 
-        pData := apex_web_service.make_rest_request(p_url=>l_terraform_aws_gateway_url, p_http_method=>pMethod, p_body=>pBody);
+        pData := apex_web_service.make_rest_request(p_url=>l_url, p_http_method=>pMethod, p_body=>pBody);
 
-        pck_core.log(apex_web_service.g_status_code || ' : ' || pMethod || ' - ' || l_terraform_aws_gateway_url);
+        pck_core.log(apex_web_service.g_status_code || ' : ' || pMethod || ' - ' || l_url);
 
         IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
             RETURN;
@@ -248,40 +218,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
         FOR C IN (SELECT error FROM JSON_TABLE(pData,'$' COLUMNS (error))) LOOP
             pck_core.log(C.error);
         END LOOP;
-    END;
-
-    PROCEDURE getCloudinaryData(pUserId IN users.id%type, pCloudName IN OUT users.cld_cloud_name%type, pCldApiKey IN OUT users.cld_api_key%type, pCldImageMaxSize IN OUT INTEGER, pCldVideoMaxSize IN OUT INTEGER, pGoogleApiKey IN OUT VARCHAR2) IS
-        l_cld_cloud_name users.cld_cloud_name%type;
-        l_cld_api_key users.cld_api_key%type;
-        l_google_api_key users.google_api_key%type;
-
-        /* Free Plan limits - we would have to use admin usage API to support higher limits on paid plans */
-        DEFAULT_IMAGE_MAX_SIZE CONSTANT NUMBER:=10*1024*1024; 
-        DEFAULT_VIDEO_MAX_SIZE CONSTANT NUMBER:=100*1024*1024;
-    BEGIN
-        /* Get user's Cloud name and API Key */
-        FOR C IN (SELECT cld_cloud_name, cld_api_key, google_api_key FROM users WHERE id=pUserId) LOOP 
-            l_cld_cloud_name:=C.cld_cloud_name;
-            l_cld_api_key:=C.cld_api_key;
-            l_google_api_key:=C.google_api_key;
-        END LOOP;
-
-        /* Get Administrator values if user not registered with Cloudinary */
-        IF (l_cld_cloud_name IS NULL) THEN
-            SELECT u.cld_cloud_name, u.cld_api_key, u.google_api_key
-              INTO l_cld_cloud_name, l_cld_api_key, l_google_api_key
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
-        END IF;
-
-        pCloudName:=l_cld_cloud_name;
-        pCldApiKey:=l_cld_api_key;
-        pCldImageMaxSize:=DEFAULT_IMAGE_MAX_SIZE;
-        pCldVideoMaxSize:=DEFAULT_VIDEO_MAX_SIZE;
-        pGoogleApiKey:=l_google_api_key;
-
     END;
 
     FUNCTION getCloudinaryAPISecret(pUserId IN users.id%type) RETURN users.cld_api_secret%type IS
@@ -303,38 +239,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
         END IF;
 
         RETURN (l_cld_api_secret);
-    END;
-
-    /*
-    ** MINIFY CSS FILE USING TOPTAL UTILITY API.
-    ** TODO: REPLACE WITH CSS LIGHTNING
-    */
-    PROCEDURE callMinifyCss(pFileContent IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB) IS
-        l_url VARCHAR2(200):='https://www.toptal.com/developers/cssminifier/api/raw';
-        l_clob clob;
-        l_parm_names   apex_application_global.VC_ARR2; 
-        l_parm_values  apex_application_global.VC_ARR2;
-        l_error_message LONG;
-    BEGIN
-        apex_web_service.clear_request_headers;
-        apex_web_service.g_request_headers(1).name  := 'Content-Type';
-        apex_web_service.g_request_headers(1).value := 'application/x-www-form-urlencoded';
-
-        l_parm_names(1):='input';
-        l_parm_values(1):=pFileContent;
-
-        pData:=apex_web_service.make_rest_request(p_url=>l_url, p_http_method=>'POST', p_parm_name=>l_parm_names, p_parm_value=>l_parm_values);
-
-        pck_core.log(apex_web_service.g_status_code || ' : ' || 'GET' || ' - ' || l_url);
-
-        IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
-            RETURN;
-        END IF;
-
-        FOR C IN (SELECT status,title,detail FROM JSON_TABLE(pData,'$.errors[0]' COLUMNS (status,title,detail))) LOOP
-            l_error_message:='status: ' || C.status || ' title: ' || C.title || ' detail: ' || C.detail;
-        END LOOP;
-        RAISE_APPLICATION_ERROR(-20030,l_error_message);
     END;
 
     /*
@@ -533,31 +437,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     END;
 
     /*
-    **  GOOGLE API TO RETRIEVE FONT_FACE CSS RULES
+    **  GOOGLE API WHERE KEY REQUIRE - E.G. TO GET WEBFONTS JSON
     */
-    PROCEDURE callGoogleAPI(pUrl IN VARCHAR2, pData IN OUT NOCOPY CLOB)
+    PROCEDURE callGoogleAPI(pData IN OUT NOCOPY CLOB)
     IS
-        l_google_api_key users.google_api_key%type;
+        l_url api_credential.url%type;
+        l_key api_credential.key%type;
         l_error_part1 VARCHAR2(500);
         l_error_part2 VARCHAR2(500);
     BEGIN
-        /* Get user's Google api key if requesting webfonts list - e.g. in daily backup job */
-        IF (INSTR(pUrl,'webfonts')>0) THEN
-            SELECT u.google_api_key 
-              INTO l_google_api_key
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
-        END IF;
+        SELECT url, key
+          INTO l_url, l_key
+          FROM api_credential
+         WHERE name='GOOGLE';
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'User-Agent';
         apex_web_service.g_request_headers(1).value := 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
 
-        pData := apex_web_service.make_rest_request(p_url=>pUrl || CASE WHEN  l_google_api_key IS NOT NULL THEN '&key=' || l_google_api_key END, p_http_method=>'GET');
+        pData := apex_web_service.make_rest_request(p_url=>l_url || '&key=' || l_key, p_http_method=>'GET');
 
-        pck_core.log(apex_web_service.g_status_code || ' : GET - ' || pUrl);
+        pck_core.log(apex_web_service.g_status_code || ' : GET - ' || l_url);
 
         IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
             RETURN;
@@ -629,23 +529,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     **  TERRAFORM API
     */
     PROCEDURE callTerraformAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pData IN OUT NOCOPY CLOB) IS
-        l_terraform_token users.terraform_token%type;
-        l_terraform_url VARCHAR2(200):='https://app.terraform.io/';
+        l_terraform_token api_credential.url%type;
+        l_terraform_url api_credential.url%type;
         l_error_message LONG;
     BEGIN
-        /* Get Terraform details either from website owner or Administrator */
-        FOR C IN (SELECT terraform_token FROM users WHERE id=pUserId) LOOP
-            l_terraform_token:=C.terraform_token;
-        END LOOP;
-
-        IF (l_terraform_token IS NULL) THEN
-            SELECT u.terraform_token
-              INTO l_terraform_token
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               FETCH FIRST ROW ONLY;
-        END IF;
+        SELECT url, key 
+          INTO l_terraform_url, l_terraform_token
+          FROM api_credential
+         WHERE name='TERRAFORM';
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'Authorization';
@@ -668,46 +559,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
             END LOOP;
             RAISE_APPLICATION_ERROR(-20050,l_error_message);
         END IF;
-    END;
-
-    /*
-    **  GODADDY API
-    */
-    PROCEDURE callGodaddyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB)
-    IS
-        l_godaddy_url VARCHAR2(100):='https://api.godaddy.com/vi/';
-        l_godaddy_api_key users.godaddy_api_key%type;
-        l_godaddy_api_secret users.godaddy_api_secret%type;
-        l_error_message LONG;
-    BEGIN
-        SELECT u.godaddy_api_key, u.godaddy_api_secret
-          INTO l_godaddy_api_key, l_godaddy_api_secret
-          FROM apex_workspace_apex_users w, users u 
-         WHERE w.email=u.email
-           AND w.is_admin='Yes'
-         FETCH FIRST ROW ONLY;
-
-        apex_web_service.clear_request_headers;
-        apex_web_service.g_request_headers(1).name := 'Content-Type';
-        apex_web_service.g_request_headers(1).value := 'application/json';
-
-        l_godaddy_url:=l_godaddy_url || pEndpoint;
-
-        pData := apex_web_service.make_rest_request(p_url=>l_godaddy_url, p_http_method=>pMethod, p_username=>l_godaddy_api_key, p_password=>l_godaddy_api_secret,
-            p_parm_name=>apex_string.string_to_table('domain'),
-            p_parm_value=>apex_string.string_to_table('adfreesites.com'));
-
-        pck_core.log(apex_web_service.g_status_code || ' : ' || pMethod || ' - ' || l_godaddy_url);
-
-        IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
-            RETURN;
-        END IF;
-
-        l_error_message:=pMethod || ' ' || l_godaddy_url || ' https status:' || apex_web_service.g_status_code;
-        FOR C IN (SELECT message FROM JSON_TABLE(pData,'$.error' COLUMNS (message)) WHERE message IS NOT NULL) LOOP
-            l_error_message:=l_error_message || chr(10) || 'API message: ' || C.message;
-        END LOOP;
-        RAISE_APPLICATION_ERROR(-20040,l_error_message);
     END;
 
         /*
