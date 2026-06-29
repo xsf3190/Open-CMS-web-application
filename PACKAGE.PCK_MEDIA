@@ -8,13 +8,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_MEDIA" IS
     --
     FUNCTION getImageSrcset(pAssetId IN asset.id%type, pSizes IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2;
     --
-    FUNCTION getThumbnails(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pRequest IN VARCHAR2, pNbImages IN OUT NUMBER) RETURN CLOB;
-    --
     PROCEDURE getThumbnails(pArticleId IN article.id%type, pDeploy IN BOOLEAN DEFAULT FALSE, pHTML IN OUT NOCOPY CLOB);
     --
     PROCEDURE getCldSignature(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pParamsToSign IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE getCldDetails(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pRequest IN VARCHAR2, pStatus OUT NUMBER);
+    PROCEDURE getUploadedMedia(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE setImageBreakpoints(pAssetId IN asset.id%type);
     --
@@ -28,43 +26,111 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     gWidthThumbnail CONSTANT INTEGER:=360;
 
     /*
-    ** GET AUTHENTICATED USER'S CLOUDINARY DETAILS IN ORDER TO PREPARE UPLOAD WIDGET
+    ** GET TABLE OF UPLOADED MEDIA FOR USER TO COPY URL OR DELETE UNUSED MEDIA
     */
-    PROCEDURE getCldDetails(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pRequest IN VARCHAR2, pStatus OUT NUMBER) IS
+    PROCEDURE getUploadedMedia(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_cld_cloud_name users.cld_cloud_name%type;
-        l_cld_api_key users.cld_api_key%type;
-        l_cld_api_secret users.cld_api_secret%type;
-        l_image_max_size INTEGER;
-        l_video_max_size INTEGER;
-        l_google_api_key users.google_api_key%type;
-        l_thumbnails CLOB;
-        l_nb_images NUMBER;
-        l_heading VARCHAR2(50);
+        l_article CLOB;
+        l_src VARCHAR2(500);
+        l_data_url VARCHAR2(500);
+        l_file_name asset.public_id%type;
+        n PLS_INTEGER;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        IF (pRequest='details') THEN
-            pck_api.getCloudinaryData(pUserId=>l_session_data.user_id, pCloudName=>l_cld_cloud_name, pCldApiKey=>l_cld_api_key, pCldImageMaxSize=>l_image_max_size, pCldVideoMaxSize=>l_video_max_size, pGoogleApiKey=>l_google_api_key);
-            apex_json.open_object; 
-            apex_json.write('success', TRUE);
-            apex_json.write('cloudname', l_cld_cloud_name);
-            apex_json.write('apikey', l_cld_api_key);
-            apex_json.write('maxImageFileSize', l_image_max_size);
-            apex_json.write('maxVideoFileSize', l_video_max_size);
-            apex_json.write('googleApiKey', l_google_api_key);
-            apex_json.close_object;
-        ELSE
-            l_thumbnails:=pck_media.getThumbnails(pWebsiteId,pArticleId, pRequest, l_nb_images);
+        n:=0;
+        FOR C IN (
+            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, au.asset_id asset_used_id, w.domain_name, wa.navigation_label
+              FROM asset a, asset_used au, article ar, website_article wa, website w
+             WHERE a.article_id=pArticleId
+               AND au.asset_id=a.id
+               AND ar.id=au.article_id
+               AND wa.article_id=NVL(ar.parent_id,au.article_id)
+               AND w.id=wa.website_id
+               UNION ALL               
+            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, null, null, null
+              FROM asset a
+             WHERE a.article_id=pArticleId
+               AND NOT EXISTS (SELECT null FROM asset_used au WHERE au.asset_id=a.id)
+             ORDER BY asset_used_id, created_date  DESC )
+        LOOP
+            n:=n+1;
+            IF (n=1) THEN
+                l_article:=
+                '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
+                    '<table>' ||
+                        '<caption id="table-caption">Images and media files uploaded to this page</caption>' ||
+                        '<tr><th>Uploaded File</th><th>Where Used</th><th>Copy URL</th><th>Delete File</th></tr>';
+            END IF;
+            l_article:=l_article ||
+            '<tr><td><figure role="group" aria-labelledby="fig' || n || '">';
+            /* Get widest image if breakpoints - i.e. AVIF */
+            IF (C.format='avif') THEN
+                FOR C1 IN (
+                    SELECT breakpoint, ROW_NUMBER() OVER (ORDER BY breakpoint) rn, COUNT(*) OVER () nb  FROM (SELECT TO_NUMBER(column_value) AS breakpoint FROM TABLE(apex_string.split(C.breakpoints,','))) ORDER BY 1 DESC
+                    ) LOOP
+                    IF (C1.rn=1) THEN
+                        l_src:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
+                    END IF;
+                    IF (C1.rn=C1.nb) THEN
+                        l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
+                    END IF;
+                END LOOP;
+                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || '.' || C.format;
+                l_article:=l_article || 
+                '<img width="' ||  C.width|| '" height="' ||  C.height|| '" draggable="false" style="pointer-events:none" src="' || l_src || '" alt="">';
+            ELSIF (C.format='pdf') THEN
+                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || '.' || C.format;
+                l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/image/upload/' || C.public_id || '.pdf';
+                l_article:=l_article || 
+                '<svg width="576" height="512" viewBox="0 0 576 512"><path d="M208 48L96 48c-8.8 0-16 7.2-16 16l0 384c0 8.8 7.2 16 16 16l80 0 0 48-80 0c-35.3 0-64-28.7-64-64L32 64C32 28.7 60.7 0 96 0L229.5 0c17 0 33.3 6.7 45.3 18.7L397.3 141.3c12 12 18.7 28.3 18.7 45.3l0 149.5-48 0 0-128-88 0c-39.8 0-72-32.2-72-72l0-88zM348.1 160L256 67.9 256 136c0 13.3 10.7 24 24 24l68.1 0zM240 380l32 0c33.1 0 60 26.9 60 60s-26.9 60-60 60l-12 0 0 28c0 11-9 20-20 20s-20-9-20-20l0-128c0-11 9-20 20-20zm32 80c11 0 20-9 20-20s-9-20-20-20l-12 0 0 40 12 0zm96-80l32 0c28.7 0 52 23.3 52 52l0 64c0 28.7-23.3 52-52 52l-32 0c-11 0-20-9-20-20l0-128c0-11 9-20 20-20zm32 128c6.6 0 12-5.4 12-12l0-64c0-6.6-5.4-12-12-12l-12 0 0 88 12 0zm76-108c0-11 9-20 20-20l48 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 24 28 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 44c0 11-9 20-20 20s-20-9-20-20l0-128z"/></svg>';
+            ELSIF (C.resource_type='raw') THEN
+                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || SUBSTR(C.public_id,INSTR(C.public_id,'.',-1));
+                l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/raw/upload/' || C.public_id;
+                l_article:=l_article || 
+                '<svg width="384" height="512" viewBox="0 0 384 512"><path d="M64 48l112 0 0 88c0 39.8 32.2 72 72 72l88 0 0 240c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16L48 64c0-8.8 7.2-16 16-16zM224 67.9l92.1 92.1-68.1 0c-13.3 0-24-10.7-24-24l0-68.1zM64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-261.5c0-17-6.7-33.3-18.7-45.3L242.7 18.7C230.7 6.7 214.5 0 197.5 0L64 0zM80 104c0 13.3 10.7 24 24 24l16 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-16 0c-13.3 0-24 10.7-24 24zm0 80c0 13.3 10.7 24 24 24l32 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-32 0c-13.3 0-24 10.7-24 24zm64 56l-32 0c-17.7 0-32 14.3-32 32l0 48c0 26.5 21.5 48 48 48s48-21.5 48-48l0-48c0-17.7-14.3-32-32-32zm-16 64a16 16 0 1 1 0 32 16 16 0 1 1 0-32z"/></svg>';
+            ELSE
+                l_file_name:=C.public_id;
+                l_article:=l_article || 
+                '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">';
+            END IF;
+            l_article:=l_article || 
+                '<figcaption id="fig' || n || '">' || 
+                    '<span><strong>File name: </strong>' || l_file_name || '</span><br>' ||
+                    '<span><strong>Size: </strong>' || apex_string_util.to_display_filesize(C.bytes) || '</span><br>'||
+                    '<span><strong>Uploaded: </strong>' || TO_CHAR(C.created_date,'dd-Mon-yyyy hh24:mi') || '</span>'||
+                '</figcaption></figure></td>';
 
-            l_json:= new JSON_OBJECT_T;
-            l_json.put('success',true);
-            l_json.put('header', '<small>' || CASE WHEN l_nb_images=0 THEN 'Hint: Upload file or image first' ELSE 'Use this form to copy URL or delete unused files' END || '</small>');
-            l_json.put('article', l_thumbnails);
-            l_json.put('footer', '<small aria-live="polite" style="color:green">' || l_nb_images || ' image' || CASE WHEN l_nb_images>1 THEN 's' END || '</small>');
-            apex_util.prn(l_json.to_clob,false);
+            l_article:=l_article ||
+                '<td><small>' || CASE WHEN C.navigation_label IS NULL THEN 'UNUSED' ELSE C.domain_name || '/' || C.navigation_label END || '</small></td>';
+
+            l_article:=l_article ||
+                '<td><button type="button" class="button copy" data-url="' || l_data_url || '" data-file="' || l_file_name || '">COPY</button></td>';
+            
+            IF (C.asset_used_id IS NULL) THEN
+                l_article:=l_article ||
+                '<td><button type="button" class="button delete" data-id="' || C.id || '" data-file="' || l_file_name || '">DELETE</button></td>';
+            ELSE
+                l_article:=l_article ||
+                '<td style="text-align:center">IN USE</td>';
+            END IF;
+
+            l_article:=l_article ||
+            '</tr>';
+        END LOOP;
+        IF (n>0) THEN
+            l_article:=l_article || 
+                '</table>' ||
+            '</div>';
         END IF;
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header', '<h4>' || CASE WHEN n=0 THEN 'Hint: Upload media file first' ELSE 'Copy media URL or delete unused media' END || '</h4>');
+        l_json.put('article', l_article);
+        l_json.put('footer', '<small aria-live="polite" style="color:green">' || n || ' image' || CASE WHEN n>1 THEN 's' END || '</small>');
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
         
@@ -468,7 +534,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     END;
 
     /*
-     **  Build gallery of thumbnail images for a given article
+     **  INACTIVE METHOD CREATE IMAGE INDEX APPENDED TO PAGE W/ COLLECTION-TYPE='MEDIA'
      */
     PROCEDURE getThumbnails(pArticleId IN article.id%type, pDeploy IN BOOLEAN DEFAULT FALSE, pHTML IN OUT NOCOPY CLOB)
     IS
@@ -532,100 +598,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         END LOOP;
     END;
 
-    /*
-     **  Build list of thumbnail images for a given article
-     */
-    FUNCTION getThumbnails(pWebsiteid IN website.id%type, pArticleId IN article.id%type, pRequest IN VARCHAR2, pNbImages IN OUT NUMBER) RETURN CLOB
-    IS
-        l_clob CLOB;
-        l_src VARCHAR2(500);
-        l_data_url VARCHAR2(500);
-        l_file_name asset.public_id%type;
-        n PLS_INTEGER:=0;
-    BEGIN
-        /*
-        ** TABLE OF ASSETS UPLOADED TO PAGE WITH AVAILABLE COPY / DELETE OPTIONS.
-        ** ONLY UNUSED ASSETS CAN BE DELETED
-        */
-        FOR C IN (
-            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, au.asset_id asset_used_id, w.domain_name, wa.navigation_label
-              FROM asset a, asset_used au, article ar, website_article wa, website w
-             WHERE a.article_id=pArticleId
-               AND au.asset_id=a.id
-               AND ar.id=au.article_id
-               AND wa.article_id=NVL(ar.parent_id,au.article_id)
-               AND w.id=wa.website_id
-               UNION ALL               
-            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, null, null, null
-              FROM asset a
-             WHERE a.article_id=pArticleId
-               AND NOT EXISTS (SELECT null FROM asset_used au WHERE au.asset_id=a.id)
-             ORDER BY asset_used_id, created_date  DESC )
-        LOOP
-            n:=n+1;
-            IF (n=1) THEN
-                l_clob:=
-                '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
-                    '<table>' ||
-                        '<caption id="table-caption">Images and media files uploaded to this page</caption>' ||
-                        '<tr><th>Uploaded File</th><th>Where Used</th><th>Copy URL</th><th>Delete File</th></tr>';
-            END IF;
-            l_clob:=l_clob ||
-            '<tr><td><figure role="group" aria-labelledby="fig' || n || '">';
-            /* Get widest image if breakpoints - i.e. AVIF */
-            IF (C.format='avif') THEN
-                FOR C1 IN (
-                    SELECT breakpoint, ROW_NUMBER() OVER (ORDER BY breakpoint) rn, COUNT(*) OVER () nb  FROM (SELECT TO_NUMBER(column_value) AS breakpoint FROM TABLE(apex_string.split(C.breakpoints,','))) ORDER BY 1 DESC
-                    ) LOOP
-                    IF (C1.rn=1) THEN
-                        l_src:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
-                    END IF;
-                    IF (C1.rn=C1.nb) THEN
-                        l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
-                    END IF;
-                END LOOP;
-                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || '.' || C.format;
-                l_clob:=l_clob || 
-                '<img width="' ||  C.width|| '" height="' ||  C.height|| '" draggable="false" style="pointer-events:none" src="' || l_src || '" alt="">';
-            ELSIF (C.format='pdf') THEN
-                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || '.' || C.format;
-                l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/image/upload/' || C.public_id || '.pdf';
-                l_clob:=l_clob || 
-                '<svg width="576" height="512" viewBox="0 0 576 512"><path d="M208 48L96 48c-8.8 0-16 7.2-16 16l0 384c0 8.8 7.2 16 16 16l80 0 0 48-80 0c-35.3 0-64-28.7-64-64L32 64C32 28.7 60.7 0 96 0L229.5 0c17 0 33.3 6.7 45.3 18.7L397.3 141.3c12 12 18.7 28.3 18.7 45.3l0 149.5-48 0 0-128-88 0c-39.8 0-72-32.2-72-72l0-88zM348.1 160L256 67.9 256 136c0 13.3 10.7 24 24 24l68.1 0zM240 380l32 0c33.1 0 60 26.9 60 60s-26.9 60-60 60l-12 0 0 28c0 11-9 20-20 20s-20-9-20-20l0-128c0-11 9-20 20-20zm32 80c11 0 20-9 20-20s-9-20-20-20l-12 0 0 40 12 0zm96-80l32 0c28.7 0 52 23.3 52 52l0 64c0 28.7-23.3 52-52 52l-32 0c-11 0-20-9-20-20l0-128c0-11 9-20 20-20zm32 128c6.6 0 12-5.4 12-12l0-64c0-6.6-5.4-12-12-12l-12 0 0 88 12 0zm76-108c0-11 9-20 20-20l48 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 24 28 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 44c0 11-9 20-20 20s-20-9-20-20l0-128z"/></svg>';
-            ELSIF (C.resource_type='raw') THEN
-                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || SUBSTR(C.public_id,INSTR(C.public_id,'.',-1));
-                l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/raw/upload/' || C.public_id;
-                l_clob:=l_clob || 
-                '<svg width="384" height="512" viewBox="0 0 384 512"><path d="M64 48l112 0 0 88c0 39.8 32.2 72 72 72l88 0 0 240c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16L48 64c0-8.8 7.2-16 16-16zM224 67.9l92.1 92.1-68.1 0c-13.3 0-24-10.7-24-24l0-68.1zM64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-261.5c0-17-6.7-33.3-18.7-45.3L242.7 18.7C230.7 6.7 214.5 0 197.5 0L64 0zM80 104c0 13.3 10.7 24 24 24l16 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-16 0c-13.3 0-24 10.7-24 24zm0 80c0 13.3 10.7 24 24 24l32 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-32 0c-13.3 0-24 10.7-24 24zm64 56l-32 0c-17.7 0-32 14.3-32 32l0 48c0 26.5 21.5 48 48 48s48-21.5 48-48l0-48c0-17.7-14.3-32-32-32zm-16 64a16 16 0 1 1 0 32 16 16 0 1 1 0-32z"/></svg>';
-            ELSE
-                l_file_name:=C.public_id;
-                l_clob:=l_clob || 
-                '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">';
-            END IF;
-            l_clob:=l_clob || 
-                '<figcaption id="fig' || n || '">' || 
-                    '<span><strong>File name: </strong>' || l_file_name || '</span><br>' ||
-                    '<span><strong>Size: </strong>' || apex_string_util.to_display_filesize(C.bytes) || '</span><br>'||
-                    '<span><strong>Uploaded: </strong>' || TO_CHAR(C.created_date,'dd-Mon-yyyy hh24:mi') || '</span>'||
-                '</figcaption></figure></td>';
-
-            l_clob:=l_clob ||
-                '<td><small>' || CASE WHEN C.navigation_label IS NULL THEN 'UNUSED' ELSE C.domain_name || '/' || C.navigation_label END || '</small></td>';
-
-            l_clob:=l_clob ||
-                '<td><button type="button" class="button copy" data-url="' || l_data_url || '" data-file="' || l_file_name || '">COPY</button></td>';
-            
-            IF (C.asset_used_id IS NULL) THEN
-                l_clob:=l_clob ||
-                '<td><button type="button" class="button delete" data-id="' || C.id || '" data-file="' || l_file_name || '">DELETE</button></td>';
-            ELSE
-                l_clob:=l_clob ||
-                '<td style="text-align:center">IN USE</td>';
-            END IF;
-
-            l_clob:=l_clob ||
-            '</tr>';
-
+    
             
             /*
             IF (C.resource_type='image') THEN
@@ -647,19 +620,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 '</audio>';
             END IF;
                 */
-                
-        END LOOP;
-
-        IF (l_clob IS NOT NULL) THEN
-            l_clob:=l_clob || 
-                '</table>' ||
-            '</div>';
-        END IF;
-
-        pNbImages:=n;
-
-        RETURN (NVL(l_clob,'<p>No files have been uploaded to this page.</p>'));
-    END;
 
     /*
      **  Build gallery of thumbnail images for a given article
