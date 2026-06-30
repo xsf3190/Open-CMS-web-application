@@ -1,0 +1,30 @@
+.cta {
+    display: grid;
+    place-items: center;
+    fieldset {
+        display: flex;
+        flex-direction: column;
+        border-radius: 12px;
+        inline-size:fit-content;
+    }
+    input,
+    button,
+    textarea,
+    select {
+        font-family: var(--font-family-text);
+        font-size: var(--step--1);
+    }
+    input {
+        line-height: 1lh;
+        padding: 0.15em 0.25em;
+    }
+    button {
+        background-color: red;
+        color: white;
+        padding: 0.2em 0.5em;
+        border-radius: 12px;
+    }
+}
+
+'<fieldset class="flow flex-items" style="--flex-direction:column;inline-size:fit-content;border-radius:12px">' ||
+                
