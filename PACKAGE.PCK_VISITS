@@ -161,7 +161,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             l_location:=C1.location;
         END LOOP;
         IF (l_location IS NULL) THEN
-            pck_api.callIpdataAPI(null,OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'GET',l_clob);
+            pck_api.callIpdataAPI(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'GET',l_clob);
             FOR C2 IN (
                 SELECT city,country_code, NVL2(city,city || ',',null) || country_code AS location
                   FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code))
