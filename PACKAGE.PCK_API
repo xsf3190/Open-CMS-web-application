@@ -14,17 +14,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_API" IS
     --
     PROCEDURE callGoogleAPI(pData IN OUT NOCOPY CLOB);
     --
-    PROCEDURE callIpdataAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB);
+    PROCEDURE callIpdataAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB);
     --
-    PROCEDURE callNetlifyAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
+    PROCEDURE callNetlifyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB);
     --
-    PROCEDURE callNetlifyAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB);
+    PROCEDURE callNetlifyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB);
     --
-    PROCEDURE callNetlifyAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY BLOB, pData IN OUT NOCOPY CLOB);
+    PROCEDURE callNetlifyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY BLOB, pData IN OUT NOCOPY CLOB);
     --
-    PROCEDURE callStripeAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pParmNames IN apex_application_global.vc_arr2, pParmValues IN apex_application_global.vc_arr2, pData IN OUT NOCOPY CLOB);
+    PROCEDURE callStripeAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pParmNames IN apex_application_global.vc_arr2, pParmValues IN apex_application_global.vc_arr2, pData IN OUT NOCOPY CLOB);
     --
-    PROCEDURE callTerraformAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pData IN OUT NOCOPY CLOB);
+    PROCEDURE callTerraformAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pData IN OUT NOCOPY CLOB);
     --
 END;
 /
@@ -33,10 +33,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /* 
     ** GLOBAL PACKAGE VARIABLES INITIALIZED ON FIRST CALL
     */
-    NETLIFY_TOKEN users.netlify_token%type;
-    NETLIFY_ACCOUNT_SLUG users.netlify_account_slug%type;
+    NETLIFY_TOKEN api_credential.key%type;
+    NETLIFY_URL api_credential.url%type;
 
-    IPDATA_APIKEY users.ipdata_api_key%type;
+    IPDATA_APIKEY api_credential.key%type;
+    IPDATA_URL api_credential.url%type;
     
     WHATISMYBROWSER_APIKEY api_credential.key%type;
     WHATISMYBROWSER_URL api_credential.url%type;
@@ -168,7 +169,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /*
     **  STRIPE API
     */
-    PROCEDURE callStripeAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pParmNames IN apex_application_global.vc_arr2, pParmValues IN apex_application_global.vc_arr2, pData IN OUT NOCOPY CLOB) IS
+    PROCEDURE callStripeAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pParmNames IN apex_application_global.vc_arr2, pParmValues IN apex_application_global.vc_arr2, pData IN OUT NOCOPY CLOB) IS
         l_stripe_secret_key_test api_credential.key%type;
         l_stripe_url api_credential.url%type;
         l_error_message LONG;
@@ -244,34 +245,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /*
     **  NETLIFY API - handles CLOB, BLOB and VARCHAR2 requests
     */
-    PROCEDURE setNetlifyHeaders(pUserid IN users.id%type, pContentType IN VARCHAR2 DEFAULT NULL, pAccountSlug IN OUT users.netlify_account_slug%type) IS
-        l_netlify_token users.netlify_token%type;
-        l_netlify_account_slug users.netlify_account_slug%type;
+    PROCEDURE setNetlifyHeaders(pContentType IN VARCHAR2 DEFAULT NULL) IS
     BEGIN
         /*
-        ** GET USER'S (OR ADMIN'S) NETLIFY TOKEN AND ACCOUNT SLUG ONLY ONCE
+        ** GET NETLIFY API TOKEN AND URL
         */
         IF (NETLIFY_TOKEN IS NULL) THEN
-            /* Get user's netlify token */
-            FOR C IN (SELECT netlify_token, netlify_account_slug FROM users WHERE id=pUserId) LOOP 
-                l_netlify_token:=C.netlify_token;
-                l_netlify_account_slug:=C.netlify_account_slug;
-            END LOOP;
-
-            /* Use Administrator's token if user does not have token */
-            IF (l_netlify_token IS NULL) THEN
-                SELECT u.netlify_token, u.netlify_account_slug
-                  INTO l_netlify_token, l_netlify_account_slug
-                  FROM apex_workspace_apex_users w, users u 
-                 WHERE w.email=u.email
-                   AND w.is_admin='Yes'
-                   FETCH FIRST ROW ONLY;
-            END IF;
-            NETLIFY_TOKEN:=l_netlify_token;
-            NETLIFY_ACCOUNT_SLUG:=l_netlify_account_slug;
+            SELECT key, url
+              INTO NETLIFY_TOKEN, NETLIFY_URL
+              FROM api_credential
+             WHERE name='NETLIFY';
         END IF;
-
-        pAccountSlug:=NETLIFY_ACCOUNT_SLUG;
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'Authorization';
@@ -308,17 +292,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /*
     **  NETLIFY API - pBody is JSON, E.G. GET REQUEST FOR SITE ID, DEPLOYMENT STATUS ETC.
     */
-    PROCEDURE callNetlifyAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB) IS
-        l_netlify_account_slug users.netlify_account_slug%type;
-        l_netlify_url VARCHAR2(200):='https://api.netlify.com/api/v1/';
+    PROCEDURE callNetlifyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pStatusAllowed IN INTEGER DEFAULT NULL, pData IN OUT NOCOPY CLOB) IS
+        l_netlify_url VARCHAR2(200);
     BEGIN
-        setNetlifyHeaders(pUserId=>pUserId, pContentType=>CASE WHEN pBody IS NOT NULL THEN 'application/json' END, pAccountSlug=>l_netlify_account_slug);
+        setNetlifyHeaders(pContentType=>CASE WHEN pBody IS NOT NULL THEN 'application/json' END);
 
-        l_netlify_url:=l_netlify_url || pEndpoint;
-
-        IF (INSTR(l_netlify_url,'#SLUG#')>0) THEN
-            l_netlify_url:=REPLACE(l_netlify_url,'#SLUG#',l_netlify_account_slug);
-        END IF;
+        l_netlify_url:=NETLIFY_URL || pEndpoint;
 
         IF (pBody IS NULL) THEN
             pData := apex_web_service.make_rest_request(p_url=>l_netlify_url, p_http_method=>pMethod);
@@ -336,14 +315,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /*
     **  NETLIFY API - pBody is CLOB - E.G. UPLOAD CSS AND HTML FILES
     */
-    PROCEDURE callNetlifyAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB) IS
-        l_netlify_account_slug users.netlify_account_slug%type;
-        l_netlify_url VARCHAR2(200):='https://api.netlify.com/api/v1/';
+    PROCEDURE callNetlifyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY CLOB, pData IN OUT NOCOPY CLOB) IS
+        l_netlify_url VARCHAR2(200);
         l_error_message LONG;
     BEGIN
-        setNetlifyHeaders(pUserId=>pUserId, pContentType=>'application/octet-stream', pAccountSlug=>l_netlify_account_slug);
+        setNetlifyHeaders(pContentType=>'application/octet-stream');
 
-        l_netlify_url:=l_netlify_url || pEndpoint;
+        l_netlify_url:=NETLIFY_URL || pEndpoint;
 
         pData := apex_web_service.make_rest_request(p_url=>l_netlify_url, p_http_method=>pMethod, p_body=>pBody);
 
@@ -357,14 +335,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /*
     **  NETLIFY API - pBody is BLOB - E.G. UPLOAD FONT FILES
     */
-    PROCEDURE callNetlifyAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY BLOB, pData IN OUT NOCOPY CLOB) IS
-        l_netlify_account_slug users.netlify_account_slug%type;
-        l_netlify_url VARCHAR2(200):='https://api.netlify.com/api/v1/';
+    PROCEDURE callNetlifyAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN OUT NOCOPY BLOB, pData IN OUT NOCOPY CLOB) IS
+        l_netlify_url VARCHAR2(200);
         l_return BLOB;
     BEGIN
-        setNetlifyHeaders(pUserId=>pUserId, pContentType=>'application/octet-stream', pAccountSlug=>l_netlify_account_slug);
+        setNetlifyHeaders(pContentType=>'application/octet-stream');
 
-        l_netlify_url:=l_netlify_url || pEndpoint;
+        l_netlify_url:=NETLIFY_URL || pEndpoint;
 
         l_return:=apex_web_service.make_rest_request_b(p_url=>l_netlify_url, p_http_method=>pMethod, p_body_blob=>pBody);
 
@@ -478,27 +455,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /*
     **  IPDATA API
     */
-    PROCEDURE callIpdataAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB)
+    PROCEDURE callIpdataAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pData IN OUT NOCOPY CLOB)
     IS
-        l_ipdata_url VARCHAR2(200):='https://api.ipdata.co/';
+        l_ipdata_url api_credential.url%type;
+        l_ipdata_key api_credential.key%type;
         l_error_message VARCHAR2(100);
         l_error_code NUMBER;
     BEGIN
         IF (IPDATA_APIKEY IS NULL) THEN
-            SELECT u.ipdata_api_key 
-              INTO IPDATA_APIKEY
-              FROM apex_workspace_apex_users w, users u 
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-               AND u.ipdata_api_key IS NOT NULL
-               FETCH FIRST ROW ONLY;
+            SELECT url, key
+              INTO IPDATA_URL, IPDATA_APIKEY
+              FROM api_credential
+             WHERE name='IPDATA';
         END IF;
 
         apex_web_service.clear_request_headers;
         apex_web_service.g_request_headers(1).name := 'Content-Type';
         apex_web_service.g_request_headers(1).value := 'application/json';
 
-        l_ipdata_url:=l_ipdata_url || pEndpoint || '?api-key=' || IPDATA_APIKEY || '&fields=city,country_code,postal,zip';
+        l_ipdata_url:=IPDATA_URL || pEndpoint || '?api-key=' || IPDATA_APIKEY || '&fields=city,country_code,postal,zip';
 
         pData := apex_web_service.make_rest_request(p_url=>l_ipdata_url, p_http_method=>pMethod);
 
@@ -528,7 +503,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_API" IS
     /*
     **  TERRAFORM API
     */
-    PROCEDURE callTerraformAPI(pUserId IN users.id%type, pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pData IN OUT NOCOPY CLOB) IS
+    PROCEDURE callTerraformAPI(pEndpoint IN VARCHAR2, pMethod IN VARCHAR2, pBody IN VARCHAR2 DEFAULT NULL, pData IN OUT NOCOPY CLOB) IS
         l_terraform_token api_credential.url%type;
         l_terraform_url api_credential.url%type;
         l_error_message LONG;
