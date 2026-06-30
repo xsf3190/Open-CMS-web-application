@@ -10,10 +10,6 @@ CREATE TABLE "USERS"
 	"LAST_LOGIN_DATE" TIMESTAMP (6) WITH TIME ZONE, 
 	"LAST_LOGIN_PROVIDER" VARCHAR2(30), 
 	"CLD_PLAN" VARCHAR2(50), 
-	"NETLIFY_TOKEN" VARCHAR2(50), 
-	"NETLIFY_ACCOUNT_SLUG" VARCHAR2(30), 
-	"IPDATA_API_KEY" VARCHAR2(60), 
-	"GOOGLE_API_KEY" VARCHAR2(40), 
 	"PASSCODE" RAW(32), 
 	"TOKEN" VARCHAR2(1000), 
 	"LOGIN_STATUS" VARCHAR2(12), 
@@ -26,10 +22,6 @@ CREATE TABLE "USERS"
 COMMENT ON COLUMN "USERS"."CLD_API_KEY" IS 'API key of your Cloudinary account used to sign media uploads';
    COMMENT ON COLUMN "USERS"."CLD_API_SECRET" IS 'API secret used together with the key to sign media uploads';
    COMMENT ON COLUMN "USERS"."CLD_CLOUD_NAME" IS 'The cloud name assigned to your Cloudinary account';
-   COMMENT ON COLUMN "USERS"."NETLIFY_TOKEN" IS '<ol><li>Sign up for free <a href="https://app.netlify.com/user/applications/personal" target="a_blank">Netlify</a> account.</li><li>Get Personal Access token - <a href="https://app.netlify.com/user/applications/personal" target="a_blank">Get Token</a></li></ol>';
-   COMMENT ON COLUMN "USERS"."NETLIFY_ACCOUNT_SLUG" IS 'Logged on to your Netlify account this is listed under Team Settings. Needed in order to report current bandwidth usage.';
-   COMMENT ON COLUMN "USERS"."IPDATA_API_KEY" IS 'API key of IPDATA account used for the rudimentary IP to Location service';
-   COMMENT ON COLUMN "USERS"."GOOGLE_API_KEY" IS 'Google API key used for accessing Web Fonts';
    COMMENT ON TABLE "USERS"  IS 'Log in accounts created through Social Sign-in (Facebook, Google) enabling secure access to user-created content.';
 
   CREATE UNIQUE INDEX "PK_USERS" ON "USERS" ("ID") 
