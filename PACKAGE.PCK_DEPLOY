@@ -96,7 +96,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END LOOP;
             l_json:=new JSON_OBJECT_T;
             l_json.put('files',l_files);
-            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || pSiteid || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || pSiteid || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
             check_deploy;
 
             IF (l_deploy_css=1) THEN
@@ -238,7 +238,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             END LOOP;
             l_json:=new JSON_OBJECT_T;
             l_json.put('files',l_files);
-            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id_custom || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || C.netlify_site_id_custom || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
             
             /* Upload required Font files to hosting platform */
             FOR C1 IN (
@@ -247,7 +247,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                  WHERE j.sha1 IS NOT NULL
                    AND j.sha1=wf.sha1
             ) LOOP
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/files/' || C1.path, pMethod=>'PUT', pBody=>C1.content, pData=>l_clob);
+                pck_api.callNetlifyAPI(pEndpoint=>'deploys/' || C1.id || '/files/' || C1.path, pMethod=>'PUT', pBody=>C1.content, pData=>l_clob);
             END LOOP;
 
             /* Upload required CSS files to hosting platform */
@@ -257,7 +257,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                  WHERE j.sha1 IS NOT NULL
                    AND j.sha1=wc.sha1
             ) LOOP
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C1.id || '/files/' || C1.path, pMethod=>'PUT', pBody=>C1.content, pData=>l_clob);
+                pck_api.callNetlifyAPI(pEndpoint=>'deploys/' || C1.id || '/files/' || C1.path, pMethod=>'PUT', pBody=>C1.content, pData=>l_clob);
             END LOOP;
 
             UPDATE website
@@ -909,7 +909,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_json:= new JSON_OBJECT_T;
             l_json.put('files',l_files);
 
-            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || pSiteId || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || pSiteId || '/deploys', pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
 
             FOR C IN (
                 SELECT id, sha1 
@@ -918,9 +918,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             ) LOOP
                 -- dbms_output.put_line('Uploading ' || l_deploy_files(C.sha1).file_name);
                 IF (l_deploy_files(C.sha1).file_content IS NOT NULL) THEN
-                    pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
+                    pck_api.callNetlifyAPI(pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content,pData=>l_clob);
                 ELSIF (l_deploy_files(C.sha1).file_content_b IS NOT NULL) THEN
-                    pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content_b,pData=>l_clob);
+                    pck_api.callNetlifyAPI(pEndpoint=>'deploys/' || C.id || '/files/' || l_deploy_files(C.sha1).file_name, pMethod=>'PUT', pBody=>l_deploy_files(C.sha1).file_content_b,pData=>l_clob);
                 ELSE
                     RAISE_APPLICATION_ERROR(-20090,'Logic error - file_content clob and blob both null');
                 END IF;
@@ -1331,7 +1331,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pck_sec.g_session_user_id:=pUserId;
         pck_sec.g_website_id:=pWebsiteId;
         
-        pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'sites/'|| pSiteId || '/deploys', pMethod=>'GET', pData=>l_clob);
+        pck_api.callNetlifyAPI(pEndpoint=>'sites/'|| pSiteId || '/deploys', pMethod=>'GET', pData=>l_clob);
         FOR C IN (
             SELECT id, published_at, MAX(published_at) OVER() last_published_at 
             FROM
@@ -1341,7 +1341,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         )
         LOOP
             IF (C.published_at<C.last_published_at) THEN
-                pck_api.callNetlifyAPI(pUserId=>pUserId, pEndpoint=>'sites/'|| pSiteId || '/deploys/' || C.id, pMethod=>'DELETE', pData=>l_clob);
+                pck_api.callNetlifyAPI(pEndpoint=>'sites/'|| pSiteId || '/deploys/' || C.id, pMethod=>'DELETE', pData=>l_clob);
             END IF;
         END LOOP;
     END;
