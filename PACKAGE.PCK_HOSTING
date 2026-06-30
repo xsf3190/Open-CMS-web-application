@@ -62,7 +62,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
         WHILE NOT l_done 
         LOOP
-            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/'|| pNetlifySiteId || '/deploys/' || pNetlifyDeployId, pMethod=>'GET', pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/'|| pNetlifySiteId || '/deploys/' || pNetlifyDeployId, pMethod=>'GET', pData=>l_clob);
             
             SELECT state INTO l_state FROM JSON_TABLE(l_clob, '$' COLUMNS (state));
 
@@ -124,7 +124,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_new_website_id website.id%type:=seq_website.nextval;
         l_admin_user_id users.id%type;
     BEGIN
-        pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites', pMethod=>'POST', pData=>l_clob);
+        pck_api.callNetlifyAPI(pEndpoint=>'sites', pMethod=>'POST', pData=>l_clob);
         FOR C IN (
             SELECT id AS netlify_site_id, name AS domain_name
               FROM JSON_TABLE(l_clob, '$' COLUMNS (id, name))
@@ -225,7 +225,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         l_json:=new JSON_OBJECT_T;
         l_json.put('name', l_domain_name || '-custom');
         l_json.put('custom_domain', l_domain_name);
-        pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites', pStatusAllowed=>422, pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+        pck_api.callNetlifyAPI(pEndpoint=>'sites', pStatusAllowed=>422, pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
         IF (apex_web_service.g_status_code=422) THEN
             error('Domain name invalid or already taken');
             RETURN;
@@ -247,7 +247,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             l_json:=new JSON_OBJECT_T;
             l_json.put('name', l_domain_name || '-editor');
             l_json.put('custom_domain', 'editor.' || l_domain_name);
-            pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'PATCH', pBody=>l_json.stringify, pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'PATCH', pBody=>l_json.stringify, pData=>l_clob);
             pck_email.sendmail(C.contact_email, 'Configure DNS at your domain registrar', pck_email.DNSTemplate(l_domain_name));
         END LOOP;
 
@@ -284,16 +284,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         ) LOOP
             /* DELETE NETLIFY SITES (ALLOW 404 AS HOSTING OBJECT MAY HAVE BEEN DELETED MANUALLY)  */
             IF (C.netlify_site_id_custom IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id_custom, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pEndpoint=>'sites/' || C.netlify_site_id_custom, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
             END IF;
             
             IF (C.netlify_site_id IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
             END IF;
 
             IF (C.netlify_dns_zone_id IS NOT NULL) THEN
-                pck_api.callNetlifyAPI(pUserId=>null, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
+                pck_api.callNetlifyAPI(pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pStatusAllowed=>404, pData=>l_clob);
             END IF;
         END LOOP;
 
@@ -374,7 +374,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         ELSE
             l_json:=new JSON_OBJECT_T;
             l_json.put('name', l_subdomain);
-            pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites/' || l_netlify_site_id, pMethod=>'PATCH', pBody=>l_json.stringify, pStatusAllowed=>422, pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || l_netlify_site_id, pMethod=>'PATCH', pBody=>l_json.stringify, pStatusAllowed=>422, pData=>l_clob);
             IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
                 l_message:='URL successfully changed';
                 UPDATE website SET domain_name=l_subdomain WHERE id=pWebsiteId;
@@ -439,7 +439,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             apex_json.write('article', '<label for="domain_name_custom">Enter Registered Domain Name</label><input type="text" id="domain_name_custom" name="domain_name_custom" required><div class="result"></div>');
             apex_json.write('footer', '<button type="button" class="button create-dns">GET NAMESERVERS</button><div class="loader visually-hidden"></div>');
         ELSE
-            pck_api.callNetlifyAPI(pUserId=>l_session_data.user_id, pEndpoint=>'sites/' || l_netlify_site_id_custom || '/dns', pMethod=>'GET', pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || l_netlify_site_id_custom || '/dns', pMethod=>'GET', pData=>l_clob);
             FOR C IN (SELECT dns_server  FROM JSON_TABLE(l_clob, '$' COLUMNS (NESTED PATH '$.dns_servers[*]' COLUMNS (dns_server PATH '$'))) ) 
             LOOP
                 l_html:=l_html || '<li>' || C.dns_server || '</li>';
@@ -468,7 +468,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             SELECT netlify_dns_zone_id, user_id FROM website WHERE id=pWebsiteId AND netlify_dns_zone_id IS NOT NULL
         )
         LOOP
-            pck_api.callNetlifyAPI(pUserId=>C.user_id, pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pData=>l_clob);
+            pck_api.callNetlifyAPI(pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pData=>l_clob);
         END LOOP;
     END;
     
@@ -539,7 +539,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
            AND w.is_admin='Yes'
          FETCH FIRST ROW ONLY;
 
-        pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'dns_zones', pMethod=>'GET', pData=>l_dns_zones);
+        pck_api.callNetlifyAPI(pEndpoint=>'dns_zones', pMethod=>'GET', pData=>l_dns_zones);
         DELETE netlify_dns_zone;
         INSERT INTO netlify_dns_zone (id, name, site_id, created_at, updated_at)
         SELECT id, name, site_id, TO_TIMESTAMP_TZ(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR'), TO_TIMESTAMP_TZ(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR') 
@@ -549,7 +549,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         INSERT INTO netlify_dns_zone_server (dns_zone_id, server)
         SELECT id, server FROM JSON_TABLE(l_dns_zones, '$[*]' COLUMNS (id, NESTED '$.dns_servers[*]' COLUMNS (server varchar2(50) path '$')));
 
-        pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'sites', pMethod=>'GET', pData=>l_sites);
+        pck_api.callNetlifyAPI(pEndpoint=>'sites', pMethod=>'GET', pData=>l_sites);
         DELETE netlify_site;
         INSERT INTO netlify_site (id, name, custom_domain, url, created_at, updated_at)
         SELECT id, name, custom_domain, url, TO_TIMESTAMP_TZ(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR'), TO_TIMESTAMP_TZ(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS.FXFF3TZR')
@@ -559,7 +559,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         FOR C IN (
             SELECT id FROM netlify_dns_zone
         ) LOOP
-            pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'dns_zones/' || C.id || '/dns_records', pMethod=>'GET', pData=>l_dns_records);
+            pck_api.callNetlifyAPI(pEndpoint=>'dns_zones/' || C.id || '/dns_records', pMethod=>'GET', pData=>l_dns_records);
             
             INSERT INTO netlify_dns_record (id, hostname, type, value, ttl, dns_zone_id, site_id, managed)
             SELECT id, hostname, type, value, ttl, dns_zone_id, site_id, managed
@@ -571,7 +571,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
             FOR C IN (
                 SELECT id FROM netlify_site
             ) LOOP
-                pck_api.callNetlifyAPI(pUserId=>l_admin_userid, pEndpoint=>'sites/' || C.id || '/files', pMethod=>'GET', pData=>l_files);
+                pck_api.callNetlifyAPI(pEndpoint=>'sites/' || C.id || '/files', pMethod=>'GET', pData=>l_files);
                 INSERT INTO netlify_file (site_id, path, sha, mime_type, size_bytes)
                 SELECT C.id, path, sha, mime_type, "size"
                   FROM JSON_TABLE(l_files, '$[*]' COLUMNS(path, sha, mime_type, "size"));
