@@ -40,10 +40,12 @@ export const changeHandler = async (e) => {
                         document.documentElement.style.setProperty('--logo-font-size', logoform.querySelector("[name='logo_font_size']").value + "vw");
                         break;
                     case "img":
-                        loadImg(logoform.querySelector("selectedcontent>img").getAttribute("src"));
-                        document.documentElement.style.setProperty('--logo-img-corner-shape', "superellipse(" + logoform.querySelector("[name='logo_img_corner_shape']").value + ")");
-                        document.documentElement.style.setProperty('--logo-img-border-radius', logoform.querySelector("[name='logo_img_border_radius']").value + "px");
-                        document.documentElement.style.setProperty('--logo-img-block-size', logoform.querySelector("[name='logo_img_block_size']").value + "vh");
+                        if (logoform.querySelector("selectedcontent>img")) {
+                            loadImg(logoform.querySelector("selectedcontent>img").getAttribute("src"));
+                            document.documentElement.style.setProperty('--logo-img-corner-shape', "superellipse(" + logoform.querySelector("[name='logo_img_corner_shape']").value + ")");
+                            document.documentElement.style.setProperty('--logo-img-border-radius', logoform.querySelector("[name='logo_img_border_radius']").value + "px");
+                            document.documentElement.style.setProperty('--logo-img-block-size', logoform.querySelector("[name='logo_img_block_size']").value + "vh");
+                        }
                         break;
                     case "svg":
                         logo.replaceChildren();
