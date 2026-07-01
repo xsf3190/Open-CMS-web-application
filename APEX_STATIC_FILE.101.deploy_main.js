@@ -53,6 +53,7 @@ if (url.searchParams.has("refresh")) {
     url.searchParams.delete('refresh');
     url.searchParams.delete('menulist');
     history.replaceState(history.state, '', url.href);
+    document.getElementById("menulist").togglePopover();
 }
 
 let aud = "";
