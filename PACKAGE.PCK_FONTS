@@ -21,6 +21,8 @@ end "PCK_FONTS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
 
+    CHARACTERS VARCHAR2(250);
+
     /*
     **  CONVERT unicode_range IN LANGUAGE TABLE TO TEXT CHARACTERS
     */
@@ -110,16 +112,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
     END;
 
     FUNCTION combineLanguages RETURN VARCHAR2 IS
-        l_chars LONG;
     BEGIN
-        FOR C IN (
-            SELECT text
-              FROM language
-             WHERE code IN ('en','fr')
-        ) LOOP
-            l_chars:=distinct_chars(l_chars || C.text);
-        END LOOP;
-        RETURN (l_chars);
+        IF (CHARACTERS IS NULL) THEN
+            FOR C IN (
+                SELECT text
+                  FROM language
+                 WHERE code IN ('en','fr','de','hu')
+            ) LOOP
+                CHARACTERS:=distinct_chars(CHARACTERS || C.text);
+            END LOOP;
+        END IF;
+        RETURN (CHARACTERS);
     END;
 
     FUNCTION callGoogleAPI(pUrl IN VARCHAR2) RETURN CLOB
