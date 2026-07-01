@@ -2,6 +2,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CTA" is
     --
     PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER);
     --
+    FUNCTION getCtaForm(pCta IN website_article.cta%type) RETURN VARCHAR2;
+    --
     PROCEDURE login(pWebsiteid IN NUMBER, pRequestType IN VARCHAR2, pUrl IN VARCHAR2, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER);
     --
 end;
@@ -227,5 +229,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
             dbms_scheduler.enable(l_job_name);
         END IF;
     END;
+
+    /*
+    ** GET CALL-TO-ACTION FORM (EMAIL ADDRESS SAME AS "getLoginForm")
+    */
+    FUNCTION getCtaForm(pCta IN website_article.cta%type) RETURN VARCHAR2 IS
+        l_html LONG;
+    BEGIN
+        l_html:=
+        '<form class="cta">' ||
+            '<fieldset class="flow">' ||
+                '<legend>' || INITCAP(REPLACE(pCta,'-',' ')) || '</legend>' ||
+                '<input type="hidden" name="url" value="">' ||
+                '<input type="hidden" name="request_type" value="">' ||
+                '<div class="error-summary" tabindex="-1" hidden>' ||
+                    '<h4>' ||
+                        '<span aria-hidden="true">⚠️</span>Errors in Form' ||
+                    '</h4>' ||
+                    '<ul></ul>' ||
+                '</div>' ||
+                '<p>Required fields are marked with an <span style="color:red">*</span></p>' ||
+                '<div>' ||
+                    '<label for="cta-email">Email <span style="color:red">*</span></label>' ||
+                    '<input type="email" id="cta-email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
+                    '<div id="cta-email-error" class="inline-error"></div>' ||
+                '</div>' ||
+                '<div class="flex-items">' ||
+                    '<button class="button sendmail-magic" type="button" data-endpoint="authenticate/:ID"' ||
+                        'data-action="' || pCta || '" data-store-tokens="false">' || pCta || 
+                    '</button>' ||
+                    '<span aria-live="polite"></span>' ||
+                    '<span class="loader icon"></span>' ||
+                '</div>' ||
+            '</fieldset>' ||
+        '</form>';
+
+        RETURN (l_html);
+    END;
+
 end;
 /
