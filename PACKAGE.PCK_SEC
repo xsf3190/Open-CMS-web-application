@@ -29,8 +29,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     FUNCTION getJWTIssuer(pWebsiteId IN website.id%type) RETURN VARCHAR2;
     --
-    FUNCTION getCtaForm(pWebsiteId IN website_article.website_id%type, pArticleid IN website_article.article_id%type) RETURN VARCHAR2;
-    --
     FUNCTION getFingerprint(pRemoteAddr IN OUT VARCHAR2, pUserAgent IN OUT VARCHAR2, pTimezone IN OUT VARCHAR2) RETURN RAW;
     --
     PROCEDURE getLoginForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
@@ -243,49 +241,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         END IF;
     END;
 
-    /*
-    ** GET CALL-TO-ACTION FORM (EMAIL ADDRESS SAME AS "getLoginForm")
-    */
-    FUNCTION getCtaForm(pWebsiteId IN website_article.website_id%type, pArticleid IN website_article.article_id%type) RETURN VARCHAR2 IS
-        l_html LONG;
-    BEGIN
-        FOR C IN (
-            SELECT cta 
-              FROM website_article 
-             WHERE website_id=pWebsiteId
-               AND article_id=pArticleid
-        ) LOOP
-            l_html:=
-            '<form style="display:grid;place-items:center">' ||
-                '<fieldset class="flow flex-items" style="--flex-direction:column;inline-size:fit-content;border-radius:12px">' ||
-                    '<legend>' || C.cta || '</legend>' ||
-                    '<input type="hidden" name="url" value="">' ||
-                    '<input type="hidden" name="request_type" value="">' ||
-                    '<div class="error-summary" tabindex="-1" hidden>' ||
-                        '<h4>' ||
-                            '<span aria-hidden="true">⚠️</span>Errors in Form' ||
-                        '</h4>' ||
-                        '<ul></ul>' ||
-                    '</div>' ||
-                    '<p>Required fields are marked with an <span style="color:red">*</span></p>' ||
-                    '<div>' ||
-                        '<label for="cta-email">Email <span style="color:red">*</span></label>' ||
-                        '<input type="email" id="cta-email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
-                        '<div id="cta-email-error" class="inline-error"></div>' ||
-                    '</div>' ||
-                    '<div class="flex-items">' ||
-                        '<button class="button sendmail-magic" type="button" data-endpoint="authenticate/:ID" data-processing="Click link sent to your inbox" ' ||
-                            'data-action="' || C.cta || '" data-store-tokens="false">' || C.cta || 
-                        '</button>' ||
-                        '<span aria-live="polite"></span>' ||
-                        '<span class="loader icon"></span>' ||
-                    '</div>' ||
-                '</fieldset>' ||
-            '</form>';
-        END LOOP;
 
-        RETURN (l_html);
-    END;
 
     /*
     ** GET USER LOGIN FORM
@@ -430,11 +386,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         IF (pScope='visitor') THEN
             RETURN(l_html);
         END IF;
-
+        /*
+🏞
+🌍
+🚧	
+🎨
+🎼
+📄
+♍
+🔠
+🔤
+🇬🇧🇳
+🇳🇱
+🇭🇺
+🇨🇭
+*/
         l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'red', '🖍', 'Editor');
-        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'orange', '🌅', 'Upload');
+        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'orange', '🏞', 'Upload');
         l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish');
-        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '📝', 'Fonts');
+        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '🔤', 'Fonts');
         l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo');
         l_html:=l_html || addMenuitem('favicon/:ID', '', '🍀', 'Favicon');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Pages');
