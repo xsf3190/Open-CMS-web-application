@@ -18,8 +18,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
     --
-    PROCEDURE getPagesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER);
-    --
     PROCEDURE publishPageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     -- PROCEDURE setAssetUsed(pArticleId IN article.id%type, pHtml IN OUT NOCOPY CLOB);
@@ -27,8 +25,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     PROCEDURE updateEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     PROCEDURE updatePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
-    --
-    PROCEDURE updatePages(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
 end;
 /
@@ -736,6 +732,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article:=l_article || 
         '</tbody></table></div>';
 
+        pck_core.log('l_update_count:'||l_update_count);
+        pck_core.log('l_a11y_fails:'||l_a11y_fails);
+        pck_core.log('l_netlify_site_id_custom:'||l_netlify_site_id_custom);
+
         CASE
             WHEN (l_update_count>0 AND l_a11y_fails=0) THEN    
                 l_footer:=
@@ -754,6 +754,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                     '<button type="button" class="button publish-live-site" data-endpoint="go-live/:ID/:PAGE">GO LIVE</button>' ||
                     '<span aria-live="polite"></span>' ||
                     '<span class="loader icon"></span>' ||
+                '</div>';
+            ELSE
+                l_header:='<h4>EDITOR SITE CURRENT</h4>';
+                l_footer:=
+                '<div class="flex-items">' ||
+                    '<span aria-live="polite">NOTHING TO DO</span>' ||
                 '</div>';
         END CASE;
 
@@ -905,203 +911,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     END;
 
 
-    /* 
-    **  BUILD FORM CONTROLS TO MANAGE WEBSITE PAGES
-    */
-    PROCEDURE getPagesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_header LONG;
-        l_article CLOB;
-        l_footer LONG;
-        l_json JSON_OBJECT_T;
-        l_navigation_label website_article.navigation_label%type;
-        l_collection_type website_article.collection_type%type;
-        l_cta website_article.cta%type;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-        
-        l_header:='<h4>Manage Site Pages</h4>';
-
-        l_article:=
-        '<fieldset class="pages hide-controls flex-items">' ||
-            '<legend>Select page</legend>';
-
-        FOR C IN (
-            SELECT wa.article_id, wa.collection_type, wa.navigation_label, wa.cta
-              FROM website_article wa
-             WHERE wa.website_id=pWebsiteId
-             ORDER BY wa.display_order
-        ) LOOP
-            l_article:=l_article ||
-            '<div>' ||
-                '<input id="page-' || C.article_id || '" type="radio" name="page" data-collection="' || C.collection_type || '"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
-                '<label for="page-' || C.article_id || '">' || C.navigation_label || '</label>' ||
-            '</div>';
-            IF (C.article_id=pArticleId) THEN
-                l_navigation_label:=C.navigation_label;
-                l_collection_type:=C.collection_type;
-                l_cta:=C.cta;
-            END IF;
-        END LOOP;
-        l_article:=l_article ||
-        '</fieldset>' || 
-        '<div class="flex-items space-between">' ||
-            '<div>' ||
-                '<label for="navigation-label" class="block">Edit name</label>' ||
-                '<input type="text" id="navigation-label" name="navigation-label" value="' || l_navigation_label || '">' ||
-            '</div>' ||
-            '<button type="button" class="button add-page" style="align-self:flex-end;--button-bg:crimson">New Page</button>' ||
-            '<button type="button" class="button delete-page" style="align-self:flex-end;--button-bg:crimson">Delete Page</button>' ||
-        '</div>' ||
-        '<fieldset class="collection-type show-controls flex-items">' ||
-            '<legend>Page Type</legend>' ||
-            '<div>' ||            
-                '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"' || CASE WHEN l_collection_type='N/A' THEN ' checked' END || '>' ||
-                '<label for="collection_type-normal">Normal</label>' ||
-            '</div>' ||
-            '<div>' ||  
-                '<input type="radio" id="collection_type-blog" name="collection_type" value="BLOG"' || CASE WHEN l_collection_type='BLOG' THEN ' checked' END || '>' ||
-                '<label for="collection_type-blog">Blog</label>' ||
-            '</div>' ||
-            '<div>' ||  
-                '<input type="radio" id="collection_type-portfolio" name="collection_type" value="PORTFOLIO"' || CASE WHEN l_collection_type='PORTFOLIO' THEN ' checked' END || '>' ||
-                '<label for="collection_type-portfolio">Portfolio</label>' ||
-            '</div>' ||
-        '</fieldset>' ||
-        '<fieldset class="cta" flex-items">' ||
-            '<legend>Include Call to Action</legend>' ||
-            '<select id="cta" name="cta">' ||
-                '<button>' ||
-                  '<selectedcontent></selectedcontent>' ||
-                  '<span class="arrow"></span>' ||
-                '</button>' ||
-                '<option value="">--Choose Call to Action--</option>' ||
-                '<option value="create-website"' || CASE WHEN l_cta='create-website' THEN ' selected' END || '>' ||
-                    '<div class="chip" aria-hidden="true">Website</div>' ||
-                    '<div>' ||
-                        '<div class="heading">Create Website</div>' ||
-                        '<div class="detail">Get free website</div>' ||
-                    '</div>' ||
-                '</option>' ||
-                '<option value="contact-form">' ||
-                    '<div class="chip" aria-hidden="true">Contact</div>' ||
-                    '<div>' ||    
-                        '<div class="heading">Contact Form</div>' ||
-                        '<div class="detail">Visitors contact site owner by email</div>' ||
-                    '</div>' ||
-                '</option>' ||
-            '</select>' ||
-        '</fieldset>';
-
-        l_footer:=
-        '<div class="flex-items">' ||
-            '<button type="button" class="button save">PUBLISH</button>' ||
-            '<span aria-live="polite"></span>' ||
-            '<span class="loader icon"></span>' ||
-        '</div>';
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('header',l_header);
-        l_json.put('article',l_article);
-        l_json.put('footer',l_footer);
-        apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=200;
-
-    EXCEPTION WHEN OTHERS THEN
-        pck_core.log_error(pStatus);
-
-    END;
-
-    /* 
-    **  UPDATE WEBSITE_ARTICLE TABLE WITH ALL CHANGES 
-    */
-    PROCEDURE updatePages(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_body_text CLOB:=pBodyText;
-        TYPE tt_arr IS RECORD(
-            display_order website_article.display_order%type,
-            article_id website_article.article_id%type,
-            navigation_label website_article.navigation_label%type,
-            collection_type website_article.collection_type%type,
-            cta website_article.cta%type
-        );
-        TYPE t_arr IS TABLE OF tt_arr;
-        l_arr t_arr;
-        l_current_date TIMESTAMP:=current_timestamp;
-        TYPE t_article_id IS TABLE OF website_article.article_id%type;
-        l_article_id t_article_id;
-        l_old_nav VARCHAR2(4000);
-        l_new_nav VARCHAR2(4000);
-        l_do_deploy BOOLEAN;
-        l_clob CLOB;
-        l_json JSON_OBJECT_T;
-        l_bodytext CLOB:=pBodyText;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        l_old_nav:=pck_deploy.buildNav(pWebsiteid);
-
-        SELECT display_order, SUBSTR(article_id,INSTR(article_id,'-')+1), navigation_label, collection_type, cta
-          BULK COLLECT INTO l_arr
-          FROM JSON_TABLE(l_bodytext, '$[*]' COLUMNS (display_order FOR ORDINALITY, article_id, navigation_label, collection_type, cta));
-
-       -- Create ARTICLE and WEBSITE_ARTICLE rows for new pages.
-        FOR i IN 1..l_arr.COUNT LOOP
-            IF (l_arr(i).article_id<=0) THEN
-                INSERT INTO article (id, author_user_id, updated_date) 
-                    VALUES (seq_article.nextval, l_session_data.user_id, current_timestamp);
-                INSERT INTO website_article (website_id, article_id, navigation_label, collection_type, cta, user_id, display_order)
-                    VALUES (pWebsiteId, seq_article.currval, l_arr(i).navigation_label, l_arr(i).collection_type, l_arr(i).cta, l_session_data.user_id, l_arr(i).display_order);
-            END IF;
-        END LOOP;
-
-        FORALL i IN l_arr.FIRST .. l_arr.LAST
-            UPDATE website_article 
-               SET display_order=l_arr(i).display_order,
-                   navigation_label=l_arr(i).navigation_label,
-                   collection_type=l_arr(i).collection_type,
-                   cta=l_arr(i).cta,
-                   updated_date=l_current_date
-             WHERE website_id = pWebsiteId
-               AND article_id=l_arr(i).article_id;
-
-        -- Delete pages not passed from client
-        DELETE website_article WHERE website_id=pWebsiteId AND updated_date<l_current_date RETURNING article_id BULK COLLECT INTO l_article_id;
-
-        FORALL i IN l_article_id.FIRST .. l_article_id.LAST
-            DELETE article WHERE id=l_article_id(i);
-
-        l_new_nav:=pck_deploy.buildNav(pWebsiteid);
-
-        l_do_deploy:=NVL(l_new_nav,'x') <> NVL(l_old_nav,'x');
-
-        IF (l_do_deploy) THEN
-            /* Force all pages to be rebuilt */
-            DELETE website_files WHERE website_id=pWebsiteid AND mime_type='html';
-            UPDATE website SET updated_date=current_timestamp WHERE id=pWebsiteid;
-            pck_deploy.deployEditorSite(pWebsiteid);
-        END IF;
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        IF (l_do_deploy) THEN
-            l_json.put('message','DEPLOY SUCCESSFUL ... RELOADING SITE');
-        ELSE
-            l_json.put('message','NO CHANGES');
-        END IF;
-        l_json.put('published',l_do_deploy);
-        apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=200;
-
-        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
-
-    EXCEPTION WHEN OTHERS THEN
-        pck_core.log_error(pStatus);
-    END;
-
+    
     /* 
     **  GET LATEST EDITED CONTENT
     */
