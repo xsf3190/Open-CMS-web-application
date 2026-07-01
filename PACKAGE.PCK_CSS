@@ -327,16 +327,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             l_css:=l_css || C.editor_fontfaces;
         END LOOP;
 
-        -- Font faces actually required
-        /*
-        FOR C IN (
-            SELECT fontface
-              FROM website_fontfiles_temp
-        ) LOOP
-            l_css:=l_css || C.fontface;
-        END LOOP;
-        */
-
         l_sha1:=LOWER(dbms_crypto.hash(src => l_css, typ => dbms_crypto.hash_sh1));
         INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_TOKENS, l_sha1, l_css);
 
@@ -456,6 +446,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                    SUM(BITAND(a.elements_used,32))  uses_pre,
                    SUM(BITAND(a.elements_used,64))  uses_table,
                    SUM(BITAND(a.elements_used,128)) uses_ul,
+                   SUM(BITAND(a.elements_used,256)) uses_cta,
                    SUM(BITAND(wa.elements_used_header,64))  uses_table_header,
                    SUM(BITAND(wa.elements_used_footer,64))  uses_table_footer
               FROM website_article wa, article a
@@ -486,6 +477,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             END IF;
             IF (C.uses_ul>0) THEN
                 l_css:=l_css || getContent('deploy_ul');
+            END IF;
+            IF (C.uses_cta>0) THEN
+                l_css:=l_css || getContent('deploy_cta');
             END IF;
         END LOOP;
 
