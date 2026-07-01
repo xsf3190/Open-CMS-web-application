@@ -796,7 +796,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             ** GET HTML FOR ANY CALL TO ACTION
             */
              IF (pCta IS NOT NULL) THEN
-                l_cta:=pck_sec.getCtaForm(pWebsiteid, pArticleid);
+                l_cta:=pck_cta.getCtaForm(pCta);
             END IF;
 
             pBody:=
