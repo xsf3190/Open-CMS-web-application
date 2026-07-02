@@ -2,7 +2,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
     PROCEDURE changeURL(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE createEditorWebsite(pTemplateWebsiteid IN website.id%type);
+    PROCEDURE createEditorWebsite(pTemplateWebsiteid IN website.id%type, pRestURL IN VARCHAR2);
     --
     PROCEDURE createLiveWebsite(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus IN OUT NUMBER);
     --
@@ -119,7 +119,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
     /* 
     ** CREATE NEW UNASSIGNED EDITOR WEBSITE - I.E CONTACT_EMAIL IS NULL
     */
-    PROCEDURE createEditorWebsite(pTemplateWebsiteid IN website.id%type) IS
+    PROCEDURE createEditorWebsite(pTemplateWebsiteid IN website.id%type, pRestURL IN VARCHAR2) IS
         l_clob CLOB;
         l_new_website_id website.id%type:=seq_website.nextval;
         l_admin_user_id users.id%type;
@@ -138,11 +138,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
             INSERT INTO website (
                 id, domain_name, netlify_site_id, user_id, esm_library, 
-                logo_type, logo_deployed_hash, logo_font_text, logo_font_size, logo_img_id, logo_img_border_radius, logo_img_corner_shape, logo_svg, 
+                logo_type, logo_deployed_hash, logo_font_text, logo_font_size, 
+                 logo_img_block_size, logo_img_border_radius, logo_img_corner_shape, 
+                logo_svg, 
                 max_width, min_font_size, min_width_px, min_scale, max_font_size, max_width_px, max_scale
             )
             SELECT l_new_website_id, C.domain_name, C.netlify_site_id, l_admin_user_id, 'TEST', 
-                    logo_type, logo_deployed_hash, logo_font_text, logo_font_size, logo_img_id, logo_img_border_radius, logo_img_corner_shape, logo_svg, 
+                    logo_type, logo_deployed_hash, logo_font_text, logo_font_size, 
+                    logo_img_block_size, logo_img_border_radius, logo_img_corner_shape, 
+                    logo_svg, 
                     max_width, min_font_size, min_width_px, min_scale, max_font_size, max_width_px, max_scale
               FROM website
              WHERE id=pTemplateWebsiteid;
