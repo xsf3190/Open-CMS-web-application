@@ -1,10 +1,10 @@
 /*
 **  ADD / CHANGE / DELETE PAGES
 */
-import { dialog_article, dialog_footer, initDialog, dropdown } from "deploy_elements";
+import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-let endpoint, pages, collection, navigation_label, isSending;
+let endpoint, pages, collection, cta, navigation_label, isSending;
 
 export const init = (e) => {
     endpoint = e.dataset.endpoint;
@@ -15,6 +15,7 @@ export const init = (e) => {
             pages = dialog_article.querySelector("fieldset.pages");
             navigation_label = dialog_article.querySelector("input[name='navigation-label']");
             collection = dialog_article.querySelectorAll("[name='collection_type']");
+            cta = dialog_article.querySelectorAll("[name='cta']");
             isSending = false;
         })
         .catch((error) => {
@@ -23,7 +24,7 @@ export const init = (e) => {
 }
 
 /*
-** INPUT HANDLER - IGNORE
+** INPUT HANDLER - WRITE USER'S INPUT INTO RADIO CONTROL NAVIGATION LABEL
 */
 export const inputHandler = (e) => {
     if (e.target.matches("[name='navigation-label']")) {
@@ -38,6 +39,7 @@ export const changeHandler = (e) => {
     if (e.target.matches("[name='page']")) {
         navigation_label.value = e.target.nextSibling.textContent;
         setCollectionType(e.target.dataset.collection);
+        setCta(e.target.dataset.cta);
     }
     if (e.target.matches("[name='collection_type']")) {
         pages.querySelector("[name='page']:checked").dataset.collection = e.target.value;
@@ -61,9 +63,26 @@ const setCollectionType = (data) => {
     }
 }
 
+const setCta = (data) => {
+    switch (data) {
+        case "create-website":
+            cta[0].checked = true;
+            break;
+        case "":
+            cta[1].checked = true;
+            break;
+    }
+}
+
 const unsetCollection = () => {
     for( let i = 0; i < collection.length; i++ ) {
         collection[i].checked = false;
+    }
+}
+
+const unsetCta = () => {
+    for( let i = 0; i < cta.length; i++ ) {
+        cta[i].checked = false;
     }
 }
 
@@ -86,8 +105,10 @@ export const clickHandler = async (e) => {
         const input = clone.querySelector("input");
         input.setAttribute("id",id);
         input.dataset.collection = "N/A";
+        input.dataset.cta = "";
         pages.insertBefore(clone, selected.nextSibling);
         setCollectionType("N/A");
+        setCta("");
         return;
     }
 
@@ -98,6 +119,7 @@ export const clickHandler = async (e) => {
         }
         pages.querySelector("[name='page']:checked").parentNode.remove();
         unsetCollection();
+        unsetCta();
         navigation_label.value = "";
         
         return;
@@ -110,8 +132,8 @@ export const clickHandler = async (e) => {
             const obj = {};
             obj.article_id = item.getAttribute("id");
             obj.collection_type = item.dataset.collection;
-            obj.navigation_label = item.nextSibling.textContent;
             obj.cta = item.dataset.cta;
+            obj.navigation_label = item.nextSibling.textContent;
             arr.push(obj);
         });
 
