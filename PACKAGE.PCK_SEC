@@ -539,7 +539,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
         DELETE refresh_token WHERE website_id=pWebsiteid AND user_id=pUserId;
         
-        INSERT INTO refresh_token(user_id, website_id, token_issued) VALUES (pUserId, pWebsiteId, l_new_refresh_hash);
+        INSERT INTO refresh_token(user_id, website_id, token_issued, token_issued_orig) VALUES (pUserId, pWebsiteId, l_new_refresh_hash, l_new_refresh);
         
         APEX_JSON.open_object;
         l_json:= new JSON_OBJECT_T;
@@ -756,8 +756,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         );
 
         -- Rotate the user's refresh token for the website
-        INSERT INTO refresh_token(website_id, user_id, token_issued)
-            VALUES (pWebsiteid, l_session_data.user_id, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256));
+        INSERT INTO refresh_token(website_id, user_id, token_issued, token_issued_orig)
+            VALUES (pWebsiteid, l_session_data.user_id, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256), l_new_refresh);
 
         pStatus:=200;
 
