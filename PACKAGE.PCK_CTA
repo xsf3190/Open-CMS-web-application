@@ -89,6 +89,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
     **  3. Run background job to create a new unassigned editor website
     */
     PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER) IS
+        TEMPLATE_WEBSITEID CONSTANT NUMBER:=11010;
         l_user_id users.id%type;
         l_fingerprint fingerprint.fingerprint%type;
         l_remote_addr fingerprint.remote_addr%type;
@@ -134,7 +135,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         IF (l_message IS NULL) THEN
             SELECT COUNT(*) INTO n FROM website WHERE contact_email IS NULL;
             IF (n=0) THEN
-                pck_hosting.createEditorWebsite(pWebsiteid);
+                pck_hosting.createEditorWebsite(TEMPLATE_WEBSITEID,pck_core.getRestURL());
             END IF;
             FOR C IN (
                 SELECT id, domain_name FROM website WHERE contact_email IS NULL ORDER BY id FETCH FIRST ROW ONLY
@@ -191,9 +192,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
 
                 l_new_refresh_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
 
-                DELETE refresh_token WHERE website_id=C.id AND user_id=l_user_id;
+                DELETE refresh_token WHERE website_id=C.id;
             
-                INSERT INTO refresh_token(user_id, website_id, token_issued) VALUES (l_user_id, C.id, l_new_refresh_hash);
+                INSERT INTO refresh_token(user_id, website_id, token_issued, token_issued_orig) VALUES (l_user_id, C.id, l_new_refresh_hash, l_new_refresh);
 
                 l_url:='https://' || C.domain_name || '.netlify.app' || 
                     '?refresh=' || l_new_refresh ||
@@ -211,6 +212,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         l_json.put('message',l_message);
         apex_util.prn(l_json.to_clob,false);
 
+        l_create_next:=FALSE;
         /* Submit job to create a new unassigned editor website */
         IF (l_create_next) THEN
             l_job_name:=dbms_scheduler.generate_job_name('CREATE_WEBSITE_');
@@ -218,13 +220,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                 job_name   => l_job_name,
                 job_type   =>'STORED_PROCEDURE',
                 job_action =>'pck_hosting.createEditorWebsite',
-                number_of_arguments=>1,
+                number_of_arguments=>2,
                 start_date=>systimestamp
             );
             dbms_scheduler.set_job_argument_value(
                 job_name => l_job_name,
                 argument_position => 1,
-                argument_value => pWebsiteid
+                argument_value => TEMPLATE_WEBSITEID
+            );
+            dbms_scheduler.set_job_argument_value(
+                job_name => l_job_name,
+                argument_position => 2,
+                argument_value => pck_core.getRestURL()
             );
             dbms_scheduler.enable(l_job_name);
         END IF;
@@ -256,7 +263,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                 '</div>' ||
                 '<div class="flex-items">' ||
                     '<button class="button sendmail-magic" type="button" data-endpoint="authenticate/:ID"' ||
-                        'data-action="' || pCta || '" data-store-tokens="false">' || pCta || 
+                        'data-action="' || pCta || '" data-store-tokens="false">' || UPPER(REPLACE(pCta,'-',' ')) || 
                     '</button>' ||
                     '<span aria-live="polite"></span>' ||
                     '<span class="loader icon"></span>' ||
