@@ -63,6 +63,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                         '</option>';
                 END LOOP;
                 
+                
         -- pLogoImgInlineSize is expressed in cqi units
         -- need to remove those for the range input and provide min / max values
 
@@ -118,6 +119,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         l_logoform LONG;
         l_message VARCHAR2(100);
         l_json JSON_OBJECT_T;
+
+        FUNCTION checkImg RETURN BOOLEAN IS
+            n PLS_INTEGER;
+        BEGIN
+            SELECT COUNT(*) INTO n FROM dual WHERE EXISTS
+            (
+                SELECT null 
+                  FROM website_article wa, asset a
+                 WHERE wa.website_id=pWebsiteid
+                   AND a.article_id=wa.article_id
+                   AND a.format='avif'
+            );
+            RETURN (n>0);        
+        END;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -168,6 +183,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                     END IF;
                 l_article:=l_article ||
                 '</div>';
+
                 l_footer:=
                 '<div class="flex-items">' ||
                     '<button type="button" class="button save" style="--button-bg:#4D4DFF">SAVE</button>' ||
@@ -186,8 +202,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                         l_logoform:=buildFontLogoForm(pWebsiteId, C.logo_font_text, C.logo_font_size);
                         l_message:='Change text logo details';
                     WHEN 'img' THEN 
-                        l_logoform:=buildImageLogoForm(pWebsiteId, C.logo_img_id, C.logo_img_block_size, C.logo_img_corner_shape, C.logo_img_border_radius);
-                        l_message:='Change image logo details';
+                        IF (checkImg) THEN
+                            l_logoform:=buildImageLogoForm(pWebsiteId, C.logo_img_id, C.logo_img_block_size, C.logo_img_corner_shape, C.logo_img_border_radius);
+                            l_message:='Change image logo details';
+                        ELSE
+                            l_logoform:='<p>UPLOAD IMAGE FIRST</p>';
+                            l_message:='';
+                        END IF;
                     WHEN 'svg' THEN 
                         l_logoform:=buildSvgLogoForm(pWebsiteId, C.logo_svg, C.logo_img_block_size);
                         l_message:='Change SVG logo details';
