@@ -1,21 +1,31 @@
 .cta {
     display: grid;
     place-items: center;
+    font-family: system-ui;
     fieldset {
         display: flex;
         flex-direction: column;
         border-radius: 12px;
-        inline-size:fit-content;
+        legend {
+            font-weight: 700;
+            letter-spacing:2px;
+        }
+        label {
+            font-weight: 700;
+        }
     }
     input,
     button,
     textarea {
-        font-family: var(--font-family-text);
-        font-size: var(--step--1);
+        font-family: inherit;
+        font-size: var(--step-0);
     }
     input {
         line-height: 1lh;
         padding: 0.15em 0.25em;
+    }
+    div:has(.loader) {
+        min-height: 2lh;
     }
     button {
         background-color: crimson;
@@ -23,4 +33,33 @@
         padding: 0.75em 1.5em;
         border-radius: 12px;
     }
+    
 }
+
+
+/* SPINNER ELEMENT WHILE WAITING FOR ACTION TO COMPLETE */
+    .loader {
+        inline-size: 1.5em;
+        opacity: 0;
+        border: none;
+        aspect-ratio: 1;
+        display: grid;
+        -webkit-mask: conic-gradient(from 22deg, #0003,#000);
+                mask: conic-gradient(from 22deg, #0003,#000);
+        animation: load 1s steps(8) infinite;
+    }
+    .loader,
+    .loader:before {
+        --_g: linear-gradient(#17177c 0 0) 50%;
+        background: 
+            var(--_g)/34% 8%  space no-repeat,
+            var(--_g)/8%  34% no-repeat space;
+    }
+    .loader:before {
+        content: "";
+        transform: rotate(45deg);
+    }
+    @keyframes load {
+        from {transform: rotate(0turn)}
+        to   {transform: rotate(1turn)}
+    }
