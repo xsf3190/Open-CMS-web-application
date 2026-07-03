@@ -331,11 +331,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
         INSERT INTO website_cssfiles_temp(path, sha1, content) VALUES (PATH_NAME_TOKENS, l_sha1, l_css);
 
         /* 
-        **  Build core CSS file with deploy.css, deploy.editor.css plus all ckEditor content rules
+        **  Build core CSS file with deploy.css, deploy.editor.css plus all component-specific rules
         */
         l_css:=null;
         FOR C IN (
-            SELECT file_name, CAST(last_updated_on AS TIMESTAMP) updated_date, apex_util.blob_to_clob(file_content) file_content
+            SELECT file_name, apex_util.blob_to_clob(file_content) file_content
               FROM apex_application_static_files 
              WHERE application_id=101
                AND file_name LIKE 'deploy%min.css'
@@ -446,9 +446,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
                    SUM(BITAND(a.elements_used,32))  uses_pre,
                    SUM(BITAND(a.elements_used,64))  uses_table,
                    SUM(BITAND(a.elements_used,128)) uses_ul,
-                   SUM(BITAND(a.elements_used,256)) uses_cta,
                    SUM(BITAND(wa.elements_used_header,64))  uses_table_header,
-                   SUM(BITAND(wa.elements_used_footer,64))  uses_table_footer
+                   SUM(BITAND(wa.elements_used_footer,64))  uses_table_footer,
+                   MAX(wa.cta) uses_cta
               FROM website_article wa, article a
              WHERE wa.website_id=pWebsiteId
                AND wa.article_id=NVL(a.parent_id,a.id)
@@ -478,7 +478,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
             IF (C.uses_ul>0) THEN
                 l_css:=l_css || getContent('deploy_ul');
             END IF;
-            IF (C.uses_cta>0) THEN
+            IF (C.uses_cta IS NOT NULL) THEN
                 l_css:=l_css || getContent('deploy_cta');
             END IF;
         END LOOP;
