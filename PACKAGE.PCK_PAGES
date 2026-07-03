@@ -37,7 +37,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_PAGES" as
         ) LOOP
             l_article:=l_article ||
             '<div>' ||
-                '<input id="page-' || C.article_id || '" type="radio" name="page" data-collection="' || C.collection_type || '"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
+                '<input id="page-' || C.article_id || '" type="radio" name="page" data-collection="' || C.collection_type || '" data-cta="' || C.cta || '"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
                 '<label for="page-' || C.article_id || '">' || C.navigation_label || '</label>' ||
             '</div>';
             IF (C.article_id=pArticleId) THEN
@@ -56,7 +56,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_PAGES" as
             '<button type="button" class="button add-page" style="align-self:flex-end;--button-bg:crimson">New Page</button>' ||
             '<button type="button" class="button delete-page" style="align-self:flex-end;--button-bg:crimson">Delete Page</button>' ||
         '</div>' ||
-        '<fieldset class="collection-type show-controls flex-items">' ||
+        '<fieldset class="show-controls flex-items">' ||
             '<legend>Page Type</legend>' ||
             '<div>' ||            
                 '<input type="radio" id="collection_type-normal" name="collection_type" value="N/A"' || CASE WHEN l_collection_type='N/A' THEN ' checked' END || '>' ||
@@ -71,31 +71,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_PAGES" as
                 '<label for="collection_type-portfolio">Portfolio</label>' ||
             '</div>' ||
         '</fieldset>' ||
-        '<fieldset class="cta" flex-items">' ||
+        '<fieldset class="show-controls flex-items">' ||
             '<legend>Call to Action</legend>' ||
-            '<div class="flex-items space-apart">' ||
-                '<select id="cta" name="cta">' ||
-                    '<button>' ||
-                      '<selectedcontent></selectedcontent>' ||
-                      '<span class="arrow"></span>' ||
-                    '</button>' ||
-                    '<option value="">--Choose Call to Action--</option>' ||
-                    '<option value="create-website"' || CASE WHEN l_cta='create-website' THEN ' selected' END || '>' ||
-                        '<div class="chip" aria-hidden="true">Website</div>' ||
-                        '<div>' ||
-                            '<div class="heading">Create Website</div>' ||
-                            '<div class="detail">Offer free website</div>' ||
-                        '</div>' ||
-                    '</option>' ||
-                    '<option value="contact-form"' || CASE WHEN l_cta='contact-form' THEN ' selected' END || '>' ||
-                        '<div class="chip" aria-hidden="true">Contact</div>' ||
-                        '<div>' ||    
-                            '<div class="heading">Contact Form</div>' ||
-                            '<div class="detail">Allow Visitors to send email to site owner</div>' ||
-                        '</div>' ||
-                    '</option>' ||
-                '</select>' ||
-                '<button type="button" class="button delete-cta" style="--button-bg:crimson">Remove Action</button>' ||
+            '<div>' ||            
+                '<input type="radio" id="cta-create-website" name="cta" value="create-website"' || CASE WHEN l_cta='create-website' THEN ' checked' END || '>' ||
+                '<label for="cta-create-website">Create Website</label>' ||
+            '</div>' ||
+            '<div>' ||            
+                '<input type="radio" id="cta-none" name="cta" value=""' || CASE WHEN l_cta IS NULL THEN ' checked' END || '>' ||
+                '<label for="cta-none">None</label>' ||
             '</div>' ||
         '</fieldset>';
 
@@ -156,8 +140,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_PAGES" as
        -- Create ARTICLE and WEBSITE_ARTICLE rows for new pages.
         FOR i IN 1..l_arr.COUNT LOOP
             IF (l_arr(i).article_id<=0) THEN
-                INSERT INTO article (id, author_user_id, elements_used, updated_date) 
-                    VALUES (seq_article.nextval, l_session_data.user_id, NVL2(l_arr(i).cta,256,0), current_timestamp);
+                INSERT INTO article (id, author_user_id, updated_date) 
+                    VALUES (seq_article.nextval, l_session_data.user_id, current_timestamp);
                 INSERT INTO website_article (website_id, article_id, navigation_label, collection_type, cta, user_id, display_order)
                     VALUES (pWebsiteId, seq_article.currval, l_arr(i).navigation_label, l_arr(i).collection_type, l_arr(i).cta, l_session_data.user_id, l_arr(i).display_order);
             END IF;
@@ -172,11 +156,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_PAGES" as
                    updated_date=l_current_date
              WHERE website_id = pWebsiteId
                AND article_id=l_arr(i).article_id;
-
-        FORALL i IN l_arr.FIRST .. l_arr.LAST
-            UPDATE article 
-               SET elements_used=elements_used+NVL2(l_arr(i).cta,256,0)
-             WHERE id=l_arr(i).article_id;
 
         -- Delete pages not passed from client
         DELETE website_article WHERE website_id=pWebsiteId AND updated_date<l_current_date RETURNING article_id BULK COLLECT INTO l_article_id;
