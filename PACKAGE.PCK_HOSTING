@@ -140,13 +140,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
                 id, domain_name, netlify_site_id, user_id, esm_library, 
                 logo_type, logo_deployed_hash, logo_font_text, logo_font_size, 
                  logo_img_block_size, logo_img_border_radius, logo_img_corner_shape, 
-                logo_svg, 
+                logo_svg, favicon,
                 max_width, min_font_size, min_width_px, min_scale, max_font_size, max_width_px, max_scale
             )
             SELECT l_new_website_id, C.domain_name, C.netlify_site_id, l_admin_user_id, 'TEST', 
                     logo_type, logo_deployed_hash, logo_font_text, logo_font_size, 
                     logo_img_block_size, logo_img_border_radius, logo_img_corner_shape, 
-                    logo_svg, 
+                    logo_svg, favicon,
                     max_width, min_font_size, min_width_px, min_scale, max_font_size, max_width_px, max_scale
               FROM website
              WHERE id=pTemplateWebsiteid;
