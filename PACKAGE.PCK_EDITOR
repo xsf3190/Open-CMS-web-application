@@ -718,7 +718,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         n:=n+1;
                         l_update_count:=l_update_count+1;
                         l_article:=l_article || 
-                        '<tr><td>' || C.context || ' font ' || C1.axis || ' changed to ' || C1.value || '</td><td>' || TO_CHAR(C.updated_date at time zone l_session_data.timeZone, l_datetime_format) || '</td></tr>';
+                        '<tr><td>' || C.context || ' font ' || C1.axis || ' changed to ' || C1.value || '</td><td>' || apex_util.get_since(C1.updated_date,false) || '</td><td>N/A</td></tr>';
                     END IF;
                 END LOOP;
             END IF;
