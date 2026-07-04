@@ -17,18 +17,26 @@ const handleError = (error) => {
     if (!output_dialog.open) {
         output_dialog.showModal();
     }
+    let logout = false;
     dialog_article.replaceChildren();
     let message = "<h4>" + error.name + ": " + error.message + "</h4>";
     if (message.includes("Unauthorized")) {
         sessionStorage.clear();
         localStorage.clear();
-        message += "<p>You have been logged out because you have not previously authenticated from this location or device</p>";
-        output_dialog.querySelector(".close").classList.add("reload");
+        message += "<p>You are being logged out because you've not previously authenticated from this location or device</p>";
+        message += "<p>Log in as the registered owner of this website</p>";
+        logout = true;
     }
     dialog_article.insertAdjacentHTML('afterbegin',message);
     
     dialog_footer.replaceChildren();
     dialog_footer.insertAdjacentHTML('afterbegin',"<span></span>");
+    
+    if (logout) {
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+    }
 }
 
 /* 
