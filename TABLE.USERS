@@ -24,10 +24,10 @@ COMMENT ON COLUMN "USERS"."CLD_API_KEY" IS 'API key of your Cloudinary account u
    COMMENT ON COLUMN "USERS"."CLD_CLOUD_NAME" IS 'The cloud name assigned to your Cloudinary account';
    COMMENT ON TABLE "USERS"  IS 'Log in accounts created through Social Sign-in (Facebook, Google) enabling secure access to user-created content.';
 
-  CREATE UNIQUE INDEX "PK_USERS" ON "USERS" ("ID") 
+  CREATE UNIQUE INDEX "EMAIL_UNQ" ON "USERS" ("EMAIL") 
   ;
 
-  CREATE UNIQUE INDEX "EMAIL_UNQ" ON "USERS" ("EMAIL") 
+  CREATE UNIQUE INDEX "PK_USERS" ON "USERS" ("ID") 
   ;
 
   ALTER TABLE "USERS" MODIFY ("ID" NOT NULL ENABLE);
