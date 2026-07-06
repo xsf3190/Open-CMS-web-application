@@ -1,4 +1,4 @@
-import { getJWTClaim, initDialog, form } from "deploy_elements";
+import { getJWTClaim, initDialog, output_dialog, form } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
 const eventHandler = async (e) => {
@@ -21,6 +21,11 @@ const eventHandler = async (e) => {
         return;
     }
 
+    if (e.type==="close") {
+        console.log("DIALOG CLOSE EVENT FIRED");
+        return;
+    }
+
     /* 
     ** module is data attribute of the common dialog form to which
     ** the click, change and input events are attached.
@@ -29,6 +34,7 @@ const eventHandler = async (e) => {
     ** the module and invoke its event handler - means that individual modules
     ** must export its "clickHandler" function to be invoked here.
     */
+    
     const module = await import(e.currentTarget.dataset.module)
     .catch((error) => {
         console.error(error);
@@ -46,6 +52,7 @@ const eventHandler = async (e) => {
 
 /* Event handlers on common dialog */
 
+output_dialog.addEventListener("close",eventHandler);
 form.addEventListener("input",eventHandler);
 form.addEventListener("click",eventHandler);
 form.addEventListener("change",eventHandler);
