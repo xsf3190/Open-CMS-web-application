@@ -9,11 +9,11 @@ CREATE TABLE "USERS"
 	"CLD_CLOUD_NAME" VARCHAR2(50), 
 	"LAST_LOGIN_DATE" TIMESTAMP (6) WITH TIME ZONE, 
 	"LAST_LOGIN_PROVIDER" VARCHAR2(30), 
-	"CLD_PLAN" VARCHAR2(50), 
 	"PASSCODE" RAW(32), 
 	"TOKEN" VARCHAR2(1000), 
 	"LOGIN_STATUS" VARCHAR2(12), 
 	"CLD_UPLOAD_PRESET" VARCHAR2(50), 
+	"CLIENT_SECRET" VARCHAR2(24), 
 	 CONSTRAINT "PK_USERS" PRIMARY KEY ("ID")
   USING INDEX  ENABLE, 
 	 CONSTRAINT "EMAIL_UNQ" UNIQUE ("EMAIL")
@@ -22,12 +22,12 @@ CREATE TABLE "USERS"
 COMMENT ON COLUMN "USERS"."CLD_API_KEY" IS 'API key of your Cloudinary account used to sign media uploads';
    COMMENT ON COLUMN "USERS"."CLD_API_SECRET" IS 'API secret used together with the key to sign media uploads';
    COMMENT ON COLUMN "USERS"."CLD_CLOUD_NAME" IS 'The cloud name assigned to your Cloudinary account';
-   COMMENT ON TABLE "USERS"  IS 'Log in accounts created through Social Sign-in (Facebook, Google) enabling secure access to user-created content.';
-
-  CREATE UNIQUE INDEX "EMAIL_UNQ" ON "USERS" ("EMAIL") 
-  ;
+   COMMENT ON TABLE "USERS"  IS 'Registered platform user';
 
   CREATE UNIQUE INDEX "PK_USERS" ON "USERS" ("ID") 
+  ;
+
+  CREATE UNIQUE INDEX "EMAIL_UNQ" ON "USERS" ("EMAIL") 
   ;
 
   ALTER TABLE "USERS" MODIFY ("ID" NOT NULL ENABLE);
