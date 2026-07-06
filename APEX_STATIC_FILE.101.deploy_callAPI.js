@@ -23,8 +23,12 @@ const handleError = (error) => {
     if (message.includes("Unauthorized")) {
         sessionStorage.clear();
         localStorage.clear();
+        message += "<h4>Security precaution against theft</h4>";
         message += "<p>You are being logged out because you've not previously authenticated from this location or device</p>";
-        message += "<p>Log in as the registered owner of this website</p>";
+        message += "<ol><li>Maybe you moved and connected to a different WiFi</li>";
+        message += "<li>Or your browser was upgraded</li>";
+        message += "<li>Or you lost your device and someone's trying to change your site</li>";
+        message += "<p>Log in again using your registered email address</p>";
         logout = true;
     }
     dialog_article.insertAdjacentHTML('afterbegin',message);
@@ -35,7 +39,7 @@ const handleError = (error) => {
     if (logout) {
         setTimeout(() => {
             window.location.reload();
-        }, 1500);
+        }, 5000);
     }
 }
 
