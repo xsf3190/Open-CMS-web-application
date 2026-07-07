@@ -116,12 +116,7 @@ if (jwt) {
 /*
 ** SETUP COLLECTION OF METRICS. 
 */
-let website_loaded = Number(sessionStorage.getItem("website_loaded"));
-if (!website_loaded) {
-    website_loaded = Math.round(Date.now()/1000);
-    sessionStorage.setItem("website_loaded",website_loaded);
-    console.log("sessionStorage.website_loaded",website_loaded);
-}
+
 
 let page_loaded = Date.now(),
     page_visit = 0;
@@ -157,7 +152,10 @@ const flushQueues = () => {
     const json = {};
     json["website_id"] = bodydata.websiteid;
     json["article_id"] = bodydata.articleid;
-    json["website_loaded"] = website_loaded;
+    if (!sessionStorage.getItem("website_loaded")) {
+        sessionStorage.setItem("website_loaded",Math.round(Date.now()/1000));        
+    }
+    json["website_loaded"] = sessionStorage.getItem("website_loaded");
     json["url"] = window.location.hostname;
     json["seq"] = page_visit;
     json["webdriver"] = navigator.webdriver;
@@ -176,9 +174,10 @@ const flushQueues = () => {
         if (navigator.userAgentData) {
             json["mobile"] = navigator.userAgentData.mobile;
         }
+        if (!document.referrer.includes(window.location.hostname)) {
+            json["referrer"] = document.referrer;
+        }
         json["url"] = window.location.hostname;
-        json["pathname"] = window.location.pathname;
-        json["referrer"] = document.referrer;
 
         json["page_weight"] = page_weight();
         json["total_requests"] = total_requests();
