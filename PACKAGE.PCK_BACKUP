@@ -19,7 +19,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         l_filename VARCHAR2(60);
         l_schema_size NUMBER;
         l_status varchar2(4000);
-        l_client_secret user_ords_clients.client_secret%type;
+        l_client_secret users.client_secret%type;
         l_json JSON_OBJECT_T;
         l_payload CLOB;
         l_clob CLOB;
@@ -78,25 +78,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         /* 
         ** Get the schema workspace admin email
         */
-        SELECT u.email, o.client_secret
+        SELECT u.email, u.client_secret
           INTO l_email, l_client_secret
-          FROM users u, apex_workspace_developers w, user_ords_clients o
+          FROM users u, apex_workspace_developers w
          WHERE w.user_name=l_schema
            AND w.is_admin='Yes'
            AND w.email=u.email
-           AND o.name(+)=w.email;
-
-        IF (l_client_secret IS NULL) THEN
-            OAUTH.create_client(
-                p_name            => l_email,
-                p_grant_type      => 'client_credentials',
-                p_owner           => 'mark.russellbrown@gmail.com',
-                p_support_email   => 'mark.russellbrown@gmail.com',
-                p_description     => 'Provide secure secret in order to encrypt JWT tokens',
-                p_privilege_names => 'api_priv'
-            );
-            SELECT client_secret INTO l_client_secret FROM user_ords_clients WHERE name=l_email;
-        END IF;
+         FETCH FIRST ROW ONLY;
 
         h1 := dbms_datapump.OPEN (operation => 'EXPORT', job_mode => 'SCHEMA', job_name => dbms_scheduler.generate_job_name('EXPORT_SCHEMA_'), version => 'COMPATIBLE'); 
 
