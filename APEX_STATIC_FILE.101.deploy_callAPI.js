@@ -24,11 +24,12 @@ const handleError = (error) => {
         sessionStorage.clear();
         localStorage.clear();
         message += "<h4>Security precaution against theft</h4>";
-        message += "<p>You are being logged out because you've not previously authenticated from this location or device</p>";
-        message += "<ol><li>Maybe you moved and connected to a different WiFi</li>";
-        message += "<li>Or your browser was upgraded</li>";
-        message += "<li>Or you lost your device and someone's trying to change your site</li>";
-        message += "<p>Log in again using your registered email address</p>";
+        message += "<p>You are being logged out because you've not previously authenticated from this location or device. Possible causes:</p>";
+        message += "<ol><li>You connected to a different network</li>";
+        message += "<li>Your browser was upgraded</li>";
+        message += "<li>Your device was stolen</li>";
+        message += "<hr>";
+        message += "<p>Solution: Log in with your registered email address</p>";
         logout = true;
     }
     dialog_article.insertAdjacentHTML('afterbegin',message);
@@ -37,9 +38,9 @@ const handleError = (error) => {
     dialog_footer.insertAdjacentHTML('afterbegin',"<span></span>");
     
     if (logout) {
-        setTimeout(() => {
+        output_dialog.addEventListener("close", () => {
             window.location.reload();
-        }, 5000);
+        });
     }
 }
 
