@@ -6,7 +6,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_VISITS" AS
     --
     FUNCTION getBrowser RETURN VARCHAR2;
     --
-    FUNCTION getLocation RETURN VARCHAR2;
+    FUNCTION getLocation(pRemoteAddr IN VARCHAR2) RETURN VARCHAR2;
     --
     PROCEDURE getVisits(pWebsiteId IN website.id%type, pReport IN NUMBER, pPage IN NUMBER, pHandler IN VARCHAR2, pStatus OUT NUMBER);
     --
@@ -147,12 +147,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     /*
     **  GET GEOLOCATION FROM VISITOR'S IP ADDRESS
     */
-    FUNCTION getLocation RETURN VARCHAR2 IS
+    FUNCTION getLocation(pRemoteAddr IN VARCHAR2) RETURN VARCHAR2 IS
         l_ip_address_hash ip_lookup_hash.ip_address_hash%type;
         l_location page_hit.location%type;
         l_clob CLOB;
     BEGIN
-        l_ip_address_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+        l_ip_address_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pRemoteAddr,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
         FOR C1 IN (
             SELECT NVL2(city,city || ',',null) || country_code location
               FROM ip_lookup_hash
@@ -161,7 +161,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             l_location:=C1.location;
         END LOOP;
         IF (l_location IS NULL) THEN
-            pck_api.callIpdataAPI(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'GET',l_clob);
+            pck_api.callIpdataAPI(pRemoteAddr,'GET',l_clob);
             FOR C2 IN (
                 SELECT city,country_code, NVL2(city,city || ',',null) || country_code AS location
                   FROM JSON_TABLE(l_clob, '$' COLUMNS(city,country_code))
@@ -176,10 +176,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     END;
 
     /*
-    **  GET BROWSER FROM VISITOR'S USER AGENT DATA FIRST (CHROMIUM ONLY IN Q1-2026)
-    **  OTHERWISE ASK WHATSMYBROWSER.COM
+    **  GET BROWSER FROM VISITOR'S USER AGENT 
+    **  ONLY ASK WHATSMYBROWSER.COM IF NOT PREVIOUSLY DISCOVERED
     */
     FUNCTION getBrowser RETURN VARCHAR2 IS
+        l_user_agent VARCHAR2(500);
         l_user_agent_hash browser_lookup.user_agent_hash%type;
         l_clob CLOB;
         l_clob2 clob;
@@ -187,23 +188,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_array JSON_ARRAY_T;    
         l_browser browser_lookup.browser%type;
     BEGIN
-        l_browser:=pck_sec.parseUAData(pIncludePlatform=>TRUE);
-        IF (l_browser IS NULL) THEN
-            l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
-            FOR C1 IN (
-                SELECT browser
-                  FROM browser_lookup
-                 WHERE user_agent_hash=l_user_agent_hash
-             ) LOOP
-                l_browser:=C1.browser;
-            END LOOP;
-        END IF;
+        l_user_agent:=OWA_UTIL.get_cgi_env('HTTP_USER_AGENT');
+        
+        l_user_agent_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_user_agent,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+        FOR C1 IN (
+            SELECT browser
+              FROM browser_lookup
+             WHERE user_agent_hash=l_user_agent_hash
+         ) LOOP
+            l_browser:=C1.browser;
+        END LOOP;
 
         IF (l_browser IS NULL) THEN
             l_array:= new JSON_ARRAY_T;
             l_object:=new JSON_OBJECT_T;
             l_object.put('name','User-Agent');
-            l_object.put('value',OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
+            l_object.put('value',l_user_agent);
             l_array.append(l_object);
             l_object:=new JSON_OBJECT_T;
             l_object.put('headers',l_array);
@@ -225,36 +225,39 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     **  UPLOAD CLIENT VISIT DETAILS INTO PAGE_HIT TABLE
     */
     PROCEDURE uploadPageVisit(pWebsiteid IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB) IS
+        l_remote_addr VARCHAR2(45);
+        l_user_agent VARCHAR2(500);
         l_location page_hit.location%type;
-        l_browser browser_lookup.browser%type;   
+        l_browser browser_lookup.browser%type;  
+        l_session_data VARCHAR2(1000); 
         l_session_id page_hit.session_id%type;
         l_cpu_used_session NUMBER;
         n PLS_INTEGER;
     BEGIN
+    -- pck_core.log('start uploadPageVisit:'||pWebsiteid||':'||pArticleid);
         l_cpu_used_session:=dbms_utility.get_cpu_time();
+
+        l_remote_addr:=OWA_UTIL.get_cgi_env('REMOTE_ADDR');
+        l_location:=getLocation(l_remote_addr);
+
+        l_browser:=pck_sec.parseUAData(pIncludePlatform=>TRUE); /* respect privacy first */
+        IF (l_browser IS NULL) THEN
+            l_browser:=getBrowser; /* whatsmybrowser API is last resort */
+        END IF;
 
         FOR C IN (
             SELECT seq, referrer, lcp, lcp_rating, cls, cls_rating, inp, inp_rating, fcp, fcp_rating, ttfb, ttfb_rating,
-                mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud, timezone
+                mobile, connection, url, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud, timezone
           FROM JSON_TABLE(pBodyText FORMAT JSON, '$' 
             COLUMNS (seq, referrer, LCP, LCP_rating, CLS, CLS_rating, INP, INP_rating, FCP, FCP_rating, TTFB, TTFB_rating,
-                    mobile, connection, url, pathname, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud, timezone))
+                    mobile, connection, url, website_loaded, duration_visible, page_weight, total_requests, first_visit, aud, timezone))
         ) LOOP
             /* 
-            ** 1. Get location from IPData.co
-            **    TO BE GDPR/CCPA COMPLIANT NEVER STORE VISITOR'S IP ADDRESS 
+            ** CREATE SESSION_ID : 
             */
-            l_location:=getLocation;
-
-            /* 
-            ** 2. BROWSER
-            */
-            l_browser:=getBrowser;
-
-            /* 
-            ** 3. SESSION_ID : 
-            */
-            l_session_id:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pWebsiteid || C.url || C.website_loaded || OWA_UTIL.get_cgi_env('HTTP_REMOTE_ADDR') || OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+            l_session_data:=pWebsiteid||':'||C.url||':'||C.website_loaded||':'||l_remote_addr||':'||l_browser;
+            l_session_id:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_session_data,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+            pck_core.log(l_session_data||':'||l_session_id);
 
             /*
             **  seq=0 means first analytics segment for page
@@ -266,12 +269,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
                 INSERT INTO page_hit (
                     website_id, article_id, session_id, visit_date, url, duration_visible, first_visit,
                      ttfb, ttfb_rating, fcp, fcp_rating, lcp, lcp_rating, cls, cls_rating, inp, inp_rating,
-                     referrer, browser, location, mobile, connection, page_weight, total_requests, aud, pathname, timezone
+                     referrer, browser, location, mobile, connection, page_weight, total_requests, aud, timezone
                 )
                 VALUES (
                     pWebsiteid, pArticleid, l_session_id, TO_TIMESTAMP('1970-01-01','yyyy-mm-dd') + numtodsinterval(C.website_loaded,'second'), C.url, C.duration_visible, C.first_visit,
                     C.ttfb, C.ttfb_rating, C.fcp, C.fcp_rating, C.lcp, C.lcp_rating, C.cls, C.cls_rating, C.inp, C.inp_rating,
-                    apex_string_util.get_domain(C.referrer), l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.pathname, C.timezone
+                    apex_string_util.get_domain(C.referrer), l_browser, l_location, C.mobile, C.connection, C.page_weight, C.total_requests, C.aud, C.timezone
                 );
             ELSE
                 UPDATE page_hit
@@ -297,6 +300,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         ) LOOP
             pck_sec.updateCpuUsed(pWebsiteid=>pWebsiteid, pUserid=>C.id, pCpuUsedStart=>l_cpu_used_session);
         END LOOP;
+        EXCEPTION WHEN OTHERS THEN pck_core.log_error;
     END;
 
     /*
