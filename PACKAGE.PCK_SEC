@@ -697,7 +697,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
         IF (n=0) THEN
             INSERT INTO security_log(id, website_id, user_id, message, remote_addr, user_agent, timezone) 
-            VALUES (seq_log.nextval, pWebsiteid, l_session_data.user_id, 'Access denied - refresh token not exists', l_remote_addr, l_user_agent, l_timezone);
+            VALUES (seq_log.nextval, pWebsiteid, l_session_data.user_id, 'Access denied - refresh token not exists.' || CASE WHEN l_session_data.bearer_token IS NULL THEN ' - Bearer token is null' END, l_remote_addr, l_user_agent, l_timezone);
             pStatus:=401;
             RETURN;
         END IF;
