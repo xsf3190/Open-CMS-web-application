@@ -177,6 +177,7 @@ const flushQueues = () => {
         if (!document.referrer.includes(window.location.hostname)) {
             json["referrer"] = document.referrer;
         }
+        json["properties"] = `v=${window.innerWidth}x${window.innerHeight};dpr=${window.devicePixelRatio}`;
         json["url"] = window.location.hostname;
 
         json["page_weight"] = page_weight();
