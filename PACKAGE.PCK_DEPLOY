@@ -549,7 +549,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     n2:=INSTR(l_img_src(i).img_src,'/',1,5);
                     l_img_width:=SUBSTR(l_img_src(i).img_src,n1+3,n2-n1-3);
                     l_img_width_pct:=ROUND((l_img_width/l_max_width_px)*100);
-                    l_sizes:='(width >= ' || l_max_width_px || ') ' || l_img_width || 'px,' || l_img_width_pct || 'vw';
+                    l_sizes:='(width >= ' || l_max_width_px || ') ' || l_img_width || 'px,' || LEAST(l_img_width_pct,100) || 'vw';
                 END IF;
             ELSE
                 l_loading:='lazy';
