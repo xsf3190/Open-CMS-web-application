@@ -680,6 +680,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
            AND fingerprint=l_fingerprint;
 
         IF (n=0) THEN
+            DELETE refresh_token 
+             WHERE website_id=pWebsiteid 
+               AND user_id=l_session_data.user_id;
+               
             INSERT INTO security_log(id, website_id, user_id, message, remote_addr, user_agent, timezone) 
             VALUES (seq_log.nextval, pWebsiteid, l_session_data.user_id, 'Access denied - fingerprint', l_remote_addr, l_user_agent, l_timezone);
             pStatus:=401;
