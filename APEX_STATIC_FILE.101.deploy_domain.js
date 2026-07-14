@@ -2,7 +2,7 @@
 /* CREATE NEW WEBSITE. DOMAIN NAME OPTIONAL, DEFAULTS TO RANDOMLY GENERATED NAME                             */
 /* **************************************************************************** */
 import { callAPI, handleError } from "deploy_callAPI";
-import { liveRegion, dialog_footer, initDialog } from "deploy_elements";
+import { liveRegion, output_dialog, dialog_footer, initDialog } from "deploy_elements";
 
 let endpoint;
 
@@ -32,8 +32,14 @@ export const clickHandler = (e) => {
         .then((data) => {
             isSending = false;
             loader.style.opacity=0;
-            console.log(data);
             liveRegion(data);
+            if (data.token) {
+                output_dialog.addEventListener("close", () => {
+                    const url = `https://${input.value}.netlify.app?token=${data.token}&refresh=${data.refresh}&menulist=${data.menulist}`;
+                    window.location.replace(url);
+                });
+            }
+            
         })
 }
 
