@@ -124,7 +124,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 'data-endpoint="' || pEndpoint || '"' ||
                 CASE WHEN pData IS NOT NULL THEN ' ' || pData END ||
                 '>' ||
-                '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
+                -- '<span aria-hidden="true" style="color:' || pColor || '">' || pIcon || '</span>' || pText ||
+                '<span aria-hidden="true">' || pIcon || '</span>' || pText ||
             '</button>'
         );
     END;
@@ -179,6 +180,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         /*
         **  "sub" in the token is the user's email address which we need to get client_secret
         */
+        pck_core.log('l_session_data.bearer_token:'||l_session_data.bearer_token);
         l_token:=apex_jwt.DECODE(p_value=>l_session_data.bearer_token, p_signature_key=>null);
 
         FOR C IN (
@@ -389,6 +391,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo');
         l_html:=l_html || addMenuitem('favicon/:ID', '', '🍀', 'Favicon');
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Pages');
+        l_html:=l_html || addMenuitem('domain/:ID', '', '🌐', 'Domain');
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '🈸', 'Options');
         
         FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
