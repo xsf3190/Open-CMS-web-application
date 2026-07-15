@@ -180,7 +180,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         /*
         **  "sub" in the token is the user's email address which we need to get client_secret
         */
-        pck_core.log('l_session_data.bearer_token:'||l_session_data.bearer_token);
+        -- pck_core.log('l_session_data.bearer_token:'||l_session_data.bearer_token);
         l_token:=apex_jwt.DECODE(p_value=>l_session_data.bearer_token, p_signature_key=>null);
 
         FOR C IN (
@@ -308,7 +308,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     ** WORKFLOW DEPENDS ON ACTION:
     **
     ** null - SEND PASSCODE OR MAGIC LINK TO EMAIL ADDRESS
-    ** create-website - send link to editor website to email address 
+    ** create-website - send link to editor website to provided email address 
     */
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
     BEGIN
@@ -441,6 +441,35 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         pUserAgent:=l_user_agent;
         pTimezone:=l_timezone;
         RETURN (l_fingerprint);
+    END;
+
+    /*
+    ** CHECK USER HAS A REGISTERED FINGERPRINT
+    */
+    FUNCTION checkFingerprint(pWebsiteid IN NUMBER, pUserid IN NUMBER) RETURN BOOLEAN IS
+        l_fingerprint fingerprint.fingerprint%type;
+        l_remote_addr security_log.remote_addr%type;
+        l_user_agent  security_log.user_agent%type;
+        l_timezone security_log.timezone%type;
+        n PLS_INTEGER;
+    BEGIN
+        l_remote_addr:=OWA_UTIL.get_cgi_env ('REMOTE_ADDR');
+        l_user_agent:=parseUAData(pIncludePlatform=>FALSE);
+        l_timezone:=OWA_UTIL.get_cgi_env ('timezone');
+        l_fingerprint:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_remote_addr || l_user_agent || l_timezone,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+
+        SELECT COUNT(*) 
+          INTO n
+          FROM fingerprint
+         WHERE user_id=pUserid
+           AND fingerprint=l_fingerprint;
+
+        IF (n=0) THEN
+            INSERT INTO security_log(id, website_id, user_id, message, remote_addr, user_agent, timezone) 
+            VALUES (seq_log.nextval, pWebsiteid, pUserid, 'Access denied - fingerprint', l_remote_addr, l_user_agent, l_timezone);
+        END IF;  
+
+        RETURN (n>0);
     END;
 
     /*
@@ -618,23 +647,29 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     ** NOW WE CAN ISSUE NEW PAIR OF TOKENS
     */
     PROCEDURE checkAuthStatus(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
-        l_email users.email%type;
         l_user_id users.id%type;
-        l_client_secret users.client_secret%type;
-        l_cld_cloud_name users.cld_cloud_name%type;
-        l_cld_upload_preset users.cld_upload_preset%type;
+        l_email users.email%type;
         l_time_since_sent number;
-        l_token_issued refresh_token.token_issued%type;
+        l_refresh VARCHAR2(1000);
+        l_token VARCHAR2(1000);
+        l_aud VARCHAR2(7);
         l_json JSON_OBJECT_T;
     BEGIN
     -- pck_core.log('checkAuthStatus:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
-        SELECT u.id, u.client_secret, LOWER(u.email), u.cld_cloud_name, u.cld_upload_preset, extract (minute from (current_timestamp - coalesce(u.updated_date, u.created_date)))
-          INTO l_user_id, l_client_secret, l_email, l_cld_cloud_name, l_cld_upload_preset, l_time_since_sent
+        SELECT u.id, u.email, extract (minute from (current_timestamp - coalesce(u.updated_date, u.created_date)))
+          INTO l_user_id, l_email, l_time_since_sent
           FROM users u, JSON_TABLE(pBodyText, '$' COLUMNS email) j
-         WHERE u.email=j.email
+         WHERE u.email=LOWER(j.email)
            AND u.login_status='AUTH OK';
 
-        issueJWTTokens(pWebsiteId, l_email, l_user_id, l_cld_cloud_name, l_cld_upload_preset, l_client_secret);
+        pck_jwt.issueJWTokens(pWebsiteid=>pWebsiteid,pUserid=>l_user_id, pRefresh=>l_refresh, pToken=>l_token, pAud=>l_aud);
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('refresh', l_refresh);
+        l_json.put('token', l_token);
+        l_json.put('menulist', buildMenulist(pWebsiteId, l_aud, l_email));
+        apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
 
@@ -652,102 +687,50 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     END;
 
     /*
-    ** CREATE NEW PAIR OF ACCESS / REFRESH TOKENS
-    ** CALLED WHEN CLIENT'S ACCESS TOKEN HAS EXPIRED
+    ** CREATE NEW PAIR OF ACCESS / REFRESH TOKENS WHEN ACCESS TOKEN EXPIRES ON CLIENT
     ** REFRESH TOKEN SENT IN THE REQUEST MUST EXIST FOR ONLY ONE USER/WEBSITE
     */
     PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS 
         l_session_data pck_sec.t_session_data;
-        l_token_issued refresh_token.token_issued%type;
-        l_token APEX_JWT.T_TOKEN;
-        l_new_token VARCHAR2 (4000);
-        l_new_refresh VARCHAR2 (4000);
-        l_fingerprint fingerprint.fingerprint%type;
-        l_remote_addr fingerprint.remote_addr%type;
-        l_user_agent  fingerprint.user_agent%type;
-        l_timezone fingerprint.timezone%type;
+        l_token_hash refresh_token.token_issued%type;
+        l_refresh VARCHAR2(1000);
+        l_token VARCHAR2(1000);
+        l_aud VARCHAR2(7);
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteid);
 
-        /* Tokens stored as one-way hash values in database */
-        -- l_refresh_token_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
-
-        l_fingerprint:=getFingerprint(l_remote_addr, l_user_agent, l_timezone);
-
-        SELECT COUNT(*) 
-          INTO n
-          FROM fingerprint
-         WHERE user_id=l_session_data.user_id
-           AND fingerprint=l_fingerprint;
-
-        IF (n=0) THEN
-            DELETE refresh_token 
-             WHERE website_id=pWebsiteid 
-               AND user_id=l_session_data.user_id;
-               
-            INSERT INTO security_log(id, website_id, user_id, message, remote_addr, user_agent, timezone) 
-            VALUES (seq_log.nextval, pWebsiteid, l_session_data.user_id, 'Access denied - fingerprint', l_remote_addr, l_user_agent, l_timezone);
+        IF (NOT checkFingerprint(pWebsiteid, l_session_data.user_id)) THEN   
             pStatus:=401;
             RETURN;
         END IF;
 
-        /* Check token registered for user and website (tokens stored as hash values in database)*/
-        l_token_issued:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_session_data.bearer_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+        /* Check token registered for user and website. Convert bearer token to hash value */
+        l_token_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_session_data.bearer_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
         
         SELECT COUNT(*) INTO n 
           FROM refresh_token 
-         WHERE token_issued=l_token_issued 
+         WHERE token_issued=l_token_hash
            AND website_id=pWebsiteid 
            AND user_id=l_session_data.user_id;
 
         IF (n=0) THEN
-            INSERT INTO security_log(id, website_id, user_id, message, remote_addr, user_agent, timezone) 
-            VALUES (seq_log.nextval, pWebsiteid, l_session_data.user_id, 'Access denied - refresh token not exists.' || CASE WHEN l_session_data.bearer_token IS NULL THEN ' - Bearer token is null' END, l_remote_addr, l_user_agent, l_timezone);
+            INSERT INTO security_log(id, website_id, user_id, message) 
+            VALUES (seq_log.nextval, pWebsiteid, l_session_data.user_id, 'Access denied - refresh token was not issued.' || CASE WHEN l_session_data.bearer_token IS NULL THEN ' - Bearer token is null' END);
             pStatus:=401;
             RETURN;
         END IF;
 
-        -- Delete old token before replacing it
-        DELETE refresh_token 
-         WHERE website_id=pWebsiteid 
-           AND user_id=l_session_data.user_id;
-
-        -- Create new refresh and access tokens
-        l_new_token:=apex_jwt.ENCODE (
-            p_iss       => l_session_data.iss,
-            p_sub       => l_session_data.sub,
-            p_aud       => l_session_data.scope,
-            p_jti       => l_session_data.user_id,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => ACCESS_TOKEN_EXP,
-            p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
-        );
-
-        l_new_refresh:=apex_jwt.ENCODE (
-            p_iss       => l_session_data.iss,
-            p_sub       => l_session_data.sub,
-            p_aud       => l_session_data.scope,
-            p_jti       => l_session_data.user_id,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => REFRESH_TOKEN_EXP,
-            p_other_claims => '"cld_cloud_name":' || apex_json.stringify(l_session_data.cld_cloud_name) ||
-                              ',"cld_upload_preset":' || apex_json.stringify(l_session_data.cld_upload_preset),
-            p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
-        );
-
-        -- Rotate the user's refresh token for the website
-        INSERT INTO refresh_token(website_id, user_id, token_issued, token_issued_orig)
-            VALUES (pWebsiteid, l_session_data.user_id, dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256), l_new_refresh);
-
-        pStatus:=200;
+        pck_jwt.issueJWTokens(pWebsiteid=>pWebsiteid,pUserid=>l_session_data.user_id, pRefresh=>l_refresh, pToken=>l_token, pAud=>l_aud);
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('token', l_new_token);
-        l_json.put('refresh', l_new_refresh);
+        l_json.put('refresh', l_refresh);
+        l_json.put('token', l_token);
         apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
 
         EXCEPTION WHEN OTHERS THEN
             pck_core.log_error(pStatus);
