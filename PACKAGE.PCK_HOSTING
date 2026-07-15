@@ -1,7 +1,5 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
-    PROCEDURE changeURL(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
-    --
     PROCEDURE createEditorWebsite(pTemplateWebsiteid IN website.id%type, pRestURL IN VARCHAR2);
     --
     PROCEDURE createLiveWebsite(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus IN OUT NUMBER);
@@ -9,8 +7,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     PROCEDURE deleteDNS(pWebsiteId IN website.id%type);
     --
     PROCEDURE deleteWebsite(pWebsiteid IN website.id%type);
-    --
-    PROCEDURE getChangeURL(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     FUNCTION getEnvFromURL(pUrl IN VARCHAR2) RETURN VARCHAR2;
     --
@@ -327,99 +323,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
         /* DELETE TOKENS AND WEBSITE */
         DELETE website WHERE id=pWebsiteId;
-    END;
-
-    /*
-    ** CREATE HTML FOR FORM TO CHANGE SUBDOMAIN OF TEST URL
-    */
-    PROCEDURE getChangeURL(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_subdomain website.domain_name%type;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        l_subdomain:=SUBSTR(l_session_data.url,1,INSTR(l_session_data.url,'.')-1);
-
-        apex_json.open_object;
-        apex_json.write('article', '<label for="subdomain">Enter New URL</label><input type="text" name="subdomain" required value="' || l_subdomain || '"><span class="result">' || l_session_data.url || '</span>');
-        apex_json.write('footer', '<button type="button" class="button change-url">CHANGE URL</button><div class="loader visually-hidden"></div>');
-        apex_json.write('success', TRUE);
-        apex_json.close_object;
-
-        pStatus:=200;
-
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
-    END;
-
-    /*
-    ** CHANGE NETLIFY SUBDOMAIN NAME IF AVAILABLE
-    */
-    PROCEDURE changeURL(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_netlify_site_id website.netlify_site_id%type;
-        l_subdomain website.domain_name%type;
-        l_json JSON_OBJECT_T;
-        l_clob CLOB;
-        l_valid BOOLEAN:=TRUE;
-        l_message VARCHAR2(50);
-        l_new_token_domain VARCHAR2 (4000);
-        l_new_refresh_domain VARCHAR2 (4000);
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        SELECT j.subdomain, w.netlify_site_id 
-          INTO l_subdomain, l_netlify_site_id  
-          FROM JSON_TABLE(pBodytext, '$' COLUMNS (subdomain)) j, website w WHERE w.id=pWebsiteId;
-
-        IF (urlExists(l_subdomain || '.netlify.app')) THEN
-            l_message:='URL already in use. Try again';
-            l_valid:=FALSE;
-        ELSE
-            l_json:=new JSON_OBJECT_T;
-            l_json.put('name', l_subdomain);
-            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || l_netlify_site_id, pMethod=>'PATCH', pBody=>l_json.stringify, pStatusAllowed=>422, pData=>l_clob);
-            IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
-                l_message:='URL successfully changed';
-                UPDATE website SET domain_name=l_subdomain WHERE id=pWebsiteId;
-                pck_deploy.runDeployment(pWebsiteId, l_netlify_site_id, pck_core.getResturl);
-            ELSIF (apex_web_service.g_status_code=422) THEN
-                l_message:='Name already taken. Try again';
-                l_valid:=FALSE;
-            END IF;
-        END IF;
-
-        apex_json.open_object; 
-        apex_json.write('success', TRUE);
-        apex_json.write('valid', l_valid);
-        IF (l_valid) THEN
-            l_new_token_domain:=apex_jwt.ENCODE (
-                p_iss       => l_session_data.iss,
-                p_sub       => l_session_data.sub,
-                p_aud       => l_session_data.scope,
-                p_jti       => l_session_data.user_id,
-                p_iat_ts    => current_timestamp,
-                p_exp_sec   => pck_sec.ACCESS_TOKEN_EXP,
-                p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
-            ); 
-            l_new_refresh_domain:=apex_jwt.ENCODE (
-                p_iss       => l_session_data.iss,
-                p_sub       => l_session_data.sub,
-                p_aud       => l_session_data.scope,
-                p_jti       => l_session_data.user_id,
-                p_iat_ts    => current_timestamp,
-                p_exp_sec   => pck_sec.REFRESH_TOKEN_EXP,
-                p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret)
-            );
-            apex_json.write('url', 'https://' || l_subdomain || '.netlify.app' || '?refresh=' || l_new_refresh_domain || '&token=' || l_new_token_domain);
-        END IF;
-        apex_json.write('message', l_message);
-        apex_json.close_object;
-
-        pStatus:=200;
-
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
     END;
 
     /*
