@@ -46,12 +46,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
                 '<details name="domain">' ||
                     '<summary>Change netlify subdomain</summary>' ||
                     '<fieldset class="flow">' ||
-                        '<legend>Enter your domain name</legend>' ||
+                        '<legend>Enter new sub-domain name</legend>' ||
                         '<div>' ||
                             '<label for="subdomain-name" class="block">Sub-domain name</label>' ||
                             '<input id="subdomain-name" type="text" maxlength="' || C.data_length || '" value="' || C.domain_name || '">' ||
                         '</div>' ||
-                        '<button type="button" class="button">SUBMIT</button>' ||
+                        '<button type="button" class="button" data-processing="Changing sub-domain ... wait a few seconds">SUBMIT</button>' ||
                     '</fieldset>' ||
                 '</details>' ||
             '</div>';
@@ -77,20 +77,90 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
     END;
 
     /*
+    ** CHANGE NETLIFY SUBDOMAIN NAME IF AVAILABLE
+    */
+    FUNCTION changeSubdomain(pWebsiteId IN website.id%type, pSubdomain IN VARCHAR2, pNetlifySiteId IN VARCHAR2, pMessage IN OUT VARCHAR2) RETURN BOOLEAN IS
+        l_json JSON_OBJECT_T;
+        l_clob CLOB;
+        l_valid BOOLEAN:=TRUE;
+    BEGIN
+        IF (pck_hosting.urlExists(pSubdomain || '.netlify.app')) THEN
+            pMessage:='Sub-domain already in use. Try again';
+            l_valid:=FALSE;
+        ELSE
+            l_json:=new JSON_OBJECT_T;
+            l_json.put('name', pSubdomain);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || pNetlifySiteId, pMethod=>'PATCH', pBody=>l_json.stringify, pStatusAllowed=>422, pData=>l_clob);
+            IF (apex_web_service.g_status_code BETWEEN 200 AND 299) THEN
+                pMessage:='Sub-domain successfully changed. Site reloads on closing window';
+                UPDATE website SET domain_name=pSubdomain WHERE id=pWebsiteId;
+                DELETE website_files WHERE website_id=pWebsiteId AND mime_type='html';
+                pck_deploy.deployEditorSite(pWebsiteid);
+            ELSIF (apex_web_service.g_status_code=422) THEN
+                pMessage:='Name already taken. Try again';
+                l_valid:=FALSE;
+            END IF;
+        END IF;
+
+        RETURN(l_valid);
+
+    END;
+
+    /*
     ** UPDATES FOR DOMAIN FORM
     */
     PROCEDURE updateDomain(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
-        l_bodytext CLOB:=pBodyText;
+        l_message VARCHAR2(100);
+        l_status BOOLEAN;
+        l_refresh_token VARCHAR2(1000);
+        l_refresh_token_hash refresh_token.token_issued%type;
         l_json JSON_OBJECT_T;
+
+        FUNCTION getToken(pExpires IN PLS_INTEGER) RETURN VARCHAR2 IS
+            l_token VARCHAR2(1000);
+        BEGIN
+            l_token:=apex_jwt.ENCODE (
+                p_iss       => l_session_data.iss,
+                p_sub       => l_session_data.sub,
+                p_aud       => l_session_data.scope,
+                p_jti       => l_session_data.user_id,
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => pExpires,
+                p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret));
+
+            RETURN(l_token);
+        END;
+
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        pck_core.log(l_bodytext);
-
         l_json:= new JSON_OBJECT_T;
+
+        FOR C IN (
+            SELECT j.id, j.value, w.netlify_site_id 
+              FROM JSON_TABLE(pBodytext, '$' COLUMNS (id, value)) j, website w WHERE w.id=pWebsiteId
+        ) LOOP
+            CASE C.id
+                WHEN 'domain-name' THEN
+                    l_message:='Processing DOMAIN for '||C.value;
+                WHEN 'subdomain-name' THEN
+                    l_status:=changeSubdomain(pWebsiteid, C.value, C.netlify_site_id, l_message);
+                    IF (l_status) THEN
+                        l_refresh_token:=getToken(pck_sec.REFRESH_TOKEN_EXP);
+                        l_refresh_token_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+                        l_json.put('token',getToken(pck_sec.ACCESS_TOKEN_EXP));
+                        l_json.put('refresh',l_refresh_token);
+                        l_json.put('menulist',pck_sec.buildMenulist(pWebsiteid, 'owner', l_session_data.sub));
+                        DELETE refresh_token WHERE website_id=pWebsiteid;
+                        INSERT INTO refresh_token(user_id, website_id, token_issued, token_issued_orig) VALUES (l_session_data.user_id, pWebsiteId, l_refresh_token_hash, l_refresh_token);
+                    END IF;
+            END CASE;
+        END LOOP;
+
+        
         l_json.put('success',true);
-        l_json.put('message','processed');
+        l_json.put('message',l_message);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
