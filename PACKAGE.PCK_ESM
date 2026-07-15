@@ -2,6 +2,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_ESM" as
     --
     PROCEDURE buildESModules(pEsmLibrary IN VARCHAR2 DEFAULT 'test');
     --
+    PROCEDURE searchCode(pString IN VARCHAR2);
+    --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
@@ -159,6 +161,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_ESM" as
         EXCEPTION
             WHEN OTHERS THEN
                 pck_core.log_error;
+    END;
+
+    /*
+    ** SEARCH JAVASCRIPT CODE BASE FOR GIVEN STRING
+    */
+    PROCEDURE searchCode(pString IN VARCHAR2) IS
+    BEGIN
+        FOR C IN (
+            SELECT file_name, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) AS updated_date, apex_util.blob_to_clob(file_content) AS file_content
+              FROM apex_application_static_files
+             WHERE application_id=101
+               AND file_name LIKE '%.min.js'
+             ORDER BY updated_date DESC
+        ) LOOP
+            IF (INSTR(C.file_content,pString)>0) THEN
+                dbms_output.put_line(C.file_name);
+            END IF;
+        END LOOP;
     END;
     
 end;
