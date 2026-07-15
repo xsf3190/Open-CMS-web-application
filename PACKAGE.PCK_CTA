@@ -91,15 +91,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
     PROCEDURE createWebsite(pWebsiteid IN NUMBER, pEmail IN VARCHAR2, pEncKey IN VARCHAR2, pUserid IN NUMBER) IS
         TEMPLATE_WEBSITEID CONSTANT NUMBER:=11010;
         l_user_id users.id%type;
-        l_fingerprint fingerprint.fingerprint%type;
-        l_remote_addr fingerprint.remote_addr%type;
-        l_user_agent  fingerprint.user_agent%type;
-        l_timezone fingerprint.timezone%type;
-        l_cld_cloud_name users.cld_cloud_name%type;
-        l_cld_upload_preset users.cld_upload_preset%type;
-        l_new_token VARCHAR2 (4000);
-        l_new_refresh VARCHAR2 (4000);
-        l_new_refresh_hash refresh_token.token_issued%type;
+        l_token VARCHAR2(1000);
+        l_refresh VARCHAR2(1000);
+        l_aud VARCHAR2(7);
         l_job_name VARCHAR2(30);
         l_url VARCHAR2(4000);
         l_json JSON_OBJECT_T;
@@ -108,8 +102,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         l_create_next BOOLEAN;
         n PLS_INTEGER;
     BEGIN
-        /* Validate request */
-        /* Only 1 editor website per email unless pEmail is owner of at least 1 active domain site */
+        /* 
+        ** Request for new website
+        ** - No limit if pEmail is owner of at least 1 active domain site 
+        ** - Else 1 editor website per email
+        */
         
         l_create_next:=FALSE;
         l_ip_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
@@ -123,11 +120,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                 CONTINUE;
             END IF;
             IF (C.nb=1) THEN
-                l_message:='Only 1 website on free plan';
+                l_message:='One website only for users not using a domain';
             ELSE
                 SELECT COUNT(*) INTO n FROM website WHERE ip_hash=l_ip_hash;
                 IF (n>0) THEN
-                    l_message:='No abuse please';
+                    l_message:='Please be considerate to others';
                 END IF;
             END IF;
         END LOOP;
@@ -150,56 +147,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
 
                 UPDATE website SET contact_email=pEmail, user_id=l_user_id, ip_hash=l_ip_hash  WHERE id=C.id;
 
-                l_fingerprint:=pck_sec.getFingerprint(l_remote_addr, l_user_agent, l_timezone);
-                UPDATE fingerprint 
-                   SET last_used_date=current_timestamp
-                 WHERE user_id=l_user_id
-                   AND fingerprint=l_fingerprint;
-                n:=sql%rowcount;
-                IF (n=0) THEN
-                    INSERT INTO fingerprint(user_id, fingerprint, last_used_date, remote_addr, user_agent, timezone)
-                    VALUES (l_user_id, l_fingerprint, current_timestamp, l_remote_addr, l_user_agent, l_timezone);
-                END IF;
-
-                SELECT u.cld_cloud_name, u.cld_upload_preset
-                  INTO l_cld_cloud_name, l_cld_upload_preset
-                  FROM users u, apex_workspace_apex_users w
-                 WHERE w.email=u.email
-                   AND w.is_admin='Yes'
-                 ORDER BY date_created
-                 FETCH FIRST ROW ONLY;
-
-                l_new_refresh:=apex_jwt.ENCODE (
-                    p_iss       => pck_sec.getJWTIssuer(C.id),
-                    p_sub       => pEmail,
-                    p_aud       => 'owner',
-                    p_jti       => l_user_id,
-                    p_iat_ts    => current_timestamp,
-                    p_exp_sec   => pck_sec.REFRESH_TOKEN_EXP,
-                    p_other_claims => '"cld_cloud_name":' || apex_json.stringify(l_cld_cloud_name) || ',"cld_upload_preset":' || apex_json.stringify(l_cld_upload_preset),
-                    p_signature_key => UTL_RAW.cast_to_raw (pEncKey)
-                );
-
-                l_new_token:=apex_jwt.ENCODE (
-                    p_iss       => pck_sec.getJWTIssuer(C.id),
-                    p_sub       => pEmail,
-                    p_aud       => 'owner',
-                    p_jti       => l_user_id,
-                    p_iat_ts    => current_timestamp,
-                    p_exp_sec   => pck_sec.ACCESS_TOKEN_EXP,
-                    p_signature_key => UTL_RAW.cast_to_raw (pEncKey)
-                );
-
-                l_new_refresh_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
-
-                DELETE refresh_token WHERE website_id=C.id;
-            
-                INSERT INTO refresh_token(user_id, website_id, token_issued, token_issued_orig) VALUES (l_user_id, C.id, l_new_refresh_hash, l_new_refresh);
+                pck_jwt.issueJWTokens(pWebsiteid=>C.id,pUserid=>l_user_id, pRefresh=>l_refresh, pToken=>l_token, pAud=>l_aud);
 
                 l_url:='https://' || C.domain_name || '.netlify.app' || 
-                    '?refresh=' || l_new_refresh ||
-                    '&token=' || l_new_token ||
-                    '&menulist=' || utl_url.escape(pck_sec.buildMenulist(C.id, 'owner', pEmail),TRUE,'UTF-8');
+                    '?refresh=' || l_refresh ||
+                    '&token=' || l_token ||
+                    '&menulist=' || utl_url.escape(pck_sec.buildMenulist(C.id, l_aud, pEmail),TRUE,'UTF-8');
 
                 pck_email.sendmail(pEmail, 'Link to editor website', pck_email.websiteTemplate(l_url));
                 l_message:='Sent email with link to your website';
