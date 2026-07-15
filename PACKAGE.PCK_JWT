@@ -1,0 +1,89 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_JWT" as
+    --
+    PROCEDURE issueJWTokens(pWebsiteid IN NUMBER, pUserid IN NUMBER, pRefresh IN OUT VARCHAR2, pToken IN OUT VARCHAR2, pAud IN OUt VARCHAR2);
+    --
+end "PCK_JWT";
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_JWT" as
+    --
+    -- ISSUE NEW PAIR OF TOKENS FOR AN EXISTING USER
+    --
+    PROCEDURE issueJWTokens(pWebsiteid IN NUMBER, pUserid IN NUMBER, pRefresh IN OUT VARCHAR2, pToken IN OUT VARCHAR2, pAud IN OUt VARCHAR2) IS
+        l_fingerprint fingerprint.fingerprint%type;
+        l_remote_addr fingerprint.remote_addr%type;
+        l_user_agent  fingerprint.user_agent%type;
+        l_timezone fingerprint.timezone%type;
+        l_cld_cloud_name users.cld_cloud_name%type;
+        l_cld_upload_preset users.cld_upload_preset%type;
+        l_token VARCHAR2 (4000);
+        l_refresh VARCHAR2 (4000);
+        l_refresh_hash refresh_token.token_issued%type;
+    BEGIN
+        l_remote_addr:=OWA_UTIL.get_cgi_env ('REMOTE_ADDR');
+        l_user_agent:=pck_sec.parseUAData(pIncludePlatform=>FALSE);
+        l_timezone:=OWA_UTIL.get_cgi_env ('timezone');
+        l_fingerprint:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_remote_addr || l_user_agent || l_timezone,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+        
+        MERGE INTO fingerprint t
+        USING (
+            SELECT l_fingerprint AS fingerprint, pUserid AS user_id
+            FROM dual
+        ) s
+        ON (t.fingerprint=s.fingerprint AND t.user_id=s.user_id)
+        WHEN MATCHED THEN
+            UPDATE SET t.last_used_date=current_timestamp
+        WHEN NOT MATCHED THEN
+            INSERT (user_id, fingerprint, last_used_date, remote_addr, user_agent, timezone)
+            VALUES (s.user_id, s.fingerprint, current_timestamp, l_remote_addr, l_user_agent, l_timezone);
+
+        FOR C IN (
+            SELECT u1.email, u1.client_secret, 
+                    CASE 
+                        WHEN w.contact_email=u1.email THEN 'owner'
+                        WHEN u1.email=u2.email THEN 'admin'
+                        ELSE 'visitor'
+                    END aud,
+                    NVL(u1.cld_cloud_name, u2.cld_cloud_name) cld_cloud_name,
+                    NVL(u1.cld_upload_preset, u2.cld_upload_preset) cld_upload_preset
+              FROM users u1, users u2, apex_workspace_apex_users a, website w
+             WHERE u1.id=pUserid
+               AND a.email=u2.email
+               AND a.is_admin='Yes'
+               AND w.id=pWebsiteid
+             ORDER BY a.date_created
+             FETCH FIRST ROW ONLY
+        ) LOOP
+            pRefresh:=apex_jwt.ENCODE (
+                p_iss       => 'ORDS.' || pWebsiteid,
+                p_sub       => C.email,
+                p_aud       => C.aud,
+                p_jti       => pUserid,
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => pck_sec.REFRESH_TOKEN_EXP,
+                p_other_claims => '"cld_cloud_name":' || apex_json.stringify(C.cld_cloud_name) || ',"cld_upload_preset":' || apex_json.stringify(C.cld_upload_preset),
+                p_signature_key => UTL_RAW.cast_to_raw (C.client_secret)
+            );
+
+            pToken:=apex_jwt.ENCODE (
+                p_iss       => 'ORDS.' || pWebsiteid,
+                p_sub       => C.email,
+                p_aud       => C.aud,
+                p_jti       => pUserid,
+                p_iat_ts    => current_timestamp,
+                p_exp_sec   => pck_sec.ACCESS_TOKEN_EXP,
+                p_signature_key => UTL_RAW.cast_to_raw (C.client_secret)
+            );
+
+            l_refresh_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(pRefresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
+
+            DELETE refresh_token WHERE website_id=pWebsiteid AND user_id=pUserid;
+            
+            INSERT INTO refresh_token(user_id, website_id, token_issued, token_issued_orig) 
+                VALUES (pUserid, pWebsiteid, l_refresh_hash, pRefresh);
+
+        END LOOP;
+
+    END;
+    --
+end "PCK_JWT";
+/
