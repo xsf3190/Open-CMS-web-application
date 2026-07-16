@@ -84,6 +84,7 @@ const responseok = (response, result) => {
 }
 
 const rotate_tokens = async () => {
+    console.log("rotate_tokens. Bearer: ", refresh_token);
     const url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
     let refresh_headers = new Headers();
     refresh_headers.append("Content-Type", "application/json");
@@ -91,6 +92,7 @@ const rotate_tokens = async () => {
     refresh_headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
     refresh_headers.append("Authorization","Bearer " + refresh_token);
     const refresh_config = {method: "GET", headers: refresh_headers};
+    
     const refresh_response = await fetch(url, refresh_config);
     const refresh_result = await refresh_response.json();
     if (responseok(refresh_response, refresh_result)) {
@@ -116,7 +118,7 @@ try {
 // }
 
 /* 
-** CALL API FOR RESOURCES WITH ACCESS TOKEN
+** CALL API FOR RESOURCES EXCLUSIVELY WITH ACCESS TOKEN
 */
 const callAPI = async (endpoint, method, data) => {
     
