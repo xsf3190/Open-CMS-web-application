@@ -41,7 +41,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     FUNCTION parseUAData(pIncludePlatform IN BOOLEAN DEFAULT FALSE) RETURN VARCHAR2;
     --
-    PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
+    PROCEDURE rotateTokens(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE updateCpuUsed(pWebsiteid IN website.id%type, pUserid IN users.id%type, pCpuUsedStart IN website_cpu.cpu_used%type);
     --
@@ -561,7 +561,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     ** VERIFY PASSCODE OR TOKEN SENT BY USER MATCHES THOSE ORIGINALLY SENT BY EMAIL
     ** SET STATUS IN USERS TABLE TO "AUTH OK"
     **  - FOR VERIFIED PASSCODE, RETURN JWT ACCESS AND REFRESH TOKENS
-    **  - FOR VERIFIED TOKEN, MESSAGE IS SENT IN NEW WINDOWS TAB
+    **  - FOR VERIFIED LINK, MESSAGE IS SENT IN NEW WINDOWS TAB
     */
     PROCEDURE verifyAuthRequest(pWebsiteId IN website.id%type, pRequestType IN VARCHAR2, pUserId IN NUMBER, pVerifyData IN VARCHAR2, pStatus OUT NUMBER) IS
         l_email users.email%type;
@@ -569,7 +569,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_cld_upload_preset users.cld_upload_preset%type;
         l_jwt_enc_key users.client_secret%type;
         l_verify_data_hash RAW(32);
-        l_token APEX_JWT.T_TOKEN;
+        l_token_decoded APEX_JWT.T_TOKEN;
+        l_refresh VARCHAR2(1000);
+        l_token VARCHAR2(1000);
+        l_aud VARCHAR2(7);
         l_token_issued refresh_token.token_issued%type;
         l_url VARCHAR2(1000);
         l_url_base VARCHAR2(100);
@@ -610,13 +613,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             */
             WHEN 'magic' THEN
                 
-                l_token:=apex_jwt.DECODE (
+                l_token_decoded:=apex_jwt.DECODE (
                     p_value  => pVerifyData,
                     p_signature_key => UTL_RAW.cast_to_raw (l_jwt_enc_key)
                 );
 
                 BEGIN
-                    apex_jwt.VALIDATE (p_token => l_token, p_iss => getJWTIssuer(pWebsiteid));
+                    apex_jwt.VALIDATE (p_token => l_token_decoded, p_iss => 'ORDS.'||pWebsiteid);
                     EXCEPTION 
                         WHEN VALUE_ERROR THEN
                             htp.p('<h1>Token expired or not current. Check you sent from most recent message received. Login again</h1>');
@@ -630,7 +633,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                 htp.p('<h1 style="font-family:system-ui;font-size:2rem;color:rebeccapurple">Authenticated Successfully</h1>');
             
             WHEN 'passcode' THEN
-                issueJWTTokens(pWebsiteId, l_email, pUserId, l_cld_cloud_name, l_cld_upload_preset, l_jwt_enc_key);
+                -- issueJWTTokens(pWebsiteId, l_email, pUserId, l_cld_cloud_name, l_cld_upload_preset, l_jwt_enc_key);
+                pck_jwt.issueJWTokens(pWebsiteid=>pWebsiteid,pUserid=>pUserid, pRefresh=>l_refresh, pToken=>l_token, pAud=>l_aud);
+
+                l_json:= new JSON_OBJECT_T;
+                l_json.put('success',true);
+                l_json.put('refresh', l_refresh);
+                l_json.put('token', l_token);
+                l_json.put('menulist', buildMenulist(pWebsiteId, l_aud, l_email));
+                apex_util.prn(l_json.to_clob,false);
         END CASE;
 
         UPDATE users SET login_status='AUTH OK', last_login_date=current_timestamp WHERE id=pUserId;
@@ -690,7 +701,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     ** CREATE NEW PAIR OF ACCESS / REFRESH TOKENS WHEN ACCESS TOKEN EXPIRES ON CLIENT
     ** REFRESH TOKEN SENT IN THE REQUEST MUST EXIST FOR ONLY ONE USER/WEBSITE
     */
-    PROCEDURE refreshAuthToken(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS 
+    PROCEDURE rotateTokens(pWebsiteId IN website.id%type, pStatus OUT NUMBER) IS 
         l_session_data pck_sec.t_session_data;
         l_token_hash refresh_token.token_issued%type;
         l_refresh VARCHAR2(1000);
