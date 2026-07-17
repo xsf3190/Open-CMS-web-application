@@ -4,8 +4,6 @@ const output_dialog = document.querySelector("dialog.output");
 const dialog_article = output_dialog.querySelector("article");
 const dialog_footer = output_dialog.querySelector("footer");
 
-console.log("Starting deploy_callAPI.js");
-
 let access_token = sessionStorage.getItem("token");
 let refresh_token = localStorage.getItem("refresh");
 
@@ -14,6 +12,7 @@ let refresh_token = localStorage.getItem("refresh");
 ** "error" is object containing name, message thrown in function "responseok"
 */
 const handleError = (error) => {
+    console.log("starting handleError", error);
     if (!output_dialog.open) {
         output_dialog.showModal();
     }
@@ -21,15 +20,17 @@ const handleError = (error) => {
     dialog_article.replaceChildren();
     let message = "<h4>" + error.name + ": " + error.message + "</h4>";
     if (message.includes("Unauthorized")) {
+        console.log("refresh_token",refresh_token);
+        console.log("locatStorage",localStorage.getItem("refresh"));
         sessionStorage.clear();
         localStorage.clear();
         message += "<h4>Security precaution against theft</h4>";
         message += "<p>You are being logged out because you've not previously authenticated from this location or device. Possible causes:</p>";
         message += "<ol><li>You connected to a different network</li>";
-        message += "<li>Your browser was upgraded</li>";
+        message += "<li>Your browser was upgraded or you switched browsers</li>";
         message += "<li>Your device was stolen</li>";
         message += "<hr>";
-        message += "<p>Solution: Log in with your registered email address</p>";
+        message += "<p>Log in again</p>";
         logout = true;
     }
     dialog_article.insertAdjacentHTML('afterbegin',message);
@@ -48,6 +49,7 @@ const handleError = (error) => {
 ** CHECK IF TOKEN EXPIRED 
 */
 const expiredToken = (token) => {
+    console.log("Starting expiredToken");
     if (!token) return true;
     const now = Math.floor(new Date().getTime() / 1000);
     const arrayToken = token.split(".");
@@ -59,11 +61,11 @@ const expiredToken = (token) => {
 ** REPLACE NEW TOKENS IN STORAGE AND MEMORY. UPDATE UI
 */
 const replaceTokens = (data) => {
+    console.log("Starting replaceTokens");
     sessionStorage.setItem("token",data.token);
     access_token = data.token;
     localStorage.setItem("refresh",data.refresh);
     refresh_token = data.refresh;
-    console.log("tokens refreshed");
 }
 
 /* 
@@ -84,7 +86,7 @@ const responseok = (response, result) => {
 }
 
 const rotate_tokens = async () => {
-    console.log("rotate_tokens. Bearer: ", refresh_token);
+    console.log("Starting rotate_tokens", refresh_token);
     const url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
     let refresh_headers = new Headers();
     refresh_headers.append("Content-Type", "application/json");
@@ -99,7 +101,7 @@ const rotate_tokens = async () => {
         replaceTokens(refresh_result);
     }
 }
-
+/*
 try {
     console.log("Check if refresh_token expired");
     if (refresh_token) {
@@ -111,6 +113,7 @@ try {
 } catch (e) {
     handleError(e);
 }
+*/
 
 // if (refresh_token && !access_token) {
 //     console.log("refresh_token exists but access_token missing - rotate tokens");
@@ -121,7 +124,7 @@ try {
 ** CALL API FOR RESOURCES EXCLUSIVELY WITH ACCESS TOKEN
 */
 const callAPI = async (endpoint, method, data) => {
-    
+    console.log("Starting callAPI",endpoint);
     /* No tokens involved in Authenticate endpoints. Obviously. */
     if (!endpoint.includes("authenticate") && !endpoint.includes("auth-verify")) {
         if (expiredToken(access_token)) {
