@@ -40,7 +40,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        l_header:='<span>Add favicon to your site</span>';
+        l_header:='<h4>Set favicon for your site</h4>';
 
         FOR C IN (
             SELECT w.favicon
