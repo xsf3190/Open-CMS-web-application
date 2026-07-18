@@ -77,9 +77,57 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
     END;
 
     /*
+    ** LINK EDITOR SITE TO CUSTOM DOMAIN
+    */
+    FUNCTION linkDomain(pWebsiteId IN NUMBER, pDomain IN VARCHAR2, pNetlifySiteId IN VARCHAR2, pMessage IN OUT VARCHAR2) RETURN BOOLEAN IS
+        l_json JSON_OBJECT_T;
+        l_clob CLOB;
+        n PLS_INTEGER;
+    BEGIN
+        /* CHECK DOMAIN NAME NOT ALREADY IN USE */
+        SELECT COUNT(*) INTO n FROM website WHERE domain_name=pDomain;
+        IF (n>0) THEN
+            pMessage:='Domain already in use on platform';
+            RETURN FALSE;
+        END IF;
+
+        /* CREATE NETLIFY LIVE SITE LINKED TO DOMAIN */
+        l_json:=new JSON_OBJECT_T;
+        l_json.put('custom_domain', pDomain);
+        pck_api.callNetlifyAPI(pEndpoint=>'sites', pStatusAllowed=>422, pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
+        IF (apex_web_service.g_status_code=422) THEN
+            pMessage:='Domain name invalid or already taken';
+            RETURN FALSE;
+        END IF;
+
+        /* UPDATE WEBSITE WITH NETLIFY LIVE SITE ID */
+        FOR C IN (
+            SELECT id, name FROM JSON_TABLE(l_clob, '$' COLUMNS (id, name))
+        ) LOOP
+            UPDATE website 
+               SET domain_name=pDomain, 
+                   netlify_site_id_custom=C.id 
+             WHERE id=pWebsiteid;
+        END LOOP;
+
+        /* 
+         * Update editor netlify site to be "editor" subdomain of user's domain name
+         * Email user instructions on how to configure DNS records at their domain registrar
+         */
+        FOR C IN (
+            SELECT netlify_site_id, contact_email FROM website WHERE id=pWebsiteId
+        ) LOOP
+            l_json:=new JSON_OBJECT_T;
+            l_json.put('custom_domain', 'editor.' || pDomain);
+            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'PATCH', pBody=>l_json.stringify, pData=>l_clob);
+            pck_email.sendmail(C.contact_email, 'Configure DNS at your domain registrar', pck_email.DNSTemplate(pDomain));
+        END LOOP;
+    END;
+
+    /*
     ** CHANGE NETLIFY SUBDOMAIN NAME IF AVAILABLE
     */
-    FUNCTION changeSubdomain(pWebsiteId IN website.id%type, pSubdomain IN VARCHAR2, pNetlifySiteId IN VARCHAR2, pMessage IN OUT VARCHAR2) RETURN BOOLEAN IS
+    FUNCTION changeSubdomain(pWebsiteId IN NUMBER, pSubdomain IN VARCHAR2, pNetlifySiteId IN VARCHAR2, pMessage IN OUT VARCHAR2) RETURN BOOLEAN IS
         l_json JSON_OBJECT_T;
         l_clob CLOB;
         l_valid BOOLEAN:=TRUE;
@@ -113,24 +161,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         l_session_data pck_sec.t_session_data;
         l_message VARCHAR2(100);
         l_status BOOLEAN;
-        l_refresh_token VARCHAR2(1000);
-        l_refresh_token_hash refresh_token.token_issued%type;
+        l_refresh VARCHAR2(1000);
+        l_token VARCHAR2(1000);
+        l_aud VARCHAR2(7);
         l_json JSON_OBJECT_T;
-
-        FUNCTION getToken(pExpires IN PLS_INTEGER) RETURN VARCHAR2 IS
-            l_token VARCHAR2(1000);
-        BEGIN
-            l_token:=apex_jwt.ENCODE (
-                p_iss       => l_session_data.iss,
-                p_sub       => l_session_data.sub,
-                p_aud       => l_session_data.scope,
-                p_jti       => l_session_data.user_id,
-                p_iat_ts    => current_timestamp,
-                p_exp_sec   => pExpires,
-                p_signature_key => UTL_RAW.cast_to_raw (l_session_data.client_secret));
-
-            RETURN(l_token);
-        END;
 
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -143,21 +177,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         ) LOOP
             CASE C.id
                 WHEN 'domain-name' THEN
-                    l_message:='Processing DOMAIN for '||C.value;
+                    l_status:=linkDomain(pWebsiteid, C.value, C.netlify_site_id, l_message);
                 WHEN 'subdomain-name' THEN
                     l_status:=changeSubdomain(pWebsiteid, C.value, C.netlify_site_id, l_message);
                     IF (l_status) THEN
-                        l_refresh_token:=getToken(pck_sec.REFRESH_TOKEN_EXP);
-                        l_refresh_token_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_refresh_token,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
-                        l_json.put('token',getToken(pck_sec.ACCESS_TOKEN_EXP));
-                        l_json.put('refresh',l_refresh_token);
-                        l_json.put('menulist',pck_sec.buildMenulist(pWebsiteid, 'owner', l_session_data.sub));
-                        DELETE refresh_token WHERE website_id=pWebsiteid;
-                        INSERT INTO refresh_token(user_id, website_id, token_issued, token_issued_orig) VALUES (l_session_data.user_id, pWebsiteId, l_refresh_token_hash, l_refresh_token);
+                        pck_jwt.issueJWTokens(pWebsiteid, l_session_data.user_id, l_refresh, l_token, l_aud);
+                        l_json.put('token',l_token);
+                        l_json.put('refresh',l_refresh);
+                        l_json.put('menulist',pck_sec.buildMenulist(pWebsiteid, l_aud, l_session_data.sub));
                     END IF;
             END CASE;
         END LOOP;
-
         
         l_json.put('success',true);
         l_json.put('message',l_message);
