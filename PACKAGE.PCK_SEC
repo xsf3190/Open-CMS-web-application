@@ -117,7 +117,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         pck_core.log_error(pStatus);
     END;
 
-    FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pColor IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+    FUNCTION addMenuitem(pEndpoint IN VARCHAR2, pIcon IN VARCHAR2, pText IN VARCHAR2, pData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
     BEGIN
         RETURN (
             '<button type="button" role="menuitem" tabindex="-1" ' || 
@@ -364,42 +364,30 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html CLOB;
         
     BEGIN
-        l_html:=l_html || addMenuitem('userinfo/:ID', 'blue', '👤', pEmail);
-        l_html:=l_html || addMenuitem('visits/:ID', 'rebeccapurple', '📊', 'Analytics');
+        l_html:=l_html || addMenuitem('userinfo/:ID', '👤', pEmail);
+        l_html:=l_html || addMenuitem('visits/:ID', '📊', 'Analytics');
         IF (pScope='visitor') THEN
             RETURN(l_html);
         END IF;
         /*
-🏞
-🌍
-🚧	
-🎨
-🎼
-📄
-♍
-🔠
-🔤
-🇬🇧🇳
-🇳🇱
-🇭🇺
-🇨🇭
+🏞🌍🚧🎨📄🔠🔤
 */
-        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', 'red', '🖍', 'Editor');
-        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', 'orange', '🏞', 'Upload');
-        l_html:=l_html || addMenuitem('publish-website/:ID', 'darkgreen', '🌐', 'Publish');
-        l_html:=l_html || addMenuitem('fonts/:ID', 'green', '🔤', 'Fonts');
-        l_html:=l_html || addMenuitem('logo/:ID', '', '🌈', 'Logo');
-        l_html:=l_html || addMenuitem('favicon/:ID', '', '🍀', 'Favicon');
-        l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', 'brown', '📖', 'Pages');
-        l_html:=l_html || addMenuitem('domain/:ID', '', '🌐', 'Domain');
-        l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', 'red', '🈸', 'Options');
+        l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', '🖍', 'Content');
+        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', '🏞', 'Upload');
+        l_html:=l_html || addMenuitem('publish-website/:ID', '🌐', 'Publish');
+        l_html:=l_html || addMenuitem('fonts/:ID', '🔤', 'Fonts');
+        l_html:=l_html || addMenuitem('logo/:ID', '🌈', 'Logo');
+        l_html:=l_html || addMenuitem('favicon/:ID', '🍀', 'Favicon');
+        l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', '📖', 'Pages');
+        l_html:=l_html || addMenuitem('domain/:ID', '🌐', 'Domain');
+        l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', '🈸', 'Options');
         
         FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
-            l_html:=l_html || addMenuitem('new-collection-item/:ID', 'cyan', 'B', 'New ' || C.navigation_label, 'data-parent-id="' || C.article_id || '"');
+            l_html:=l_html || addMenuitem('new-collection-item/:ID', 'B', 'New ' || C.navigation_label, 'data-parent-id="' || C.article_id || '"');
         END LOOP;
 
         -- l_html:=l_html || addMenuitem('create-website/:ID/:PAGE', 'red', '🌐', 'New Website');
-        l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', 'cyan', '⚽', 'Codepen');
+        l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', '⚽', 'Codepen');
 
         RETURN (l_html);
     END;
