@@ -257,7 +257,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
             */
             l_session_data:=pWebsiteid||':'||C.url||':'||C.website_loaded||':'||l_remote_addr||':'||l_browser;
             l_session_id:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_session_data,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
-            pck_core.log(l_session_data||':'||l_session_id);
+            -- pck_core.log(l_session_data||':'||l_session_id);
 
             /*
             **  seq=0 means first analytics segment for page
