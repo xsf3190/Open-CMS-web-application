@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EMAIL" is
     --
-    FUNCTION DNSTemplate(pDomainName IN VARCHAR2) RETURN VARCHAR2;
+    FUNCTION DNSTemplate(pDomainName IN VARCHAR2, pEditorURL IN VARCHAR2, pLiveURL IN VARCHAR2) RETURN VARCHAR2;
     --
     FUNCTION SSLTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2 ;
     --
@@ -248,7 +248,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
     /*
     ** USER RECEIVES THIS EMAIL EXPLAINING HOW TO CONFIGURE DNS WHEN LINKING THEIR SITE TO CUSTOM DOMAIN
     */
-    FUNCTION DNSTemplate(pDomainName IN VARCHAR2) RETURN VARCHAR2 IS
+    FUNCTION DNSTemplate(pDomainName IN VARCHAR2, pEditorURL IN VARCHAR2, pLiveURL IN VARCHAR2) RETURN VARCHAR2 IS
         l_mjml_request LONG;
     BEGIN
         l_mjml_request:=
@@ -263,24 +263,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
 
                         '<mj-table>' ||
                             '<tr style="border-bottom:4px solid #ecedee;text-align:left;padding:15px 0;">' ||
-                                '<th style="padding: 0 15px 0 0;">Record Type</th>' ||
-                                '<th style="padding: 0 15px;">Name</th>' ||
-                                '<th style="padding: 0 0 0 15px;">Value from</th>' ||
+                                '<th style="padding: 0 15px 0 0;font-size:18px;">Type</th>' ||
+                                '<th style="padding: 0 15px;font-size:18px;">Name</th>' ||
+                                '<th style="padding: 0 0 0 15px;font-size:18px;">Data</th>' ||
                             '</tr>' ||
                             '<tr>' ||
-                                '<td style="padding: 0 15px 0 0;">A</td>' ||
-                                '<td style="padding: 0 15px;">@</td>' ||
-                                '<td style="padding: 0 0 0 15px;">75.2.60.5</td>' ||
+                                '<td style="padding: 0 15px 0 0;font-size:18px;">A</td>' ||
+                                '<td style="padding: 0 15px;font-size:18px;">@</td>' ||
+                                '<td style="padding: 0 0 0 15px;font-size:18px;">75.2.60.5</td>' ||
                             '</tr>' ||
                             '<tr>' ||
-                                '<td style="padding: 0 15px 0 0;">CNAME</td>' ||
-                                '<td style="padding: 0 15px;">editor</td>' ||
-                                '<td style="padding: 0 0 0 15px;">' || pDomainName || '-editor.netlify.app' || '</td>' ||
+                                '<td style="padding: 0 15px 0 0;font-size:18px;">CNAME</td>' ||
+                                '<td style="padding: 0 15px;font-size:18px;">editor</td>' ||
+                                '<td style="padding: 0 0 0 15px;font-size:18px;">' || pEditorURL || '</td>' ||
                             '</tr>' ||
                             '<tr>' ||
-                                '<td style="padding: 0 15px 0 0;">CNAME</td>' ||
-                                '<td style="padding: 0 15px;">www</td>' ||
-                                '<td style="padding: 0 0 0 15px;">' || pDomainName || '-custom.netlify.app' || '</td>' ||
+                                '<td style="padding: 0 15px 0 0;font-size:18px;">CNAME</td>' ||
+                                '<td style="padding: 0 15px;font-size:18px;">www</td>' ||
+                                '<td style="padding: 0 0 0 15px;font-size:18px;">' || pLiveURL || '</td>' ||
                             '</tr>' ||
                         '</mj-table>' ||
 
