@@ -422,6 +422,9 @@ export const init = async (element) => {
                     const viewEditableRoot = editor.editing.view.document.getRoot();
                     writer.removeClass( 'ck-editor__editable_inline', viewEditableRoot );
                 });
+                if (id==="main") {
+                    editor.focus();
+                }
             } )
             .catch( error => {
                 console.error( error.stack );
