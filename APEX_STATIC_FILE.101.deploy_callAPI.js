@@ -25,10 +25,12 @@ const handleError = (error) => {
         sessionStorage.clear();
         localStorage.clear();
         message += "<h4>Security precaution against theft</h4>";
-        message += "<p>You are being logged out because you've not previously authenticated from this location or device. Possible causes:</p>";
-        message += "<ol><li>You connected to a different network</li>";
-        message += "<li>Your browser was upgraded or you switched browsers</li>";
+        message += "<p>You are being logged out because you have not authenticated from this location or device. Possible causes:</p>";
+        message += "<ol>";
+        message += "<li>You've connected to a different network</li>";
+        message += "<li>You upgraded or changed browser</li>";
         message += "<li>Your device was stolen</li>";
+        message += "</ol>";
         message += "<hr>";
         message += "<p>Log in again</p>";
         logout = true;
