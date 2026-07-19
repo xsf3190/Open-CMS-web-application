@@ -168,9 +168,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     */
     FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data IS
         l_session_data t_session_data;
-        l_bearer_token varchar2(500);
         l_token APEX_JWT.T_TOKEN;
-
     BEGIN
     -- pck_core.log('getSessionData:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
         l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
@@ -458,91 +456,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         END IF;  
 
         RETURN (n>0);
-    END;
-
-    /*
-    ** USER AUTHENTICATED SUCCESSFULLY 
-    ** - CREATE FINGERPRINT
-    ** - ISSUE NEW PAIR OF TOKENS TO RETURN TO CLIENT
-    */
-    PROCEDURE issueJWTTokens(pWebsiteId IN website.id%type, pEmail IN users.email%type, pUserId IN users.id%type, pCldCloudName IN users.cld_cloud_name%type, pCldUploadPreset IN users.cld_upload_preset%type, pClientSecret IN users.client_secret%type) IS 
-        l_new_token VARCHAR2 (4000);
-        l_new_refresh VARCHAR2 (4000);
-        l_new_refresh_hash refresh_token.token_issued%type;
-        l_url VARCHAR2(1000);
-        l_issuer VARCHAR2(15);
-        l_scope VARCHAR2(7);
-        l_cld_cloud_name users.cld_cloud_name%type:=pCldCloudName;
-        l_cld_upload_preset users.cld_upload_preset%type:=pCldUploadPreset;
-
-        l_fingerprint fingerprint.fingerprint%type;
-        l_remote_addr fingerprint.remote_addr%type;
-        l_user_agent  fingerprint.user_agent%type;
-        l_timezone fingerprint.timezone%type;
-
-        l_json JSON_OBJECT_T;
-        n PLS_INTEGER;
-    BEGIN
-        l_fingerprint:=getFingerprint(l_remote_addr, l_user_agent, l_timezone);
-
-        UPDATE fingerprint 
-           SET last_used_date=current_timestamp
-         WHERE user_id=pUserid
-           AND fingerprint=l_fingerprint;
-
-        n:=sql%rowcount;
-        IF (n=0) THEN
-            INSERT INTO fingerprint(user_id, fingerprint, last_used_date, remote_addr, user_agent, timezone)
-            VALUES (pUserid, l_fingerprint, current_timestamp, l_remote_addr, l_user_agent, l_timezone);
-        END IF;
-
-        IF (l_cld_cloud_name IS NULL) THEN
-            SELECT u.cld_cloud_name, u.cld_upload_preset
-              INTO l_cld_cloud_name, l_cld_upload_preset
-              FROM users u, apex_workspace_apex_users w
-             WHERE w.email=u.email
-               AND w.is_admin='Yes'
-             ORDER BY date_created
-             FETCH FIRST ROW ONLY;
-        END IF;
-
-        l_issuer:=getJWTIssuer(pWebsiteid);
-        l_scope:=getScope(pWebsiteId,pEmail);
-
-        l_new_refresh:=apex_jwt.ENCODE (
-            p_iss       => l_issuer,
-            p_sub       => pEmail,
-            p_aud       => l_scope,
-            p_jti       => pUserId,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => REFRESH_TOKEN_EXP,
-            p_other_claims => '"cld_cloud_name":' || apex_json.stringify(l_cld_cloud_name) || ',"cld_upload_preset":' || apex_json.stringify(l_cld_upload_preset),
-            p_signature_key => UTL_RAW.cast_to_raw (pClientSecret)
-        );
-
-        l_new_token:=apex_jwt.ENCODE (
-            p_iss       => l_issuer,
-            p_sub       => pEmail,
-            p_aud       => l_scope,
-            p_jti       => pUserId,
-            p_iat_ts    => current_timestamp,
-            p_exp_sec   => ACCESS_TOKEN_EXP,
-            p_signature_key => UTL_RAW.cast_to_raw (pClientSecret)
-        );
-
-        l_new_refresh_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(l_new_refresh,'AL32UTF8'), typ=>dbms_crypto.hash_sh256);
-
-        DELETE refresh_token WHERE website_id=pWebsiteid AND user_id=pUserId;
-        
-        INSERT INTO refresh_token(user_id, website_id, token_issued, token_issued_orig) VALUES (pUserId, pWebsiteId, l_new_refresh_hash, l_new_refresh);
-        
-        APEX_JSON.open_object;
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('token', l_new_token);
-        l_json.put('refresh', l_new_refresh);
-        l_json.put('menulist', buildMenulist(pWebsiteId, l_scope, pEmail));
-        apex_util.prn(l_json.to_clob,false);
     END;
 
     /*
