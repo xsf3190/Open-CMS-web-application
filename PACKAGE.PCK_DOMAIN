@@ -79,7 +79,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
     /*
     ** LINK EDITOR SITE TO CUSTOM DOMAIN
     */
-    FUNCTION linkDomain(pWebsiteId IN NUMBER, pDomain IN VARCHAR2, pNetlifySiteId IN VARCHAR2, pMessage IN OUT VARCHAR2) RETURN BOOLEAN IS
+    FUNCTION linkDomain(pWebsiteId IN NUMBER, pDomain IN VARCHAR2, pNetlifySiteId IN VARCHAR2, pEditorURL IN OUT VARCHAR2, pLiveURL IN OUT VARCHAR2, pMessage IN OUT VARCHAR2) RETURN BOOLEAN IS
         l_json JSON_OBJECT_T;
         l_clob CLOB;
         n PLS_INTEGER;
@@ -87,40 +87,48 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         /* CHECK DOMAIN NAME NOT ALREADY IN USE */
         SELECT COUNT(*) INTO n FROM website WHERE domain_name=pDomain;
         IF (n>0) THEN
-            pMessage:='Domain already in use on platform';
+            pMessage:='<span style="color:red">Domain already in use on platform</span>';
             RETURN FALSE;
         END IF;
+
+        /* LINK NETLIFY EDITOR SITE TO "EDITOR" SUBDOMAIN */
+        l_json:=new JSON_OBJECT_T;
+        l_json.put('custom_domain', 'editor.' || pDomain);
+        pck_api.callNetlifyAPI(pEndpoint=>'sites/' || pNetlifySiteId, pStatusAllowed=>422, pMethod=>'PATCH', pBody=>l_json.stringify, pData=>l_clob);
+        IF (apex_web_service.g_status_code=422) THEN
+            pMessage:='<span style="color:red">Domain name invalid or already taken</span>';
+            RETURN FALSE;
+        END IF;
+        /* Get editor site URL for email */
+        FOR C IN (
+            SELECT name FROM JSON_TABLE(l_clob, '$' COLUMNS (name))
+        ) LOOP
+            pEditorURL:=C.name || '.netlify.app';
+        END LOOP;
 
         /* CREATE NETLIFY LIVE SITE LINKED TO DOMAIN */
         l_json:=new JSON_OBJECT_T;
         l_json.put('custom_domain', pDomain);
         pck_api.callNetlifyAPI(pEndpoint=>'sites', pStatusAllowed=>422, pMethod=>'POST', pBody=>l_json.stringify, pData=>l_clob);
         IF (apex_web_service.g_status_code=422) THEN
-            pMessage:='Domain name invalid or already taken';
+            pMessage:='<span style="color:red">Domain name invalid or already taken</span>';
             RETURN FALSE;
         END IF;
 
-        /* UPDATE WEBSITE WITH NETLIFY LIVE SITE ID */
+        /* UPDATE WEBSITE TABLE WITH DOMAIN NAME AND NETLIFY LIVE SITE ID */
         FOR C IN (
             SELECT id, name FROM JSON_TABLE(l_clob, '$' COLUMNS (id, name))
         ) LOOP
+            /* Get live site URL for email */
+            pLiveURL:=C.name || '.netlify.app';
+            
             UPDATE website 
                SET domain_name=pDomain, 
                    netlify_site_id_custom=C.id 
              WHERE id=pWebsiteid;
-        END LOOP;
 
-        /* 
-         * Update editor netlify site to be "editor" subdomain of user's domain name
-         * Email user instructions on how to configure DNS records at their domain registrar
-         */
-        FOR C IN (
-            SELECT netlify_site_id, contact_email FROM website WHERE id=pWebsiteId
-        ) LOOP
-            l_json:=new JSON_OBJECT_T;
-            l_json.put('custom_domain', 'editor.' || pDomain);
-            pck_api.callNetlifyAPI(pEndpoint=>'sites/' || C.netlify_site_id, pMethod=>'PATCH', pBody=>l_json.stringify, pData=>l_clob);
-            pck_email.sendmail(C.contact_email, 'Configure DNS at your domain registrar', pck_email.DNSTemplate(pDomain));
+            pck_deploy.deployLiveSite(pWebsiteid);
+            RETURN TRUE;
         END LOOP;
     END;
 
@@ -164,7 +172,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         l_refresh VARCHAR2(1000);
         l_token VARCHAR2(1000);
         l_aud VARCHAR2(7);
+        l_editor_url VARCHAR2(100);
+        l_live_url VARCHAR2(100);
         l_json JSON_OBJECT_T;
+
+        FUNCTION span(pURL IN VARCHAR2) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN('<span>' || REPLACE(pURL,'.','.</span><span>') || '</span>');
+        END;
 
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -177,7 +192,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         ) LOOP
             CASE C.id
                 WHEN 'domain-name' THEN
-                    l_status:=linkDomain(pWebsiteid, C.value, C.netlify_site_id, l_message);
+                    l_status:=linkDomain(pWebsiteid, C.value, C.netlify_site_id, l_editor_url, l_live_url, l_message);
+                    IF (l_status) THEN
+                        pck_email.sendmail(
+                            l_session_data.sub, 
+                            'DNS change instructions', 
+                            pck_email.DNSTemplate(pDomainName=>span(C.value), pEditorURL=>span(l_editor_url), pLiveURL=>span(l_live_url))
+                        );
+                        l_message:='<span style="color:green">Sent email with DNS change instructions</span>';
+                    END IF;
                 WHEN 'subdomain-name' THEN
                     l_status:=changeSubdomain(pWebsiteid, C.value, C.netlify_site_id, l_message);
                     IF (l_status) THEN
