@@ -42,7 +42,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
                         '<button type="button" class="button">SUBMIT</button>' ||
                     '</fieldset>' ||
                 '</details>' ||
-                '<div class="separator">OR</div>' ||
+                '<div class="separator" style="color:red;font-weight:650">OR</div>' ||
                 '<details name="domain">' ||
                     '<summary>Change netlify subdomain</summary>' ||
                     '<fieldset class="flow">' ||
