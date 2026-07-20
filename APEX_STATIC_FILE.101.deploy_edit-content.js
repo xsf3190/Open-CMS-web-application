@@ -469,7 +469,7 @@ const saveData = async ( data, endpoint, id ) => {
         img_src: images.map(img => img.getAttribute('src')),
         a11y_alt_fails: images.filter(img => !img.hasAttribute('alt') || !img.getAttribute('alt')).length,
         elements_used: getElementsUsed(ele), 
-        title: ele.querySelector("h2,h3,h4")?.textContent,
+        title: ele.querySelector("h1,h2,h3,h4")?.textContent,
         excerpt: ele.querySelector("p")?.textContent,
     };
 
