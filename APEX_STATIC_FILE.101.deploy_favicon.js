@@ -12,7 +12,7 @@ let endpoint;
 **  BUTTON HANDLER
 */
 export const clickHandler = (e) => {
-    if (!e.target.id === "update") return;
+    if (!e.target.id === "save") return;
 
     const value = document.getElementById("favicon").value;
 
