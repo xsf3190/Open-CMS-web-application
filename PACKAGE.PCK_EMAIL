@@ -253,38 +253,73 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
     BEGIN
         l_mjml_request:=
         '<mjml>' ||
+            '<mj-head>' ||
+                '<mj-attributes>' ||
+                    '<mj-class name="table-head" line-height="20px" font-size="16px" padding="0px" />' ||
+                    '<mj-class name="table-head-border" border-width="2px" border-color="lightgrey" padding="0px 20px 0px 0px" />' ||
+                    '<mj-class name="table-body" line-height="20px" font-size="18px" padding="0px" />' ||
+                '</mj-attributes>' ||
+            '</mj-head>' ||
             '<mj-body>' ||
                 '<mj-section>' ||
                     '<mj-column>' ||
                         '<mj-divider border-color="#020617"></mj-divider>' ||
-                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 Configure DNS records for ' || pDomainName || '</mj-text>' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui">🐶 <b>Add DNS records to</b></mj-text>' ||
+                        '<mj-spacer height="20px" />' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui"><b>' || pDomainName || '</b></mj-text>' ||
                         '<mj-divider border-color="#020617"></mj-divider>' ||
                         '<mj-spacer height="50px" />' ||
-
-                        '<mj-table>' ||
-                            '<tr style="border-bottom:4px solid #ecedee;text-align:left;padding:15px 0;">' ||
-                                '<th style="padding: 0 15px 0 0;font-size:18px;">Type</th>' ||
-                                '<th style="padding: 0 15px;font-size:18px;">Name</th>' ||
-                                '<th style="padding: 0 0 0 15px;font-size:18px;">Data</th>' ||
-                            '</tr>' ||
-                            '<tr>' ||
-                                '<td style="padding: 0 15px 0 0;font-size:18px;">A</td>' ||
-                                '<td style="padding: 0 15px;font-size:18px;">@</td>' ||
-                                '<td style="padding: 0 0 0 15px;font-size:18px;">75.2.60.5</td>' ||
-                            '</tr>' ||
-                            '<tr>' ||
-                                '<td style="padding: 0 15px 0 0;font-size:18px;">CNAME</td>' ||
-                                '<td style="padding: 0 15px;font-size:18px;">editor</td>' ||
-                                '<td style="padding: 0 0 0 15px;font-size:18px;">' || pEditorURL || '</td>' ||
-                            '</tr>' ||
-                            '<tr>' ||
-                                '<td style="padding: 0 15px 0 0;font-size:18px;">CNAME</td>' ||
-                                '<td style="padding: 0 15px;font-size:18px;">www</td>' ||
-                                '<td style="padding: 0 0 0 15px;font-size:18px;">' || pLiveURL || '</td>' ||
-                            '</tr>' ||
-                        '</mj-table>' ||
-
-                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700"></mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+                '<mj-section padding="20px 40px 26px 40px" background-color="#FEFFEA">' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-head"><b>Type</b></mj-text>' ||
+                        '<mj-divider mj-class="table-head-border"></mj-divider>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-head"><b>Name</b></mj-text>' ||
+                        '<mj-divider mj-class="table-head-border"></mj-divider>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="70%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-head"><b>Data</b></mj-text>' ||
+                        '<mj-divider mj-class="table-head-border"></mj-divider>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+                '<mj-section padding="0px 40px 26px 40px" background-color="#FEFFEA">' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">A</mj-text>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">@</mj-text>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="70%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">75.2.60.5</mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+                '<mj-section padding="0px 40px 26px 40px" background-color="#FEFFEA">' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">CNAME</mj-text>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">editor</mj-text>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="70%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">' || pEditorURL || '</mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+                '<mj-section padding="0px 40px 26px 40px" background-color="#FEFFEA">' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">CNAME</mj-text>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="15%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">www</mj-text>' ||
+                    '</mj-column>' ||
+                    '<mj-column width="70%" vertical-align="middle">' ||
+                        '<mj-text mj-class="table-body">' || pLiveURL || '</mj-text>' ||
+                    '</mj-column>' ||
+                '</mj-section>' ||
+                '<mj-section padding="0px 40px 26px 40px">' ||
+                    '<mj-column vertical-align="middle">' ||
                         '<mj-spacer height="50px" />' ||
                         '<mj-text font-size="14px" color="#020617" align="center" font-family="system-ui" font-weight="300">Engineered by Florent Meijer & Mark Brown</mj-text>' ||
                     '</mj-column>' ||
@@ -336,15 +371,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
                         '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 New Website Link</mj-text>' ||
                         '<mj-divider border-color="#020617"></mj-divider>' ||
                         '<mj-spacer height="50px" />' ||
-                        '<mj-button href="#URL#" font-family="system-ui" font-size="40px" background-color="#f45e43" color="white" inner-padding="20px" font-weight="750"  border-radius="10px" letter-spacing="5px">OPEN WEBSITE</mj-button>' ||
+                        '<mj-button href="' || pUrl || '" font-family="system-ui" font-size="40px" background-color="#f45e43" color="white" inner-padding="20px" font-weight="750"  border-radius="10px" letter-spacing="5px">OPEN WEBSITE</mj-button>' ||
                         '<mj-spacer height="50px" />' ||
                         '<mj-text font-size="14px" color="#020617" align="center" font-family="system-ui" font-weight="300">Engineered by Florent Meijer & Mark Brown</mj-text>' ||
                     '</mj-column>' ||
                 '</mj-section>' ||
             '</mj-body>' ||
         '</mjml>';
-
-        l_mjml_request:=REPLACE(l_mjml_request,'#URL#',pUrl);
 
         RETURN (renderHTML(l_mjml_request));
     END;
