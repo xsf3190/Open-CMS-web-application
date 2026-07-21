@@ -4,7 +4,7 @@
 import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
 import { callAPI, handleError } from "deploy_callAPI";
 
-let endpoint, pages, collection, cta, navigation_label, isSending;
+let endpoint, pages, collection, cta, page_title, page_description, navigation_label, isSending;
 
 export const init = (e) => {
     endpoint = e.dataset.endpoint;
@@ -16,6 +16,8 @@ export const init = (e) => {
             navigation_label = dialog_article.querySelector("input[name='navigation-label']");
             collection = dialog_article.querySelectorAll("[name='collection_type']");
             cta = dialog_article.querySelectorAll("[name='cta']");
+            page_title = dialog_article.querySelector("[name='page_title']");
+            page_description = dialog_article.querySelector("[name='page_description']");
             isSending = false;
         })
         .catch((error) => {
@@ -40,12 +42,20 @@ export const changeHandler = (e) => {
         navigation_label.value = e.target.nextSibling.textContent;
         setCollectionType(e.target.dataset.collection);
         setCta(e.target.dataset.cta);
+        page_title.value = e.target.dataset.pageTitle;
+        page_description.value = e.target.dataset.pageDescription;
     }
     if (e.target.matches("[name='collection_type']")) {
         pages.querySelector("[name='page']:checked").dataset.collection = e.target.value;
     }
     if (e.target.matches("[name='cta']")) {
         pages.querySelector("[name='page']:checked").dataset.cta = e.target.value;
+    }
+    if (e.target.matches("[name='page_title']")) {
+        pages.querySelector("[name='page']:checked").dataset.pageTitle = e.target.value;
+    }
+    if (e.target.matches("[name='page_description']")) {
+        pages.querySelector("[name='page']:checked").dataset.pageDescription = e.target.value;
     }
 }
 
@@ -106,9 +116,13 @@ export const clickHandler = async (e) => {
         input.setAttribute("id",id);
         input.dataset.collection = "N/A";
         input.dataset.cta = "";
+        input.dataset.pageTitle = "";
+        input.dataset.pageDescription = "";
         pages.insertBefore(clone, selected.nextSibling);
         setCollectionType("N/A");
         setCta("");
+        page_title.value = "";
+        page_description.value = "";
         return;
     }
 
@@ -121,7 +135,8 @@ export const clickHandler = async (e) => {
         unsetCollection();
         unsetCta();
         navigation_label.value = "";
-        
+        page_title.value = "";
+        page_description.value = "";
         return;
     }
 
@@ -133,6 +148,8 @@ export const clickHandler = async (e) => {
             obj.article_id = item.getAttribute("id");
             obj.collection_type = item.dataset.collection;
             obj.cta = item.dataset.cta;
+            obj.page_title = item.dataset.pageTitle;
+            obj.page_description = item.dataset.pageDescription;
             obj.navigation_label = item.nextSibling.textContent;
             arr.push(obj);
         });
