@@ -15,11 +15,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         '<fieldset class="flow">' ||
             '<legend>Configure text logo</legend>' ||
             '<div>' ||
-                '<label for="logo-font-text">Text</label>' ||
+                '<label for="logo-font-text" class="block">Text</label>' ||
                 '<input type="text" id="logo-font-text" name="logo_font_text" maxlength="20" value="' || pLogoFontText || '">' ||
             '</div>' ||
             '<div>' ||
-                '<label for="logo-font-size">Adjust size:</label>' ||
+                '<label for="logo-font-size" class="block">Adjust size:</label>' ||
                 '<input type="range" id="logo-font-size" name="logo_font_size" min="1" value="' || pLogoFontSize || '" max="10" step="0.1" />' ||
             '</div>' ||
             '<hr>' ||
@@ -72,15 +72,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '</select>' ||
             '</div>' ||
             '<div>' ||
-                '<label for="logo-img-block-size">Size</label>' ||
+                '<label for="logo-img-block-size" class="block">Size</label>' ||
                 '<input type="range" id="logo-img-block-size" name="logo_img_block_size" class="slider" min="5" value="' || pLogoImgBlockSize || '" max="15" step="1" />' ||
             '</div>' ||
             '<div>' ||
-                '<label for="logo-img-corner-shape">Change border shape:</label>' ||
+                '<label for="logo-img-corner-shape" class="block">Change border shape:</label>' ||
                 '<input type="range" id="logo-img-corner-shape" name="logo_img_corner_shape" min="-5" value="' || pLogoImgCornerShape || '" max="5" step="0.1" />' ||
             '</div>' ||
             '<div>' ||
-                '<label for="logo-img-border-radius">Adjust effect:</label>' ||
+                '<label for="logo-img-border-radius" class="block">Adjust effect:</label>' ||
                 '<input type="range" id="logo-img-border-radius" name="logo_img_border_radius" min="0" value="' || pLogoImgBorderRadius || '" max="90" step="1" />' ||
             '</div>' ||
         '</fieldset>';
@@ -100,7 +100,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
                 '</textarea>' ||
             '</div>' ||
             '<div>' ||
-                '<label for="logo-img-inline-size">Size</label>' ||
+                '<label for="logo-img-inline-size" class="block">Size</label>' ||
                 '<input type="range" id="logo-img-block-size" name="logo_img_block_size" class="slider" min="5" value="' || pLogoImgBlockSize || '" max="15" step="1" />' ||
             '</div>' ||
         '</fieldset>';
