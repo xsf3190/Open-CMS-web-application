@@ -157,22 +157,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
 
             FOR C1 IN (
                 SELECT a.id, a.body_html, a.title, a.excerpt, a.elements_used, a.a11y_alt_fails, a.fonts_used, 
-                        wa.navigation_label, wa.display_order, wa.header_html, wa.footer_html, wa.collection_type, wa.elements_used_header, wa.elements_used_footer, wa.cta 
+                        wa.navigation_label, wa.display_order, wa.header_html, wa.footer_html, wa.collection_type, wa.elements_used_header, wa.elements_used_footer, wa.cta, wa.title wa_title
                   FROM article a, website_article wa
                  WHERE wa.website_id=pTemplateWebsiteid
                    AND a.id=wa.article_id
             ) LOOP
                 INSERT INTO article (id, body_html, author_user_id, title, excerpt, elements_used, a11y_alt_fails, fonts_used)
                 VALUES (seq_article.nextval, C1.body_html, l_admin_user_id, C1.title, C1.excerpt, C1.elements_used, C1.a11y_alt_fails, C1.fonts_used);
-                INSERT INTO website_article (website_id, article_id, navigation_label, display_order, header_html, footer_html, collection_type, elements_used_header, elements_used_footer, cta )
-                VALUES (l_new_website_id, seq_article.currval, C1.navigation_label, C1.display_order, C1.header_html, C1.footer_html, C1.collection_type, C1.elements_used_header, C1.elements_used_footer, C1.cta );
+                INSERT INTO website_article (website_id, article_id, navigation_label, display_order, header_html, footer_html, collection_type, elements_used_header, elements_used_footer, cta, title )
+                VALUES (l_new_website_id, seq_article.currval, C1.navigation_label, C1.display_order, C1.header_html, C1.footer_html, C1.collection_type, C1.elements_used_header, C1.elements_used_footer, C1.cta, C1.wa_title );
                 FOR C2 IN (
-                    SELECT context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic, first_heading, second_heading, first_text, page_id
+                    SELECT context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic, page_id
                       FROM article_chars
                      WHERE article_id=C1.id
                 ) LOOP
-                    INSERT INTO article_chars(article_id, context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic, first_heading, second_heading, first_text, page_id)
-                    VALUES (seq_article.currval, C2.context, C2.chars_normal, C2.chars_italic, C2.chars_bold_normal, C2.chars_bold_italic, C2.first_heading, C2.second_heading, C2.first_text, C2.page_id);
+                    INSERT INTO article_chars(article_id, context, chars_normal, chars_italic, chars_bold_normal, chars_bold_italic, page_id)
+                    VALUES (seq_article.currval, C2.context, C2.chars_normal, C2.chars_italic, C2.chars_bold_normal, C2.chars_bold_italic, C2.page_id);
                 END LOOP;
             END LOOP;
         END LOOP;
@@ -180,18 +180,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         pck_deploy.deployEditorSite(l_new_website_id);
 
     END;
-
-    /*
-     * CREATE LIVE WEBSITE LINKED TO USER'S DOMAIN NAME
-     *
-     *   website.netlify_site_id        => netlify site id of editor site
-     *   website.netlify_site_id_custom => netlify site id of live site
-     *
-     *   Site owner must configure their domain as follows:
-     *   1. "A" record => "75.2.60.5"
-     *   2. "CNAME" record => name:"www"  value: ssl of netlify_site_id_custom
-     *   3. "CNAME" record => name:"editor" value: ssl of netlify_site_id
-    */
 
     /*
      * DELETE WEBSITE CALLED FROM PLSQL
