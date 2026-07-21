@@ -27,8 +27,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     PROCEDURE createAuthRequest(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    FUNCTION getJWTIssuer(pWebsiteId IN website.id%type) RETURN VARCHAR2;
-    --
     FUNCTION getFingerprint(pRemoteAddr IN OUT VARCHAR2, pUserAgent IN OUT VARCHAR2, pTimezone IN OUT VARCHAR2) RETURN RAW;
     --
     PROCEDURE getLoginForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
@@ -142,7 +140,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
         DELETE refresh_token WHERE website_id=pWebsiteid AND user_id=l_session_data.user_id;
         
-        l_dropdown:=addMenuitem('authenticate/:ID', 'blue', '👤', 'Log In');
+        l_dropdown:=addMenuitem('authenticate/:ID', '👤', 'Log In');
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
@@ -153,14 +151,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
-    END;
-
-    /*
-    ** JWT Issuer claim
-    */
-    FUNCTION getJWTIssuer(pWebsiteId IN website.id%type) RETURN VARCHAR2 IS
-    BEGIN
-        RETURN ('ORDS.' || pWebsiteid);
     END;
 
     /*
@@ -189,7 +179,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 
             l_token:=apex_jwt.DECODE(p_value=>l_session_data.bearer_token, p_signature_key=>UTL_RAW.cast_to_raw(C.client_secret));
 
-            apex_jwt.VALIDATE (p_token=>l_token, p_iss=>getJWTIssuer(pWebsiteid));
+            apex_jwt.VALIDATE (p_token=>l_token, p_iss=> 'ORDS.'||pWebsiteid);
 
             /* Token valid */
             l_session_data.user_id:=C.jti;
@@ -268,7 +258,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             '<fieldset class="flow">' ||
                 '<legend>Email address *</legend>' ||
                 '<div>' ||
-                    '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" style="width:100%">' ||
+                    '<input type="email" id="email" name="email" required maxlength="50" autocapitalize="none" autocorrect="off" autocomplete="on" size="40">' ||
                     '<div id="email-error" class="inline-error"></div>' ||
                 '</div>' ||
                 '<div class="flex-items">' ||
@@ -276,7 +266,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
                     '<div><hr><span>OR</span><hr></div>' ||
                     '<button class="button sendmail-passcode" type="button" aria-expanded="false" data-action="login" data-store-tokens="true" data-processing="Sent a 6-digit code to your inbox - enter it in the field above">Send Code</button>' ||
                     '<div id="passcode-submit" class="to-be-revealed">' ||
-                        '<label>Submit the code sent to your inbox</label>' ||
+                        '<label class="block">Submit the code sent to your inbox</label>' ||
                         '<input type="text" id="passcode" name="passcode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">' ||
                         '<div id="passcode-error" class="inline-error"></div>' ||
                         '<button class="button validate-passcode" type="button" style="margin-block-start:var(--space-m)">Submit</button>' ||
