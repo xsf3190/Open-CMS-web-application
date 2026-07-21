@@ -643,8 +643,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pCommonFooter IN website_article.footer_html%type,
         pBody IN OUT NOCOPY CLOB
     ) IS
-        l_title article_chars.first_heading%type;
-        l_description article_chars.first_text%type;  
         l_logo VARCHAR2(200);
         l_nav VARCHAR2(4000);
         l_header website_article.header_html%type;
@@ -663,7 +661,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, a.fonts_used, 
                     w.max_width, 
-                    wa.page_title, wa.page_description, w.domain_name
+                    COALESCE(wa.page_title, NVL2(wa.title, wa.title || '|', null) || NVL2(a.title, a.title || '|', null) || w.domain_name) AS title,
+                    COALESCE(wa.page_description, a.excerpt) AS description
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
                AND wa.website_id=w.id
@@ -717,35 +716,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             l_main:='<main id="main" class="flow" tabindex="-1"' || CASE WHEN C.body_html IS NULL THEN ' nocontent' END || '>' || C.body_html || '</main>';
             
             setImgSrcset(pArticleId, regexp_substr(C.max_width,'\d+'), l_main);
-
-            /*
-            ** OPTIMAL TITLE LENGTH IS 60 CHARACTERS, I.E. 580PX
-            */
-            IF (C.page_title IS NOT NULL) THEN
-                l_title:=C.page_title;
-            ELSE
-                FOR C1 IN (
-                    SELECT first_heading, second_heading FROM article_chars WHERE article_id=pArticleid AND context='headings'
-                ) LOOP
-                    IF (C1.second_heading IS NOT NULL) THEN
-                        l_title:=C1.second_heading || '|' || C1.first_heading;
-                    ELSIF (C1.first_heading IS NOT NULL) THEN
-                        l_title:=C1.first_heading || '|' || C.domain_name;
-                    ELSE
-                        l_title:=C.domain_name;
-                    END IF;
-                END LOOP;
-            END IF;
-
-            IF (C.page_description IS NOT NULL) THEN
-                l_description:=C.page_description;
-            ELSE
-                FOR C1 IN (
-                    SELECT first_text FROM article_chars WHERE article_id=pArticleid AND context='text'
-                ) LOOP
-                    l_description:=C1.first_text;
-                END LOOP;
-            END IF;
 
             /*
             ** Build font preload directives from fonts_used bitmap
@@ -805,8 +775,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                 '<head>' ||
                     '<meta charset="UTF-8">' ||
                     '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
-                    '<title>' || NVL(C.page_title,l_title) || '</title>' ||
-                    '<meta name="description" content="' || l_description || '">' ||
+                    '<title>' || C.title || '</title>' ||
+                    '<meta name="description" content="' || C.description || '">' ||
                     '<meta name="author" content="performance toolkit">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
                     l_preload_fonts ||
@@ -1229,14 +1199,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
             (
                 SELECT 'https://' || w.domain_name ||
                         CASE WHEN wa.display_order>1 THEN '/' || apex_string_util.get_slug(wa.navigation_label) END AS path1, 
-                        CASE WHEN wa.display_order>1 THEN apex_string_util.get_slug(ac.first_heading) END AS path2, 
+                        CASE WHEN wa.display_order>1 THEN apex_string_util.get_slug(wa.title) END AS path2, 
                         TO_CHAR(NVL(a.updated_date,wa.updated_date),'yyyy-mm-dd') lastmod
-                  FROM website w, website_article wa, article a, article_chars ac
+                  FROM website w, website_article wa, article a
                  WHERE w.id=pWebsiteid
                    AND wa.website_id=w.id
                    AND a.parent_id(+)=wa.article_id
-                   AND ac.article_id(+)=a.id
-                   AND ac.context(+)='headings'
                  ORDER BY wa.display_order
             ),
             xml AS
