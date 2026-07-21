@@ -28,7 +28,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         CASE pRequestType
             WHEN 'magic' THEN
                 l_token:=apex_jwt.ENCODE (
-                    p_iss       => pck_sec.getJWTIssuer(pWebsiteid),
+                    p_iss       => 'ORDS.' || pWebsiteid,
                     p_sub       => pEmail,
                     p_aud       => 'xxx',
                     p_iat_ts    => current_timestamp,
