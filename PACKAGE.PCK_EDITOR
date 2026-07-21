@@ -1052,12 +1052,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         CASE l_id
             WHEN 'header' THEN
                 FOR C IN (
-                    SELECT body_html, elements_used
-                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB, elements_used))
+                    SELECT body_html, elements_used, title
+                      FROM JSON_TABLE(l_bodytext FORMAT JSON, '$' COLUMNS (body_html CLOB, elements_used, title))
                 ) LOOP
                     UPDATE website_article 
                        SET header_html=C.body_html,
                            elements_used_header=C.elements_used,
+                           title=C.title,
                            updated_date = current_timestamp
                      WHERE website_id=pWebsiteid
                        AND article_id=pArticleId
