@@ -56,7 +56,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
                     '</textarea>' ||
                 '</div>' ||
                 '<div>' ||
-                    '<button type="button" class="button" id="update">Update</button>' ||
+                    -- '<button type="button" class="button" id="update">Update</button>' ||
+                    '<button type="button" class="button save" style="--button-bg:#4D4DFF">SAVE</button>' ||
                 '</div>';
         END LOOP;
 
