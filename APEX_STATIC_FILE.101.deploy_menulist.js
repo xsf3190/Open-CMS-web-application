@@ -1,5 +1,5 @@
 import { getJWTClaim, initDialog, output_dialog, form } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 const eventHandler = async (e) => {
     /* "publish" button occurs in multiple forms */
@@ -15,9 +15,6 @@ const eventHandler = async (e) => {
                 initDialog(data);
                 form.dataset.module = "deploy_publish-website";
             })
-            .catch((error) => {
-                handleError(error);
-            });
         return;
     }
 
