@@ -2,7 +2,7 @@
 **  WEBSITE FAVICON
 */
 import { initDialog, liveRegion } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 const favicon = document.querySelector("head > link[rel='icon']");
 
@@ -32,7 +32,6 @@ export const changeHandler = () => {
     document.getElementById("update").trigger("click");
 }
 
-
 export const init = (element) => {
     endpoint = element.dataset.endpoint;
 
@@ -40,7 +39,4 @@ export const init = (element) => {
         .then((data) => {
             initDialog(data);
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
