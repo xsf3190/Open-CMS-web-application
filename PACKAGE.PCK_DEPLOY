@@ -660,7 +660,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         pBody:=null;
         FOR C IN (
             SELECT NVL(wa.header_html,pCommonHeader) header_html, a.body_html, NVL(wa.footer_html,pCommonFooter) footer_html, a.excerpt, a.parent_id, a.fonts_used, 
-                    w.max_width, 
+                    w.max_width, w.contact_email,
                     COALESCE(wa.page_title, NVL2(wa.title, wa.title || '|', null) || NVL2(a.title, a.title || '|', null) || w.domain_name) AS title,
                     COALESCE(wa.page_description, a.excerpt) AS description
               FROM website_article wa, article a, website w
@@ -777,7 +777,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '<meta name="viewport" content="width=device-width, initial-scale=1">' ||
                     '<title>' || C.title || '</title>' ||
                     '<meta name="description" content="' || C.description || '">' ||
-                    '<meta name="author" content="performance toolkit">' ||
+                    '<meta name="author" content="' || C.contact_email || '">' ||
                     '<meta name="mobile-web-app-capable" content="yes">' ||
                     l_preload_fonts ||
                     '<link rel="stylesheet" href="' || pck_css.PATH_NAME_TOKENS || '" media="all">' ||
