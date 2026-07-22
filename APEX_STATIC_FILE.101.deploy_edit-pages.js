@@ -2,7 +2,7 @@
 **  ADD / CHANGE / DELETE PAGES
 */
 import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 let endpoint, pages, collection, cta, page_title, page_description, navigation_label, isSending;
 
@@ -20,9 +20,6 @@ export const init = (e) => {
             page_description = dialog_article.querySelector("[name='page_description']");
             isSending = false;
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
 
 /*
@@ -177,8 +174,5 @@ export const clickHandler = async (e) => {
                     }, 1500);
                 }
             })
-            .catch((error) => {
-                handleError(error);
-            });
     }
 }
