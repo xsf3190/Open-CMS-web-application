@@ -2,7 +2,7 @@
 ** USER CLICKS PUBLISH BUTTON - PUBLISH EDITOR WEBSITE
 */
 
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 import { initDialog, dialog_footer } from "deploy_elements";
 
 /* 
@@ -13,9 +13,6 @@ export const init = (e) => {
         .then( (data) => {
             initDialog(data);
         })
-        .catch((error) => {
-            handleError(error);
-        });;
 }
 
 /*
@@ -65,9 +62,5 @@ export const clickHandler = (e) => {
                     }
                 }, 1500);
             })
-            .catch((error) => {
-                loader.style.opacity=0;
-                handleError(error);
-            });
     }
 }
