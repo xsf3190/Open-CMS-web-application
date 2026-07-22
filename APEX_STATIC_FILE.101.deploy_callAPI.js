@@ -1,8 +1,4 @@
-// import { bodydata, output_dialog, dialog_article, dialog_footer } from "deploy_elements";
-const bodydata = document.body.dataset;
-const output_dialog = document.querySelector("dialog.output");
-const dialog_article = output_dialog.querySelector("article");
-const dialog_footer = output_dialog.querySelector("footer");
+import { bodydata, output_dialog, dialog_article, dialog_footer } from "deploy_elements";
 
 let access_token = sessionStorage.getItem("token");
 let refresh_token = localStorage.getItem("refresh");
@@ -60,7 +56,7 @@ const expiredToken = (token) => {
 }
 
 /* 
-** REPLACE NEW TOKENS IN STORAGE AND MEMORY. UPDATE UI
+** REPLACE NEW TOKENS IN STORAGE AND MEMORY
 */
 const replaceTokens = (data) => {
     console.log("Starting replaceTokens");
@@ -87,53 +83,45 @@ const responseok = (response, result) => {
     }
 }
 
-const rotate_tokens = async () => {
-    console.log("Starting rotate_tokens", refresh_token);
-    const url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
-    let refresh_headers = new Headers();
-    refresh_headers.append("Content-Type", "application/json");
-    refresh_headers.append("url", window.location.hostname);
-    refresh_headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
-    refresh_headers.append("Authorization","Bearer " + refresh_token);
-    const refresh_config = {method: "GET", headers: refresh_headers};
-    
-    const refresh_response = await fetch(url, refresh_config);
-    const refresh_result = await refresh_response.json();
-    if (responseok(refresh_response, refresh_result)) {
-        replaceTokens(refresh_result);
-    }
-}
-/*
-try {
-    console.log("Check if refresh_token expired");
-    if (refresh_token) {
-        if (expiredToken(refresh_token)) {
-            throw new Error("Unauthorized - Refresh token expired");
-        }
-    }
-    console.log("..refresh_token is valid");
-} catch (e) {
-    handleError(e);
-}
-*/
-
-// if (refresh_token && !access_token) {
-//     console.log("refresh_token exists but access_token missing - rotate tokens");
-//     await rotate_tokens();
-// }
-
 /* 
-** CALL API FOR RESOURCES EXCLUSIVELY WITH ACCESS TOKEN
+** CALL BACKEND DATABASE API. AUTHENTICATION USES ROTATING JWT TOKENS
 */
 const callAPI = async (endpoint, method, data) => {
     console.log("Starting callAPI",endpoint);
-    /* No tokens involved in Authenticate endpoints. Obviously. */
+
+    /* Headers object */
+    const headers = new Headers();
+    headers.append("Content-Type", "application/json");
+    headers.append("url", window.location.hostname);
+    headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+
+    /* No tokens involved in Authenticate endpoints. */
     if (!endpoint.includes("authenticate") && !endpoint.includes("auth-verify")) {
+        /* Replace refresh and access tokens when access token expired */
         if (expiredToken(access_token)) {
-            await rotate_tokens();
+            headers.set("Authorization","Bearer " + refresh_token);
+            const refresh_config = {method: "GET", headers: headers};
+            try {
+                const url = bodydata.resturl + "refresh-token/" + bodydata.websiteid;
+                const response = await fetch(url, refresh_config);
+                if (!response.ok) {
+                    throw new Error(`Response status: ${response.status}`);
+                }
+                const result = await response.json();
+                if (result.cause) {
+                    throw new Error(`${response.status} - ${result.cause}`);
+                }
+                if (result.sqlcode) {
+                    throw new Error(`${response.status} - ${result.sqlerrm}`);
+                }
+                replaceTokens(result);
+            } catch (e) {
+                handleError(e);
+            }
         }
     }
-      
+
+    /* Call API passing access token */
     const path = endpoint.replace(":ID",bodydata.websiteid)
                          .replace(":PAGE",bodydata.articleid);
     
@@ -143,24 +131,33 @@ const callAPI = async (endpoint, method, data) => {
     if (method==="GET" && data) {
       url+=data;
     }
-    
-    let headers = new Headers();
-    headers.append("Content-Type", "application/json");
-    headers.append("url", window.location.hostname);
-    headers.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
-    headers.append("Authorization","Bearer " + access_token);
-    
-    let config = {method: method, headers: headers};
+
+    headers.set("Authorization","Bearer " + access_token);
+    const config = {method: method, headers: headers};
     if (method==="POST" || method==="PUT" || method==="DELETE") {
         config["body"] = JSON.stringify(data);
     }
 
-    const response = await fetch(url, config);
-    const result = await response.json();
-  
-    if (responseok(response, result)) {
+    try {
+        const response = await fetch(url, config);
+        console.log("response",response);
+
+        if (!response.ok) {
+            throw new Error(`Response status: ${response.status}`);
+        }
+        const result = await response.json();
+        console.log("result",result);
+        
+        if (result.cause) {
+            throw new Error(`${response.status} - ${result.cause}`);
+        }
+        if (result.sqlcode) {
+            throw new Error(`${response.status} - ${result.sqlerrm}`);
+        }
         return(result);
+    } catch (e) {
+        handleError(e);
     }
 }
 
-export { handleError, callAPI, replaceTokens };
+export { callAPI, replaceTokens };
