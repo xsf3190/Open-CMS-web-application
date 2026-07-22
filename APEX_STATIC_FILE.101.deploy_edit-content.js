@@ -2,7 +2,7 @@
 ** CONFIGURE INLINE CKEDITOR PLUGINS
 */
 
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 import { dialog_article } from "deploy_elements";
 
 let endpoint;
@@ -66,7 +66,7 @@ export const init = async (element) => {
             WordCount
             } = await import(CK_JS)
             .catch((error) => {
-                handleError(error);
+                console.error(error);
                 return;
             })
 
@@ -498,8 +498,5 @@ const saveData = async ( data, endpoint, id ) => {
     callAPI(endpoint,'PUT', obj)
         .then((data) => {
             console.log(data.message);
-        })
-        .catch((error) => {
-            handleError(error);
         })
 }
