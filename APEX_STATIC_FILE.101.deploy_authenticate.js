@@ -3,7 +3,7 @@
 /* ************************************************************** */
 
 import { dropdown, dialog_footer, initDialog } from "deploy_elements";
-import { callAPI, handleError, replaceTokens } from "deploy_callAPI";
+import { callAPI, replaceTokens } from "deploy_callAPI";
 
 let endpoint, intervalId, userid, live, loader, summary;
 
@@ -13,9 +13,6 @@ export const init = (element) => {
         .then((data) => {
             initDialog(data);
         })
-        .catch((error) => {
-                handleError(error);
-        });
 }
 
 /*
@@ -114,7 +111,6 @@ export const clickHandler = (e) => {
             })
             .catch((error) => {
                 loader.style.opacity=0;
-                handleError(error);
             });
     } else if (request_type==="verify") {
         const query = "?request=passcode&user=" + userid + "&verify=" + document.getElementById("passcode").value
@@ -133,7 +129,6 @@ export const clickHandler = (e) => {
             })
             .catch((error) => {
                 loader.style.opacity=0;
-                handleError(error);
             });
     }
 }
