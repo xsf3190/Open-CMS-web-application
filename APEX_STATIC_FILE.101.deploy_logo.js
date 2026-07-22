@@ -2,7 +2,7 @@
 **  WEBSITE LOGO
 */
 import { initDialog, form, liveRegion } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 let endpoint;
 
@@ -58,9 +58,6 @@ export const changeHandler = async (e) => {
                 }
                 liveRegion(data);
             })
-            .catch((error) => {
-                handleError(error);
-            });
     } else if (id === "logo-img-id") {
         loadImg(e.target.options[e.target.selectedIndex].querySelector("img").src);
     } else if (id === "svg") {
@@ -91,9 +88,6 @@ export const clickHandler = (e) => {
             }
             liveRegion(data);
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
 
 /*
@@ -134,7 +128,4 @@ export const init = (element) => {
         .then((data) => {
             initDialog(data);
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
