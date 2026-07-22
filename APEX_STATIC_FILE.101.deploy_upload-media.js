@@ -3,7 +3,7 @@
  */
 
 import { bodydata } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 let widget;
 
@@ -11,7 +11,7 @@ const writeClipboard = async (url) => {
     try {
         await navigator.clipboard.writeText(url);
     } catch (error) {
-        handleError(error);
+        console.error(error);
     }
 }
 
@@ -65,9 +65,6 @@ const createWidget =  async (cloudName, uploadPreset, multiple) => {
                     console.log("Uploaded MEDIA metadata successfully");
                     writeClipboard(data.url);
                 })
-                .catch((error) => {
-                    handleError(error);
-                });
         }
     });
 };
@@ -129,5 +126,5 @@ export const init = (multiple, clientAllowedFormats) => {
                 // clientAllowedFormats: clientAllowedFormats
             });
         })
-        .catch((error) => handleError(error));
+        .catch((error) => console.error(error));
 }
