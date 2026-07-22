@@ -1,8 +1,8 @@
 /*
 **  FETCH LATEST CONTENT WHEN OWNER VISITS EDITED PAGE - 
 */
-import { header, main, footer, dropdown } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { header, main, footer } from "deploy_elements";
+import { callAPI } from "deploy_callAPI";
 
 export const init = () => {
     console.log("fetching latest edited content");
@@ -20,8 +20,5 @@ export const init = () => {
                 footer.replaceChildren();
                 footer.insertAdjacentHTML("beforeend",data.footer);
             }  
-        })
-        .catch((error) => {
-            handleError(error);
         })
 }
