@@ -1,7 +1,7 @@
 /*
 **  OPEN CURRENT PAGE IN CODEPEN EDITOR
 */
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 let endpoint;
 
@@ -22,7 +22,4 @@ export const init = (element) => {
             input.value = JSON.stringify(formdata);
             form.submit();
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
