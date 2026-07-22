@@ -1,7 +1,7 @@
 /* **************************************************************************** */
 /* CREATE NEW WEBSITE. DOMAIN NAME OPTIONAL, DEFAULTS TO RANDOMLY GENERATED NAME                             */
 /* **************************************************************************** */
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 import { liveRegion, output_dialog, dialog_footer, initDialog } from "deploy_elements";
 
 let endpoint;
@@ -50,9 +50,6 @@ export const init = (element) => {
         .then((data) => {
             initDialog(data);
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
 
 export const inputHandler = (e) => {
