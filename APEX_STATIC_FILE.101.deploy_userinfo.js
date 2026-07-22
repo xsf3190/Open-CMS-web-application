@@ -2,7 +2,7 @@
 **  USER INFO MODULE - REVIEW LOGGED ON USER DETAILS, LOGOUT BUTTON HANDLER
 */
 import { dialog_footer, initDialog, dropdown } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 /*
 **  CLICK HANDLER
@@ -21,9 +21,6 @@ export const clickHandler = async (e) => {
                     window.location.reload();
                 }, 1500);
             })
-            .catch((error) => {
-                handleError(error);
-            });
     }
 };
 
@@ -32,7 +29,4 @@ export const init = () => {
         .then((data) => {
             initDialog(data);
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
