@@ -23,38 +23,43 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         l_header:='<h4>Link site to custom domain</h4>';
 
         FOR C IN (
-            SELECT w.domain_name, w.netlify_last_published_custom, c.data_length
+            SELECT w.domain_name, w.netlify_site_id_custom, c.data_length
               FROM website w, user_tab_columns c
              WHERE w.id=pWebsiteId
                AND c.table_name='WEBSITE'
                AND c.column_name='DOMAIN_NAME'
         ) LOOP
-            l_article:=
-            '<div class="flow">' ||
-                '<details name="domain" open>' ||
-                    '<summary>Link site to custom domain</summary>' ||
-                    '<fieldset class="flow">' ||
-                        '<legend>Enter your domain name</legend>' ||
-                        '<div>' ||
-                            '<label for="domain-name" class="block">Domain name</label>' ||
-                            '<input id="domain-name" type="text" maxlength="' || C.data_length || '">' ||
-                        '</div>' ||
-                        '<button type="button" class="button">SUBMIT</button>' ||
-                    '</fieldset>' ||
-                '</details>' ||
-                '<div class="separator" style="color:red;font-weight:650">OR</div>' ||
-                '<details name="domain">' ||
-                    '<summary>Change netlify subdomain</summary>' ||
-                    '<fieldset class="flow">' ||
-                        '<legend>Enter new sub-domain name</legend>' ||
-                        '<div>' ||
-                            '<label for="subdomain-name" class="block">Sub-domain name</label>' ||
-                            '<input id="subdomain-name" type="text" maxlength="' || C.data_length || '" value="' || C.domain_name || '">' ||
-                        '</div>' ||
-                        '<button type="button" class="button" data-processing="Changing sub-domain ... wait a few seconds">SUBMIT</button>' ||
-                    '</fieldset>' ||
-                '</details>' ||
-            '</div>';
+            IF (C.netlify_site_id_custom IS NOT NULL) THEN
+                l_article:=
+                '<p style="color:red">This site is already linked to a custom domain</p>';
+            ELSE
+                l_article:=
+                '<div class="flow">' ||
+                    '<details name="domain" open>' ||
+                        '<summary>Link site to custom domain</summary>' ||
+                        '<fieldset class="flow">' ||
+                            '<legend>Enter your domain name</legend>' ||
+                            '<div>' ||
+                                '<label for="domain-name" class="block">Domain name</label>' ||
+                                '<input id="domain-name" type="text" maxlength="' || C.data_length || '">' ||
+                            '</div>' ||
+                            '<button type="button" class="button">SUBMIT</button>' ||
+                        '</fieldset>' ||
+                    '</details>' ||
+                    '<div class="separator" style="color:red;font-weight:650">OR</div>' ||
+                    '<details name="domain">' ||
+                        '<summary>Change netlify subdomain</summary>' ||
+                        '<fieldset class="flow">' ||
+                            '<legend>Enter new sub-domain name</legend>' ||
+                            '<div>' ||
+                                '<label for="subdomain-name" class="block">Sub-domain name</label>' ||
+                                '<input id="subdomain-name" type="text" maxlength="' || C.data_length || '" value="' || C.domain_name || '">' ||
+                            '</div>' ||
+                            '<button type="button" class="button" data-processing="Changing sub-domain ... wait a few seconds">SUBMIT</button>' ||
+                        '</fieldset>' ||
+                    '</details>' ||
+                '</div>';
+            END IF;
         END LOOP;
 
         l_footer:=
@@ -195,9 +200,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
                     l_status:=linkDomain(pWebsiteid, C.value, C.netlify_site_id, l_editor_url, l_live_url, l_message);
                     IF (l_status) THEN
                         pck_email.sendmail(
-                            l_session_data.sub, 
-                            'DNS change instructions', 
-                            pck_email.DNSTemplate(pDomainName=>span(C.value), pEditorURL=>span(l_editor_url), pLiveURL=>span(l_live_url))
+                            pEmail=>l_session_data.sub, 
+                            pSubject=>'DNS change instructions', 
+                            pBody=>pck_email.DNSTemplate(pDomainName=>span(C.value), pEditorURL=>span(l_editor_url), pLiveURL=>span(l_live_url))
                         );
                         l_message:='<span style="color:green">Sent email with DNS change instructions</span>';
                     END IF;
