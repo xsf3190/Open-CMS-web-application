@@ -45,6 +45,8 @@ export const set_alert = (alert) => {
 ** APPLICATION USES SINGLE HTML DIALOG ELEMENT FOR CUSTOM EDITOR FUNCTIONS
 */
 export const initDialog = (data) => {
+    if (!data) return;
+    
     let last = dialog_header.lastChild;
 
     while (true) {
