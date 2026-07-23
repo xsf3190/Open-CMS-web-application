@@ -109,7 +109,7 @@ export const clickHandler = (e) => {
                     e.target.setAttribute("aria-expanded",true);
                 }
             })
-            .catch((error) => {
+            .catch(() => {
                 loader.style.opacity=0;
             });
     } else if (request_type==="verify") {
@@ -127,7 +127,7 @@ export const clickHandler = (e) => {
                     live.style.color = "red";
                 }
             })
-            .catch((error) => {
+            .catch(() => {
                 loader.style.opacity=0;
             });
     }
@@ -148,17 +148,7 @@ const setTokens = async (data) => {
     replaceTokens(data);
 
     localStorage.setItem("menulist",data.menulist);  
-    dropdown.replaceChildren();
-    dropdown.insertAdjacentHTML('afterbegin',data.menulist);
-    
-    // Initialize menu dropdown
-    const menu = await import("deploy_menulist")
-    .catch((error) => {
-        console.error(error);
-        console.error("Failed to load deploy_menulist");
-        return;
-    });
-    new menu.MenuNavigationHandler(dropdown);
+    window.location.reload();
 }
 
 /* 
