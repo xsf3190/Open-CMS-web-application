@@ -37,10 +37,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FAVICON" as
         l_article CLOB;
         l_footer LONG;
         l_json JSON_OBJECT_T;
-        n pls_integer;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
-        n:=1/0;
         l_header:='<h4>Set favicon for your site</h4>';
 
         FOR C IN (
