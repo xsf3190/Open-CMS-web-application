@@ -160,21 +160,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_session_data t_session_data;
         l_token APEX_JWT.T_TOKEN;
     BEGIN
-    -- pck_core.log('getSessionData:'||OWA_UTIL.get_cgi_env('HTTP_USER_AGENT'));
         l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
+        /* Bearer token is access token */
         l_session_data.bearer_token := SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
+
+        pck_core.log('l_session_data.bearer_token:'||l_session_data.bearer_token);
         
         /*
         **  "sub" in the token is the user's email address which we need to get client_secret
         */
-        -- pck_core.log('l_session_data.bearer_token:'||l_session_data.bearer_token);
         l_token:=apex_jwt.DECODE(p_value=>l_session_data.bearer_token, p_signature_key=>null);
 
         FOR C IN (
-            SELECT j.iss, j.sub, j.aud, j.iat, j.exp, j.jti, j.cld_cloud_name, j.cld_upload_preset, u.client_secret
-              FROM JSON_TABLE(l_token.payload, '$' COLUMNS(iss, sub, aud, iat, exp, jti, cld_cloud_name, cld_upload_preset)) j, users u
-             WHERE j.sub=u.email
+            SELECT j.iss, j.sub, j.aud, j.iat, j.exp, j.jti, u.client_secret
+              FROM JSON_TABLE(l_token.payload, '$' COLUMNS(iss, sub, aud, iat, exp, jti)) j, users u
+             WHERE j.jti=u.id
         ) LOOP
 
             l_token:=apex_jwt.DECODE(p_value=>l_session_data.bearer_token, p_signature_key=>UTL_RAW.cast_to_raw(C.client_secret));
@@ -186,8 +187,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
             l_session_data.scope:=C.aud;
             l_session_data.iss:=C.iss;
             l_session_data.sub:=C.sub;
-            l_session_data.cld_cloud_name:=C.cld_cloud_name;
-            l_session_data.cld_upload_preset:=C.cld_upload_preset;
             l_session_data.client_secret:=C.client_secret;
             l_session_data.timezone:=OWA_UTIL.get_cgi_env('timezone');
             l_session_data.url:=OWA_UTIL.get_cgi_env('url');
@@ -361,7 +360,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 🏞🌍🚧🎨📄🔠🔤
 */
         l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', '🖍', 'Content');
-        l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', '🏞', 'Upload');
+        -- l_html:=l_html || addMenuitem('upload-media/:ID/:PAGE', '🏞', 'Upload');
         l_html:=l_html || addMenuitem('publish-website/:ID', '🌐', 'Publish');
         l_html:=l_html || addMenuitem('fonts/:ID', '🔤', 'Fonts');
         l_html:=l_html || addMenuitem('logo/:ID', '🌈', 'Logo');
@@ -600,11 +599,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_aud VARCHAR2(7);
         l_json JSON_OBJECT_T;
         n PLS_INTEGER;
+
+        PROCEDURE unauthenticated IS
+            l_error LONG;
+        BEGIN
+            l_error:=
+            '<h4>Security precaution against theft</h4>' ||
+            '<p>You are being logged out because you have not authenticated from this location or device. Possible causes:</p>' ||
+            '<ol>' ||
+                '<li>You''ve connected to a different network</li>' ||
+                '<li>You upgraded or changed browser</li>' ||
+                '<li>Your device was stolen</li>' ||
+                '<li>Your security token was exfiltrated</li>' ||
+            '</ol>' ||
+            '<hr>' ||
+            '<p>Log in again</p>';
+
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('sqlerrm', l_error);
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=401;
+        END;
+
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteid);
 
         IF (NOT checkFingerprint(pWebsiteid, l_session_data.user_id)) THEN   
-            pStatus:=401;
+            unauthenticated;
             RETURN;
         END IF;
 
@@ -620,7 +641,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         IF (n=0) THEN
             INSERT INTO security_log(id, website_id, user_id, message) 
             VALUES (seq_log.nextval, pWebsiteid, l_session_data.user_id, 'Access denied - refresh token was not issued.' || CASE WHEN l_session_data.bearer_token IS NULL THEN ' - Bearer token is null' END);
-            pStatus:=401;
+            unauthenticated;
             RETURN;
         END IF;
 
