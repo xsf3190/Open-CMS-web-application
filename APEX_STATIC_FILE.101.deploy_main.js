@@ -48,7 +48,7 @@ const url = new URL(window.location.href);
 if (url.searchParams.has("refresh")) {
     localStorage.setItem("refresh", url.searchParams.get("refresh"));
     localStorage.setItem("menulist", url.searchParams.get("menulist"));
-    sessionStorage.setItem("token", url.searchParams.get("token"));
+    localStorage.setItem("token", url.searchParams.get("token"));
     url.searchParams.delete('token');
     url.searchParams.delete('refresh');
     url.searchParams.delete('menulist');
