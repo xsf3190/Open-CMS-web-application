@@ -1,7 +1,9 @@
 import { bodydata, output_dialog, dialog_header, dialog_article, dialog_footer } from "deploy_elements";
 
-let access_token = sessionStorage.getItem("token");
-let refresh_token = localStorage.getItem("refresh");
+let access_token, refresh_token;
+
+if (localStorage.getItem("token")) access_token = localStorage.getItem("token");
+if (localStorage.getItem("refresh")) refresh_token = localStorage.getItem("refresh");
 
 /* 
 ** COMMON ERROR HANDLER FOR IMPORTED MODULES
@@ -27,10 +29,10 @@ const handleError = (error) => {
 /* 
 ** CHECK IF TOKEN EXPIRED 
 */
-const expiredToken = (token) => {
-    if (!token) return true;
+const expiredToken = () => {
+    if (!access_token) return true;
     const now = Math.floor(new Date().getTime() / 1000);
-    const arrayToken = token.split(".");
+    const arrayToken = access_token.split(".");
     const parsedToken = JSON.parse(atob(arrayToken[1]));
     return parsedToken.exp <= now;
 }
@@ -40,7 +42,7 @@ const expiredToken = (token) => {
 */
 const replaceTokens = (data) => {
     console.log("Starting replaceTokens");
-    sessionStorage.setItem("token",data.token);
+    localStorage.setItem("token",data.token);
     access_token = data.token;
     localStorage.setItem("refresh",data.refresh);
     refresh_token = data.refresh;
@@ -50,7 +52,7 @@ const replaceTokens = (data) => {
 ** CALL BACKEND DATABASE API. AUTHENTICATION USES ROTATING JWT TOKENS
 */
 const callAPI = async (endpoint, method, data) => {
-    console.log("Starting callAPI",endpoint);
+    console.log("Starting callAPI",endpoint, method);
 
     /* Headers object */
     const headers = new Headers();
@@ -63,7 +65,7 @@ const callAPI = async (endpoint, method, data) => {
     /* No tokens involved in Authenticate endpoints. */
     if (!endpoint.includes("authenticate") && !endpoint.includes("auth-verify")) {
         /* Replace refresh and access tokens when access token expired */
-        if (expiredToken(access_token)) {
+        if (expiredToken()) {
             headers.set("Authorization","Bearer " + refresh_token);
             const refresh_config = {method: "GET", headers: headers};
             try {
@@ -78,9 +80,6 @@ const callAPI = async (endpoint, method, data) => {
                     if (response.status === 401) {
                         authenticated = false;
                         localStorage.clear();
-                        refresh_token = "";
-                        sessionStorage.clear();
-                        access_token = "";
                         output_dialog.addEventListener("close", () => {
                             window.location.reload();
                         });
