@@ -132,6 +132,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
                    netlify_site_id_custom=C.id 
              WHERE id=pWebsiteid;
 
+            DELETE refresh_token WHERE website_id=pWebsiteid;
+
             pck_deploy.deployLiveSite(pWebsiteid);
             RETURN TRUE;
         END LOOP;
