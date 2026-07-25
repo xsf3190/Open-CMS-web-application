@@ -430,7 +430,7 @@ selectedcontent {
 /* SWITCH/TOGGLE BUTTON */
 
 .toggle[aria-pressed] {
-  display: block;
+  /* display: block; */
   box-sizing: border-box;
   border: none;
   color: inherit;
@@ -499,6 +499,23 @@ selectedcontent {
   border-color: #36a829;
 }
 
+/* STYLES FOR TOOLTIP COMPONENT */
+.tooltip-btn {
+    background-color: transparent;
+    border:none;
+    padding-inline-start: 1rem;
+    cursor: pointer;
+}
+.tooltip {
+    position: fixed;
+    background: hsl(210deg 15% 6%);
+    color: white;
+    padding: 0.15em;
+    text-align: center;
+    max-width: 15rem;
+    position-area: bottom;
+    position-try-fallbacks: flip-block;
+}
 
 /* STYLES FOR IMAGE SELECTION COMPONENT */
 
