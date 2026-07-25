@@ -5,7 +5,6 @@ import { header, main, footer } from "deploy_elements";
 import { callAPI } from "deploy_callAPI";
 
 export const init = () => {
-    console.log("fetching latest edited content");
     callAPI('edit-content/:ID/:PAGE',"GET")
         .then((data) => {
             if (data.header) {
