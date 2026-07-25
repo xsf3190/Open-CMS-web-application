@@ -3,7 +3,7 @@
 */
 
 import { initDialog, liveRegion } from "deploy_elements";
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 
 let endpoint;
 
@@ -14,9 +14,6 @@ export const init = (element) => {
     .then((data) => {
         initDialog(data);
     })
-    .catch((error) => {
-        handleError(error);
-    });
 }
 
 export const changeHandler = (e) => {
@@ -24,9 +21,6 @@ export const changeHandler = (e) => {
         .then((data) => {
             liveRegion(data);
         })
-        .catch((error) => {
-            handleError(error);
-        });
 }
 
 /*
