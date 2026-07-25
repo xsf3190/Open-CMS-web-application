@@ -93,14 +93,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
         l_json JSON_OBJECT_T;
     BEGIN
         log_error;
-
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',FALSE);
         l_json.put('sqlcode', SQLCODE);
-        l_json.put('sqlerrm', SQLERRM);
+        IF (SQLCODE=-20401) THEN
+            l_json.put('sqlerrm', 
+            '<p>Need new access token for Editor website</p>' ||
+            '<hr>' ||
+            '<p>Log In</p>');
+            pStatus:=401;
+        ELSE
+            l_json.put('sqlerrm', SQLERRM);
+            pStatus:=400;
+        END IF;
         apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=400;
     END;
 
     /*
