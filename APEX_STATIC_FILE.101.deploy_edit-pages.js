@@ -14,7 +14,7 @@ export const init = (e) => {
             initDialog(data);
             pages = dialog_article.querySelector("fieldset.pages");
             navigation_label = dialog_article.querySelector("input[name='navigation-label']");
-            collection = dialog_article.querySelectorAll("[name='collection_type']");
+            collection = dialog_article.querySelector("[id='collection']");
             cta = dialog_article.querySelectorAll("[name='cta']");
             page_title = dialog_article.querySelector("[name='page_title']");
             page_description = dialog_article.querySelector("[name='page_description']");
@@ -37,13 +37,10 @@ export const inputHandler = (e) => {
 export const changeHandler = (e) => {
     if (e.target.matches("[name='page']")) {
         navigation_label.value = e.target.nextSibling.textContent;
-        setCollectionType(e.target.dataset.collection);
+        setCollection(e.target.dataset.collection);
         setCta(e.target.dataset.cta);
         page_title.value = e.target.dataset.pageTitle;
         page_description.value = e.target.dataset.pageDescription;
-    }
-    if (e.target.matches("[name='collection_type']")) {
-        pages.querySelector("[name='page']:checked").dataset.collection = e.target.value;
     }
     if (e.target.matches("[name='cta']")) {
         pages.querySelector("[name='page']:checked").dataset.cta = e.target.value;
@@ -56,16 +53,13 @@ export const changeHandler = (e) => {
     }
 }
 
-const setCollectionType = (data) => {
+const setCollection = (data) => {
     switch (data) {
-        case "N/A":
-            collection[0].checked = true;
+        case "0":
+            collection.setAttribute("aria-pressed", "false");
             break;
-        case "BLOG":
-            collection[1].checked = true;
-            break;
-        case "PORTFOLIO":
-            collection[2].checked = true;
+        case "1":
+            collection.setAttribute("aria-pressed", "true");
             break;
     }
 }
@@ -111,12 +105,12 @@ export const clickHandler = async (e) => {
         label.setAttribute("for",id);
         const input = clone.querySelector("input");
         input.setAttribute("id",id);
-        input.dataset.collection = "N/A";
+        input.dataset.collection = "0";
         input.dataset.cta = "";
         input.dataset.pageTitle = "";
         input.dataset.pageDescription = "";
         pages.insertBefore(clone, selected.nextSibling);
-        setCollectionType("N/A");
+        setCollection("0");
         setCta("");
         page_title.value = "";
         page_description.value = "";
@@ -137,13 +131,23 @@ export const clickHandler = async (e) => {
         return;
     }
 
+    if (e.target.matches("[id='collection']")) {
+        if (e.target.getAttribute("aria-pressed") == "false") {
+            e.target.setAttribute("aria-pressed", "true");
+            pages.querySelector("[name='page']:checked").dataset.collection = "1";
+        } else {
+            e.target.setAttribute("aria-pressed", "false");
+            pages.querySelector("[name='page']:checked").dataset.collection = "0";
+        }
+    }
+
     if (e.target.matches(".save")) {
         /* SAVE CHANGES AND PROMPT USER TO PUBLISH */
         const arr = [];
         pages.querySelectorAll("input").forEach ((item) => {
             const obj = {};
             obj.article_id = item.getAttribute("id");
-            obj.collection_type = item.dataset.collection;
+            obj.collection = item.dataset.collection;
             obj.cta = item.dataset.cta;
             obj.page_title = item.dataset.pageTitle;
             obj.page_description = item.dataset.pageDescription;
