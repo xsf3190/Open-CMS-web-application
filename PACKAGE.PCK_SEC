@@ -4,6 +4,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
     --
     ACCESS_TOKEN_EXP CONSTANT PLS_INTEGER:=60*5; -- 5 MINUTES
     --
+    INVALID_TOKEN EXCEPTION;
+    PRAGMA EXCEPTION_INIT (INVALID_TOKEN, -20401);
+    --
     TYPE t_session_data IS RECORD (
         url VARCHAR2(100),
         timezone VARCHAR2(30),
@@ -11,8 +14,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_SEC" AS
         scope VARCHAR2(7),
         iss VARCHAR2(10),
         sub VARCHAR2(100),
-        cld_cloud_name users.cld_cloud_name%type,
-        cld_upload_preset users.cld_upload_preset%type,
         client_secret users.client_secret%type,
         cpu_used_session NUMBER,
         bearer_token varchar2(500)
@@ -158,15 +159,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
     */
     FUNCTION getSessionData(pWebsiteId IN website.id%type) RETURN t_session_data IS
         l_session_data t_session_data;
-        l_token APEX_JWT.T_TOKEN;
+        l_token APEX_JWT.T_TOKEN;      
     BEGIN
         l_session_data.cpu_used_session:=dbms_utility.get_cpu_time();
 
         /* Bearer token is access token */
         l_session_data.bearer_token := SUBSTR(OWA_UTIL.get_cgi_env('Authorization'), 8);
 
-        pck_core.log('l_session_data.bearer_token:'||l_session_data.bearer_token);
-        
         /*
         **  "sub" in the token is the user's email address which we need to get client_secret
         */
@@ -196,6 +195,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         g_website_id:=pWebsiteid;
 
         RETURN (l_session_data);
+
+        EXCEPTION WHEN VALUE_ERROR THEN
+            RAISE INVALID_TOKEN;
 
     END;
 
