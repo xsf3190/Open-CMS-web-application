@@ -19,6 +19,21 @@ html {
     -webkit-text-size-adjust: none;
     text-size-adjust: none;
     -webkit-font-smoothing: antialiased;
+    container-type: scroll-state;
+}
+
+/* If the last scroll was DOWN, hide the header */
+@container scroll-state(scrolled: bottom) {
+  .topnav {
+    transform: translateY(-200%);
+  }
+}
+
+/* If the last scroll was UP, show the header */
+@container scroll-state(scrolled: top) {
+  .topnav {
+    transform: translateY(0);
+  }
 }
 
 body, h1, h2, h3, h4, p, figure, blockquote, dl, dd, address, ul, ol {
