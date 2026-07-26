@@ -186,7 +186,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         /* Form depends on Page type - i.e. collection item, collection index, normal */
 
         FOR C IN (
-            SELECT wa.collection_type, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.img_border_radius, au.asset_id,
+            SELECT wa.collection, wa.navigation_label, a.id, a.parent_id, a.title, a.excerpt, w.img_border_radius, au.asset_id,
                     w.max_width, w.min_width_px, w.min_font_size, w.min_scale, w.max_width_px, w.max_font_size, w.max_scale
               FROM website w, website_article wa, article a, asset_used au
              WHERE w.id=pWebsiteId 
@@ -195,8 +195,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND au.article_id(+)=a.id
         ) LOOP
-            /* Updating Page Options for a selected BLOG */
-            IF (C.parent_id IS NOT NULL AND C.collection_type='BLOG') THEN
+            /* Updating Page Options for a selected page collection */
+            IF (C.parent_id IS NOT NULL AND C.collection=1) THEN
                 l_header:='<h4>'|| INITCAP(C.navigation_label) || ': ' || C.title || '</h4>';
                 l_article:=
                 '<input type="hidden" name="dml" value="update">' ||
