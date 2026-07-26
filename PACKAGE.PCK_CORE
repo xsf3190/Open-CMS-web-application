@@ -189,7 +189,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
 
         UPDATE asset 
            SET user_id=l_transfer_to_user_id 
-         WHERE article_id IN (SELECT parent_id FROM article WHERE id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'NA' AND user_id=l_transfer_from_user_id));
+         WHERE article_id IN (SELECT parent_id FROM article WHERE id IN (SELECT article_id FROM website_article WHERE website_id=pWebsiteid AND collection=1 AND user_id=l_transfer_from_user_id));
 
         UPDATE website_article SET user_id=l_transfer_to_user_id 
          WHERE website_id=pWebsiteId AND user_id=l_transfer_from_user_id;
