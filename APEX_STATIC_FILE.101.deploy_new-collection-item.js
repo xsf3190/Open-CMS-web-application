@@ -1,7 +1,7 @@
 /* ************************** */
 /* CREATE NEW COLLECTION ITEM */
 /* ************************** */
-import { callAPI, handleError } from "deploy_callAPI";
+import { callAPI } from "deploy_callAPI";
 import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
 
 let endpoint;
@@ -15,9 +15,6 @@ export const init = (element) => {
         initDialog(data);
         summary = document.getElementById("error-summary");
     })
-    .catch((error) => {
-            handleError(error);
-    });
 }
 
 let isSending = false;
@@ -97,10 +94,6 @@ const footerHandler = (e) => {
                     live.style.color = "red";
                 }
             })
-            .catch((error) => {
-                loader.style.opacity=0;
-                handleError(error);
-            });
     }
 };
 
