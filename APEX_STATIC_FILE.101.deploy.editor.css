@@ -512,7 +512,8 @@ selectedcontent {
     color: white;
     padding: 0.15em;
     text-align: center;
-    max-width: 15rem;
+    font-size: 80%;
+    max-width: 30rem;
     position-area: bottom;
     position-try-fallbacks: flip-block;
 }
