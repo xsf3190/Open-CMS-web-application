@@ -29,7 +29,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         FOR C IN (
-            SELECT w.domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo_type, wa.collection_type,
+            SELECT w.domain_name, wa.header_html, a.body_html, wa.footer_html, w.esm_library, w.max_width, w.logo_type, wa.collection,
                     w.logo_font_text, w.logo_svg
               FROM website_article wa, article a, website w
              WHERE w.id=pWebsiteId
@@ -62,8 +62,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CODEPEN" is
                 END IF;
             END IF;
 
-            IF (C.collection_type<>'N/A') THEN
-                pck_deploy.buildPageCollection(C.collection_type,pArticleid,l_collection_html,l_collection_css);
+            IF (C.collection=1) THEN
+                pck_deploy.buildPageCollection(pArticleid,l_collection_html,l_collection_css);
             END IF;
 
             l_html:=
