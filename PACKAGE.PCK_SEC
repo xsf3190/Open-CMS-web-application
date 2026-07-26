@@ -371,7 +371,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('domain/:ID', '🌐', 'Domain');
         l_html:=l_html || addMenuitem('page-options/:ID/:PAGE', '🈸', 'Options');
         
-        FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection_type<>'N/A') LOOP
+        FOR C IN (SELECT article_id, navigation_label FROM website_article WHERE website_id=pWebsiteid AND collection=1) LOOP
             l_html:=l_html || addMenuitem('new-collection-item/:ID', 'B', 'New ' || C.navigation_label, 'data-parent-id="' || C.article_id || '"');
         END LOOP;
 
