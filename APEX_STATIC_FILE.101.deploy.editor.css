@@ -576,7 +576,7 @@ label {
     font-weight: 550;
 }
 
-label.block {
+label.block, span.block {
     display: block;
 }
 
@@ -592,6 +592,15 @@ textarea {
   field-sizing: content;
   line-height: 1.5;
   padding: 0.25em 0.5em;
+}
+
+/* INLINE ERROR MESSAGES */
+textarea + .message {
+    visibility: hidden;
+}
+textarea[aria-invalid="true"] + .message {
+    visibility: visible;
+    color: red;
 }
 
 /* 
