@@ -1,10 +1,10 @@
 /*
 **  ADD / CHANGE / DELETE PAGES
 */
-import { dialog_article, dialog_footer, initDialog } from "deploy_elements";
+import { dialog_article, dialog_footer, initDialog, liveRegion } from "deploy_elements";
 import { callAPI } from "deploy_callAPI";
 
-let endpoint, pages, isSending;
+let endpoint, isSending;
 
 export const init = (e) => {
     endpoint = e.dataset.endpoint;
@@ -12,7 +12,6 @@ export const init = (e) => {
     callAPI(endpoint,'GET')
         .then((data) => {
             initDialog(data);
-            pages = dialog_article.querySelector("fieldset.pages");
             isSending = false;
         })
 }
@@ -21,7 +20,9 @@ export const init = (e) => {
 ** INPUT HANDLER - WRITE USER'S INPUT INTO RADIO CONTROL NAVIGATION LABEL
 */
 export const inputHandler = (e) => {
-    console.log("DO NOTHING");
+    if (e.target.getAttribute("aria-invalid")) {
+        e.target.setAttribute("aria-invalid", "false");
+    }
 }
 
 /*
@@ -31,12 +32,64 @@ export const changeHandler = (e) => {
     if (e.target.matches("[name='page']")) {
         console.log("changeHandler",e.target);
     }
+    if (e.target.matches("#collection-list")) {
+        const collection_item = e.target.options[e.target.selectedIndex]?.getAttribute("value");
+        callAPI(endpoint,'GET',"?collection_item="+collection_item)
+        .then((data) => {
+            const collectionitemdata = document.getElementById("collectionitemdata");
+            collectionitemdata.replaceChildren();
+            collectionitemdata.insertAdjacentHTML('afterbegin',data.item);
+            dialog_footer.querySelector(".upd-item").dataset.collectionItem = collection_item;
+        });
+    }
 }
 
 /*
 ** BUTTON CLICK EVENT HANDLERS
 */
 export const clickHandler = async (e) => {
+
+    if (e.target.matches(".add-item")) {
+        const title = document.getElementById("title");
+        const obj = {
+            action: "insert",
+            parent_id: e.target.dataset.parentId,
+            title: title.value,
+            excerpt: document.getElementById("excerpt").value
+        };
+        callAPI(endpoint,'POST',obj)
+        .then((data) => {
+            // new_is is set when item successfully added
+            if (data.new_id) {
+                const select = document.getElementById("collection-list");
+                const option = document.createElement("option");
+                option.value = data.new_id;
+                option.text = obj["title"];
+                select.add(option,select.options[0]);
+                select.querySelector("selectedcontent").textContent = obj["title"];
+            } else {
+                // otherwise signal error
+                title.setAttribute("aria-invalid", "true");
+                title.nextSibling.textContent = data.message;
+            }
+            liveRegion(data);
+        });
+    }
+
+    if (e.target.matches(".upd-item")) {
+        const checked = dialog_article.querySelectorAll("[name='link']:checked");
+
+        const obj = {
+            action: "update",
+            collection_item: e.target.dataset.collectionItem,
+            excerpt: document.getElementById("excerpt-upd").value,
+            links: Array.from(checked).map(x => x.value)
+        };
+        callAPI(endpoint,'POST',obj)
+        .then((data) => {
+            liveRegion(data);
+        });
+    }
 
     if (e.target.matches(".save")) {
         /* SAVE CHANGES AND PROMPT USER TO PUBLISH */
