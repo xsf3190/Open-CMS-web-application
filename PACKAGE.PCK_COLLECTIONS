@@ -1,0 +1,130 @@
+CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_COLLECTIONS" as
+    --
+    PROCEDURE getCollectionForm(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pStatus OUT NUMBER);
+    --
+    PROCEDURE updateCollection(pWebsiteId IN NUMBER, Articleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER);
+    --
+end "PCK_COLLECTIONS";
+/
+CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
+
+    /* 
+    **  BUILD FORM CONTROLS TO MANAGE COLLECTION PAGES AND SUB-PAGES
+    */
+    PROCEDURE getCollectionForm(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_parent_id NUMBER;
+        l_navigation_label website_article.navigation_label%type;
+        l_json JSON_OBJECT_T;
+        n PLS_INTEGER;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+        
+        l_header:='<h4>Manage Collection Pages</h4>';
+
+        FOR C IN (
+            SELECT wa.article_id, wa.collection, wa.navigation_label, ROW_NUMBER() OVER (ORDER BY wa.display_order) rn, COUNT(*) OVER () nb
+              FROM website_article wa
+             WHERE wa.website_id=pWebsiteid
+               AND wa.collection=1
+             ORDER BY wa.display_order
+        ) LOOP
+            IF (C.rn=1) THEN
+                /* Only show selectable labels if more than 1 collection */
+                l_parent_id:=C.article_id;
+                l_navigation_label:=C.navigation_label;
+                IF (C.nb>1) THEN
+                    l_article:=
+                    '<fieldset class="pages hide-controls flex-items">' ||
+                        '<legend>Select collection page</legend>';
+                END IF;
+            END IF;
+            IF (C.nb>1) THEN
+                l_article:=l_article ||
+                '<div>' ||
+                    '<input id="page-' || C.article_id || '" type="radio" name="page"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
+                    '<label for="page-' || C.article_id || '">' || C.navigation_label || '</label>' ||
+                '</div>';
+            END IF;
+            IF (C.rn=C.nb) THEN
+                l_article:=l_article ||
+                '</fieldset>';
+            END IF;
+        END LOOP;
+
+        l_article:=l_article ||
+        '<button type="button" class="button" class="add-item">New ' || l_navigation_label || '</button>';
+        
+        FOR C IN (
+            SELECT a.id, a.title, a.excerpt, NVL(a.updated_date,a.created_date) updated_date, ROW_NUMBER() OVER (ORDER BY NVL(a.updated_date,a.created_date) DESC) rn, COUNT(*) OVER() nb
+              FROM article a 
+             WHERE a.parent_id=l_parent_id 
+            ORDER BY updated_date DESC
+        ) LOOP
+            IF (C.rn=1) THEN
+                l_article:=l_article ||
+                '<select>';
+            END IF;
+            l_article:=l_article ||
+            '<option value="' || C.id || '">' || C.title || '</option>';
+            IF (C.rn=C.nb) THEN
+                l_article:=l_article ||
+                '</select>';
+            END IF;
+        END LOOP;
+
+        IF (l_parent_id IS NULL) THEN
+            l_article:=
+            '<p>No collection pages in website</p>' ||
+            '<p>Use the "Pages" editor option to create collection pages</p>';
+        END IF;
+        
+        l_footer:=
+        '<div class="flex-items">' ||
+            '<button type="button" class="button save">PUBLISH</button>' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>' ||
+        '</div>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+
+    END;
+
+    /* 
+    **  UPDATE COLLECTION
+    */
+    PROCEDURE updateCollection(pWebsiteId IN NUMBER, Articleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('published',true);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+
+    END;
+
+end "PCK_COLLECTIONS";
+/
