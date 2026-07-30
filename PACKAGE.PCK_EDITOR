@@ -1,12 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EDITOR" is
     --
-    PROCEDURE createCollectionItem(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
-     --
-    PROCEDURE deletePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
-    --
     PROCEDURE deployEditorWebsite(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
-    --
-    PROCEDURE getCollectionItemForm(pWebsiteId IN website.id%type, pParentId IN article.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE getDeployWebsiteForm(pWebsiteId IN website.id%type,pStatus OUT NUMBER);
     --
@@ -40,138 +34,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
     /*
     ** CREATE HTML FOR PAGE OPTIONS FORM
     */
-    PROCEDURE getCollectionItemForm(pWebsiteId IN website.id%type, pParentId IN article.id%type, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_navigation_label website_article.navigation_label%type;
-        l_header LONG;
-        l_article CLOB;
-        l_footer LONG;
-        l_json JSON_OBJECT_T;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        SELECT navigation_label INTO l_navigation_label FROM website_article WHERE website_id=pWebsiteId AND article_id=pParentId;
-
-        l_header:='<h4>Create New '|| l_navigation_label || '</h4>';
-
-        l_article:=
-        '<div id="error-summary" tabindex="-1" class="error-summary" hidden>' ||
-            '<h2 id="error-heading">' ||
-                '<span aria-hidden="true">⚠️</span> Oops! There is a problem.' ||
-            '</h2>' ||
-            '<ul></ul>' ||
-        '</div>' ||
-        '<p>Required fields are marked with an *</p>' ||
-        '<div>' ||
-            '<label for="title" class="block">Enter title *</label>' ||
-            '<input type="text" maxlength="100" id="title" name="title" value="" required>' ||
-            '<div id="title-error" class="inline-error">' ||
-        '</div>' ||
-        '<div>' ||
-            '<label for="excerpt" class="block">Enter excerpt *</label>' ||
-            '<textarea id="excerpt" name="excerpt" style="min-width:50%" maxlength="160" required></textarea>' ||
-            '<div id="excerpt-error" class="inline-error">' ||
-        '</div>';
-
-        l_footer:=
-        '<div class="flex-items">' ||
-            '<button type="button" class="button publish" data-parent-id="' || pParentId || '" data-processing="Publishing editor site, wait a few seconds...">' || 'PUBLISH' || '</button>' ||
-            '<span aria-live="polite"></span>' ||
-            '<span class="loader icon"></span>' ||
-        '</div>';
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('header',l_header);
-        l_json.put('article',l_article);
-        l_json.put('footer',l_footer);
-        apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=200;
-
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
-    END;
-
-    /*
-    ** CREATE NEW COLLECTION ITEM AND DEPLOY EDITOR SITE
-    */
-    PROCEDURE createCollectionItem(pWebsiteId IN website.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_navigation_label website_article.navigation_label%type;
-        l_link VARCHAR2(500);
-        l_json JSON_OBJECT_T;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        FOR C IN (
-            SELECT parentid, title, excerpt
-            FROM JSON_TABLE(pBodyText, '$' COLUMNS (parentid, title, excerpt))
-        ) LOOP
-            
-            INSERT INTO article(id, parent_id, author_user_id, title, excerpt, body_html) 
-            VALUES (seq_article.nextval, C.parentid, l_session_data.user_id, C.title, C.excerpt, '<h2>' || C.title || '</h2>');
-
-            UPDATE article SET updated_date=current_timestamp WHERE id=C.parentid;
-
-            FOR C1 IN (
-                SELECT w.netlify_site_id, apex_string_util.get_slug(wa.navigation_label) navigation_label_slug
-                  FROM website w, website_article wa 
-                 WHERE w.id=pWebsiteId
-                   AND wa.website_id=w.id
-                   AND wa.article_id=C.parentid
-            ) LOOP
-                /* Deploy editor site with new collection item */ 
-                pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C1.netlify_site_id, pResturl=>pck_core.getResturl);
-                /* Link to new collection item */
-                l_link:='<a href="/' || C1.navigation_label_slug || '/' || apex_string_util.get_slug(C.title) || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">Open new ' || C1.navigation_label_slug || '</a>';
-            END LOOP;
-
-        END LOOP;
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('link',l_link);
-        apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=200;
-
-        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
-
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
-    END;
-
-    /*
-    ** ARTICLE LINK OPTIONS SELECT LIST
-    */
-    FUNCTION getLinkOptions(pParentId IN article.id%type, pArticleid IN article.id%type) RETURN VARCHAR2 IS
-        l_options CLOB;
-        n PLS_INTEGER:=0;
-    BEGIN
-        FOR C IN (
-            WITH checked AS
-            (
-                SELECT article_id_2 FROM article_link WHERE article_id_1=pArticleid
-            )
-            SELECT a.id, a.title, l.article_id_2
-              FROM article a, checked l
-             WHERE a.parent_id=pParentId
-               AND a.id<>pArticleid
-               AND a.id=l.article_id_2(+)
-             ORDER BY a.title
-        ) LOOP
-            n:=n+1;
-            l_options:=l_options ||
-            '<input type="checkbox" name="link" id="link' || n || '" value="' || C.id || '"' || CASE WHEN C.article_id_2 IS NOT NULL THEN ' checked' END || '>' || 
-            '<label for="link' || n || '">' || C.title || '</label>';
-        END LOOP;
-        RETURN (l_options);
-    END;
-
-    /*
-    ** CREATE HTML FOR PAGE OPTIONS FORM
-    */
     PROCEDURE getPageOptionsForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
@@ -195,22 +57,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                AND wa.article_id=NVL(a.parent_id,a.id)
                AND au.article_id(+)=a.id
         ) LOOP
-            /* Updating Page Options for a selected page collection */
-            IF (C.parent_id IS NOT NULL AND C.collection=1) THEN
-                l_header:='<h4>'|| INITCAP(C.navigation_label) || ': ' || C.title || '</h4>';
-                l_article:=
-                '<input type="hidden" name="dml" value="update">' ||
-                '<fieldset>' ||
-                    '<legend>Excerpt for '|| C.navigation_label || '</legend>' ||
-                    '<textarea name="excerpt" style="min-width:50%" maxlength="160">' || C.excerpt || '</textarea>' ||
-                '</fieldset>' ||
-                '<fieldset>' ||
-                    '<legend>Link to related '|| C.navigation_label || 's</legend>' ||
-                    '<p><a href="#skip">Skip to next</a></p>' ||
-                        getLinkOptions(C.parent_id, pArticleId) ||
-                '</fieldset>' ||
-                '<p id="skip"></p>';
-            ELSE
                 l_header:='<h4>Page Options</h4>';
                 l_article:=
                 '<fieldset>' ||
@@ -286,7 +132,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                         '</fieldset>';
                     END LOOP;
                 END IF;
-            END IF;
 
             l_footer:=
             '<div class="flex-items">' ||
@@ -372,47 +217,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('message',l_message);
-        apex_util.prn(l_json.to_clob,false);
-
-        pStatus:=200;
-
-        EXCEPTION WHEN OTHERS THEN
-            pck_core.log_error(pStatus);
-    END;
-
-    /* 
-    **  DELETE COLLECTION ITEM
-    */
-    PROCEDURE deletePageOption(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_json JSON_OBJECT_T;
-        l_link VARCHAR2(200);
-        n PLS_INTEGER;
-    BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        /* FORCE NEXT DEPLOYMENT TO REBUILD INDEX PAGE */
-        FOR C IN (
-            SELECT w.netlify_site_id, wa.navigation_label, a.parent_id
-              FROM website w, website_article wa, article a
-             WHERE w.id=pWebsiteId
-               AND wa.website_id=w.id
-               AND wa.article_id=a.parent_id
-               AND a.id=pArticleId
-        ) LOOP
-            UPDATE article SET updated_date=current_timestamp WHERE id=C.parent_id;
-            DELETE article WHERE id=pArticleid;
-            n:=SQL%ROWCOUNT;
-            pck_core.log('DELETE ARTICLE '||pArticleid||' rowcount:'||n);
-            /* Deploy editor site with new collection item */ 
-            pck_deploy.runDeployment(pWebsiteId=>pWebsiteId, pSiteid=>C.netlify_site_id, pRestUrl=>pck_core.getRestURL);
-            /* Link to new collection item */
-            l_link:='<a href="/' || apex_string_util.get_slug(C.navigation_label) || '" rel="noopener noreferrer" aria-describedby="open-in-same-tab">' || C.navigation_label || ' Deleted. Index page updated</a>';
-        END LOOP;
-
-        l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
-        l_json.put('link',l_link);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
