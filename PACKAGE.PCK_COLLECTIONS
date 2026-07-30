@@ -2,7 +2,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_COLLECTIONS" as
     --
     PROCEDURE getCollectionForm(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pCollectionItem IN NUMBER, pStatus OUT NUMBER);
     --
-    PROCEDURE updateCollection(pWebsiteId IN NUMBER, Articleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER);
+    PROCEDURE updateCollection(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
 end "PCK_COLLECTIONS";
 /
@@ -13,7 +13,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
         l_html CLOB;
     BEGIN
         FOR C IN (
-            SELECT a.parent_id, a.excerpt, wa.navigation_label
+            SELECT a.parent_id, a.title, a.excerpt, wa.navigation_label
               FROM article a, website_article wa
              WHERE a.id=pCollectionItem
                AND wa.article_id=a.parent_id
@@ -45,7 +45,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
             END LOOP;
             l_html:=l_html ||
             '</fieldset>' ||
-            '<p id="skip"></p>';
+            '<p id="skip"></p>' ||
+            '<hr>' ||
+            '<div class="flex-items space-between no-wrap">' ||
+                '<span>' || C.title || '</span>' ||
+                '<button type="button" class="button del-item" data-collection-item="' || pCollectionItem || '" style="--button-bg:red">DELETE</button>' ||
+            '</div>' ||
+            '<hr>';
 
         END LOOP;
         
@@ -87,6 +93,20 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
 
         
         l_header:='<h4>Manage Collection Pages</h4>';
+
+        SELECT COUNT(*) INTO n FROM website_article WHERE website_id=pWebsiteid AND collection=1;
+        IF (n=0) THEN
+            l_article:=
+            '<p>No collection pages in website</p>' ||
+            '<p>Use the "Pages" editor option to create collection pages</p>';
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('header',l_header);
+            l_json.put('article',l_article);
+            l_json.put('footer','');
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+            RETURN;
+        END IF;
 
         FOR C IN (
             SELECT wa.article_id, wa.collection, wa.navigation_label, ROW_NUMBER() OVER (ORDER BY wa.display_order) rn, COUNT(*) OVER () nb
@@ -165,14 +185,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
             '</select>' ||
         '</div>' ||
         '<div id="collectionitemdata" class="flow">' ||
-        getCollectionItemData(l_selected_id) ||
+            getCollectionItemData(l_selected_id) ||
         '</div>';
-
-        IF (l_parent_id IS NULL) THEN
-            l_article:=
-            '<p>No collection pages in website</p>' ||
-            '<p>Use the "Pages" editor option to create collection pages</p>';
-        END IF;
         
         l_footer:=
         '<div class="flex-items">' ||
@@ -197,12 +211,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
     END;
 
     /* 
-    **  UPDATE COLLECTION
+    **  INSERT OR UPDATE A COLLECTION ITEM
     */
-    PROCEDURE updateCollection(pWebsiteId IN NUMBER, Articleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+    PROCEDURE updateCollection(pWebsiteId IN NUMBER, pArticleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_bodytext CLOB:=pBodytext;
         l_action VARCHAR2(6);
+        l_parentid NUMBER;
         l_json JSON_OBJECT_T;
         l_message VARCHAR2(50);
         l_new_id NUMBER;
@@ -233,7 +248,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
                         INSERT INTO article(id, parent_id, title, excerpt, author_user_id, updated_date, body_html)
                         VALUES (seq_article.nextval, C.parent_id, C.title, C.excerpt, l_session_data.user_id, current_timestamp, '<h2>' || C.title || '</h2><p>' || C.excerpt || '</p>');
                         l_new_id:=seq_article.currval;
-                        l_message:=RTRIM(INITCAP(C.navigation_label),'s') || ' added successfully';
+                        l_parentid:=C.parent_id;
                     ELSE
                         l_message:='Title already exists';
                     END IF;
@@ -243,7 +258,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
                 FOR C IN (
                     SELECT collection_item, excerpt FROM JSON_TABLE(l_bodytext, '$' COLUMNS (collection_item, excerpt))
                 ) LOOP
-                    UPDATE article SET excerpt=C.excerpt, updated_date=current_timestamp WHERE id=C.collection_item;
+                    UPDATE article 
+                       SET excerpt=C.excerpt, updated_date=current_timestamp 
+                     WHERE id=C.collection_item 
+                    RETURNING parent_id INTO l_parentid;
 
                     DELETE article_link WHERE article_id_1=C.collection_item;
                     
@@ -251,13 +269,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
                     SELECT collection_item, article_id_2 FROM JSON_TABLE(l_bodytext, '$' COLUMNS (collection_item, NESTED '$.links[*]' COLUMNS (article_id_2 PATH '$')))
                      WHERE article_id_2 IS NOT NuLL;
                 END LOOP;
-                l_message:='Collection item Updated successfully';
+
+            WHEN 'delete' THEN
+                FOR C IN (
+                    SELECT collection_item FROM JSON_TABLE(l_bodytext, '$' COLUMNS (collection_item))
+                ) LOOP
+                    DELETE article WHERE id=C.collection_item RETURNING parent_id INTO l_parentid;
+                END LOOP;
+
         END CASE;
 
         l_json:= new JSON_OBJECT_T;
-        l_json.put('success',true);
+
+        /* "l_message" either has error condition or action was successful */
+        IF (l_message IS NULL) THEN
+            SELECT RTRIM(INITCAP(wa.navigation_label),'s') || ' ' || l_action || CASE WHEN l_action='insert' THEN 'ed' ELSE 'd' END || ' successfully'
+              INTO l_message
+              FROM website_article wa
+             WHERE wa.website_id=pWebsiteid
+               AND wa.article_id=l_parentid;
+        END IF;
         l_json.put('message',l_message);
-        l_json.put('new_id',l_new_id);
+
+        IF (l_new_id IS NOT NULL) THEN
+            l_json.put('new_id',l_new_id);
+            l_json.put('item',getCollectionItemData(l_new_id));
+        END IF;
+        
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -265,7 +303,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
         pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
     EXCEPTION WHEN OTHERS THEN
-        pck_core.log(l_bodytext);
         pck_core.log_error(pStatus);
 
     END;
