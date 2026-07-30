@@ -4,7 +4,7 @@
 import { dialog_article, dialog_footer, initDialog, liveRegion } from "deploy_elements";
 import { callAPI } from "deploy_callAPI";
 
-let endpoint, select, collectionitemdata;
+let endpoint, select, collectionitem;
 
 export const init = (e) => {
     endpoint = e.dataset.endpoint;
@@ -12,8 +12,8 @@ export const init = (e) => {
     callAPI(endpoint,'GET')
         .then((data) => {
             initDialog(data);
-            select = document.getElementById("collection-list");
-            collectionitemdata = document.getElementById("collectionitemdata");
+            select = document.getElementById("collection-items");
+            collectionitem = document.getElementById("collection-item");
         })
 }
 
@@ -30,17 +30,26 @@ export const inputHandler = (e) => {
 **  CHANGE HANDLER
 */
 export const changeHandler = (e) => {
-    if (e.target.matches("[name='page']")) {
-        console.log("changeHandler",e.target);
-    }
-    // User select new collection item
-    if (e.target.matches("#collection-list")) {
-        const collection_item = e.target.options[e.target.selectedIndex]?.getAttribute("value");
-        callAPI(endpoint,'GET',"?collection_item="+collection_item)
+    if (e.target.matches("[name='collection']")) {
+        const parent_id=e.target.dataset.parentId;
+        callAPI(endpoint,'GET',"?collection="+parent_id)
         .then((data) => {
-            collectionitemdata.replaceChildren();
-            collectionitemdata.insertAdjacentHTML('afterbegin',data.item);
-            dialog_footer.querySelector(".upd-item").dataset.collectionItem = collection_item;
+            const collection = document.getElementById("collection");
+            collection.replaceChildren();
+            collection.insertAdjacentHTML('afterbegin',data.collection);
+        });
+    }
+
+    // User select new collection item
+    if (e.target.matches("#collection-items")) {
+        const item = e.target.options[e.target.selectedIndex].getAttribute("value");
+        if (item==="0") return;
+
+        callAPI(endpoint,'GET',"?collection="+e.target.dataset.collection+"&item="+item)
+        .then((data) => {
+            collectionitem.replaceChildren();
+            collectionitem.insertAdjacentHTML('afterbegin',data.item);
+            dialog_footer.querySelector(".upd-item").dataset.collectionItem = item;
         });
     }
 }
@@ -62,15 +71,15 @@ export const clickHandler = async (e) => {
         .then((data) => {
             // new_id is set when item successfully added
             if (data.new_id) {
-                // Add new title to select list
-                
+                // Remove first item and add new title to select list
+                select.remove(0);
                 const option = document.createElement("option");
                 option.value = data.new_id;
                 option.text = obj["title"];
                 select.add(option,select.options[0]);
                 select.querySelector("selectedcontent").textContent = obj["title"];
-                collectionitemdata.replaceChildren();
-                collectionitemdata.insertAdjacentHTML('afterbegin',data.item);
+                collectionitem.replaceChildren();
+                collectionitem.insertAdjacentHTML('afterbegin',data.item);
                 dialog_footer.querySelector(".upd-item").dataset.collectionItem = collection_item;
             } else {
                 // otherwise signal error
@@ -97,27 +106,21 @@ export const clickHandler = async (e) => {
     }
 
     if (e.target.matches(".del-item")) {
-        const collectionItem = e.target.dataset.collectionItem;
+        const item = e.target.dataset.collectionItem;
         const obj = {
             action: "delete",
-            collection_item: collectionItem
+            collection_item: item
         };
         callAPI(endpoint,'POST',obj)
         .then((data) => {
             for (let i = 0; i < select.options.length; i++) {
-                if (select.options[i].value === collectionItem) {
+                if (select.options[i].value === item) {
                     select.remove(i);
                 }
             }
-            document.getElementById("excerpt-upd").value = "";
-            dialog_article.querySelectorAll("[name='link']:checked").forEach(item => {
-                item.checked = false;
-            });
-            const del_btn = dialog_article.querySelector(".del-item");
-            del_btn.dataset.collectionItem = 0;
-            del_btn.previousSibling.textContent = "";
-            dialog_footer.querySelector(".upd-item").dataset.collectionItem = 0;
+            select.options[0].textContent = `-- Choose from ${select.options.length} items`;
             liveRegion(data);
+            collectionitem.replaceChildren();
             select.focus();
         });
     }
