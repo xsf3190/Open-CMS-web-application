@@ -40,17 +40,17 @@ export const changeHandler = (e) => {
         });
     }
 
-    // User select new collection item
+    // User selects collection item
     if (e.target.matches("#collection-items")) {
         const item = e.target.options[e.target.selectedIndex].getAttribute("value");
-        if (item==="0") return;
-
-        callAPI(endpoint,'GET',"?collection="+e.target.dataset.collection+"&item="+item)
-        .then((data) => {
-            collectionitem.replaceChildren();
-            collectionitem.insertAdjacentHTML('afterbegin',data.item);
-            dialog_footer.querySelector(".upd-item").dataset.collectionItem = item;
-        });
+        if (item) {
+            callAPI(endpoint,'GET',"?collection="+e.target.dataset.collection+"&item="+item)
+            .then((data) => {
+                collectionitem.replaceChildren();
+                collectionitem.insertAdjacentHTML('afterbegin',data.item);
+                dialog_footer.querySelector(".upd-item").dataset.collectionItem = item;
+            });
+        }
     }
 }
 
@@ -71,16 +71,15 @@ export const clickHandler = async (e) => {
         .then((data) => {
             // new_id is set when item successfully added
             if (data.new_id) {
-                // Remove first item and add new title to select list
-                select.remove(0);
+                select.options[0].textContent = data.count;
                 const option = document.createElement("option");
                 option.value = data.new_id;
                 option.text = obj["title"];
-                select.add(option,select.options[0]);
+                select.add(option,select.options[1]);
                 select.querySelector("selectedcontent").textContent = obj["title"];
                 collectionitem.replaceChildren();
                 collectionitem.insertAdjacentHTML('afterbegin',data.item);
-                dialog_footer.querySelector(".upd-item").dataset.collectionItem = collection_item;
+                dialog_footer.querySelector(".upd-item").dataset.collectionItem = data.new_id;
             } else {
                 // otherwise signal error
                 title.setAttribute("aria-invalid", "true");
@@ -118,7 +117,7 @@ export const clickHandler = async (e) => {
                     select.remove(i);
                 }
             }
-            select.options[0].textContent = `-- Choose from ${select.options.length} items`;
+            select.options[0].textContent = data.count;
             liveRegion(data);
             collectionitem.replaceChildren();
             select.focus();
