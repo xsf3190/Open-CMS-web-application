@@ -1,6 +1,6 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_COLLECTIONS" as
     --
-    PROCEDURE getCollectionForm(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pCollectionItem IN NUMBER, pStatus OUT NUMBER);
+    PROCEDURE getCollectionForm(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pCollection IN NUMBER, pCollectionItem IN NUMBER, pStatus OUT NUMBER);
     --
     PROCEDURE updateCollection(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
@@ -8,7 +8,7 @@ end "PCK_COLLECTIONS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
 
-    FUNCTION getCollectionItemData(pCollectionItem IN NUMBER) RETURN CLOB
+    FUNCTION getCollectionItemHTML(pCollectionItem IN NUMBER) RETURN CLOB
     IS
         l_html CLOB;
     BEGIN
@@ -58,19 +58,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
         RETURN (l_html);
     END;
 
-    /* 
-    **  BUILD FORM CONTROLS TO MANAGE COLLECTION PAGES AND SUB-PAGES
-    **  pArticleId IS PAGE FROM WHICH THIS WAS CALLED - IT MAY OR MAY NOT BE A COLLECTION
+    /*
+    ** BUILD HTML FOR COLLECTION DATA RELATED TO A SELECTED COLLECTION
     */
-    PROCEDURE getCollectionForm(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pCollectionItem IN NUMBER, pStatus OUT NUMBER) IS
-        l_session_data pck_sec.t_session_data;
-        l_header LONG;
-        l_article CLOB;
-        l_footer LONG;
-        l_parent_id NUMBER;
-        l_navigation_label website_article.navigation_label%type;
-        l_json JSON_OBJECT_T;
-        n PLS_INTEGER;
+    FUNCTION getCollectionHTML(pParentid IN NUMBER, pNavigationLabel IN VARCHAR2) RETURN CLOB
+    IS
+        l_html CLOB;
         TYPE t_items IS RECORD(
             id NUMBER,
             title article.title%type,
@@ -79,84 +72,27 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
         );
         TYPE tt_items IS TABLE OF t_items;
         l_items tt_items;
-        l_selected_id NUMBER;
     BEGIN
-        l_session_data:=pck_sec.getSessionData(pWebsiteId);
-
-        IF (pCollectionItem IS NOT NULL) THEN
-            l_json:= new JSON_OBJECT_T;
-            l_json.put('item',getCollectionItemData(pCollectionItem));
-            apex_util.prn(l_json.to_clob,false);
-            pStatus:=200;
-            RETURN;
-        END IF;
-
-        
-        l_header:='<h4>Manage Collection Pages</h4>';
-
-        SELECT COUNT(*) INTO n FROM website_article WHERE website_id=pWebsiteid AND collection=1;
-        IF (n=0) THEN
-            l_article:=
-            '<p>No collection pages in website</p>' ||
-            '<p>Use the "Pages" editor option to create collection pages</p>';
-            l_json:= new JSON_OBJECT_T;
-            l_json.put('header',l_header);
-            l_json.put('article',l_article);
-            l_json.put('footer','');
-            apex_util.prn(l_json.to_clob,false);
-            pStatus:=200;
-            RETURN;
-        END IF;
-
-        FOR C IN (
-            SELECT wa.article_id, wa.collection, wa.navigation_label, ROW_NUMBER() OVER (ORDER BY wa.display_order) rn, COUNT(*) OVER () nb
-              FROM website_article wa
-             WHERE wa.website_id=pWebsiteid
-               AND wa.collection=1
-             ORDER BY wa.display_order
-        ) LOOP
-            IF (C.rn=1) THEN
-                /* Only show selectable labels if more than 1 collection */
-                l_parent_id:=C.article_id;
-                l_navigation_label:=RTRIM(UPPER(C.navigation_label),'S');
-                IF (C.nb>1) THEN
-                    l_article:=
-                    '<fieldset class="pages hide-controls flex-items">' ||
-                        '<legend>Select collection page</legend>';
-                END IF;
-            END IF;
-            IF (C.nb>1) THEN
-                l_article:=l_article ||
+        l_html:=l_html ||
+        '<details open>' ||
+                '<summary>New ' || INITCAP(pNavigationLabel) || '</summary>' ||
+            '<fieldset class="flow">' ||
+                '<legend>Create new ' || INITCAP(pNavigationLabel) || '</legend>' ||
                 '<div>' ||
-                    '<input id="page-' || C.article_id || '" type="radio" name="page"' || CASE WHEN C.article_id=pArticleId THEN ' checked' END || '>' ||
-                    '<label for="page-' || C.article_id || '">' || C.navigation_label || '</label>' ||
-                '</div>';
-            END IF;
-            IF (C.rn=C.nb) THEN
-                l_article:=l_article ||
-                '</fieldset>';
-            END IF;
-        END LOOP;
-
-        l_article:=l_article ||
-        '<fieldset class="flow">' ||
-            '<legend>Create new ' || INITCAP(l_navigation_label) || '</legend>' ||
-            '<div>' ||
-                '<label for="title" class="block">Enter title *</label>' ||
-                '<textarea id="title" maxlength="100" aria-describedby="title-error" aria-invalid="false" style="min-width:40ch"></textarea>' ||
-                '<span id="title-error" class="block message"></span>' ||
-            '</div>' ||
-            '<div>' ||
-                '<label for="excerpt" class="block">Enter excerpt</label>' ||
-                '<textarea id="excerpt" name="excerpt" maxlength="160" style="min-width:50ch"></textarea>' ||
-            '</div>' ||
-            '<button type="button" class="button add-item" data-parent-id="' || l_parent_id || '">NEW ' || UPPER(l_navigation_label) || '</button>' ||
-        '</fieldset>';
-
-        l_article:=l_article ||
+                    '<label for="title" class="block">Enter title *</label>' ||
+                    '<textarea id="title" maxlength="100" aria-describedby="title-error" aria-invalid="false" style="min-width:40ch"></textarea>' ||
+                    '<span id="title-error" class="block message"></span>' ||
+                '</div>' ||
+                '<div>' ||
+                    '<label for="excerpt" class="block">Enter excerpt</label>' ||
+                    '<textarea id="excerpt" name="excerpt" maxlength="160" style="min-width:50ch"></textarea>' ||
+                '</div>' ||
+                '<button type="button" class="button add-item" data-parent-id="' || pParentid || '">NEW ' || UPPER(pNavigationLabel) || '</button>' ||
+            '</fieldset>'||
+        '</details>' ||
         '<div>' ||
-            '<label class="block" for="collection-list">Select ' || INITCAP(l_navigation_label) || '</label>' ||
-            '<select id="collection-list">' ||
+            '<label class="block" for="collection-items">Select ' || INITCAP(pNavigationLabel) || '</label>' ||
+            '<select id="collection-items" data-collection="' || pParentid || '">' ||
                 '<button>' ||
                     '<selectedcontent></selectedcontent>' ||
                     '<span class="arrow"></span>' ||
@@ -165,32 +101,147 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
         SELECT a.id, a.title, a.excerpt, NVL(a.updated_date,a.created_date) updated_date
           BULK COLLECT INTO l_items
           FROM article a 
-         WHERE a.parent_id=l_parent_id 
+         WHERE a.parent_id=pParentid 
         ORDER BY updated_date DESC;
 
-        FOR i IN 1..l_items.COUNT LOOP
-            IF (l_items(i).id=pArticleid) THEN
-                l_selected_id:=pArticleid;
-            END IF;
-        END LOOP;
-        IF (l_selected_id IS NULL) THEN
-            l_selected_id:=l_items(1).id;
+        IF (l_items.COUNT>0) THEN
+            FOR i IN 1..l_items.COUNT LOOP
+                IF (i=1) THEN
+                    l_html:=l_html ||
+                    '<option value"0">--Choose from ' || l_items.COUNT || ' item' || CASE WHEN l_items.COUNT>1 THEN 's' END || ' --</option>';
+                END IF;
+                l_html:=l_html ||
+                '<option value="' || l_items(i).id || '">' || l_items(i).title || '</option>';
+            END LOOP;
         END IF;
 
-        FOR i IN 1..l_items.COUNT LOOP
-            l_article:=l_article ||
-            '<option value="' || l_items(i).id || '"' || CASE WHEN l_items(i).id=l_selected_id THEN ' selected' END || '>' || l_items(i).title || '</option>';
-        END LOOP;
-        l_article:=l_article ||
+        l_html:=l_html ||
             '</select>' ||
-        '</div>' ||
-        '<div id="collectionitemdata" class="flow">' ||
-            getCollectionItemData(l_selected_id) ||
         '</div>';
+
+        RETURN (l_html);
+    END;
+
+    /* 
+    **  BUILD FORM CONTROLS TO MANAGE COLLECTION PAGES AND SUB-PAGES
+    **  pArticleId IS ID OF CALLING PAGE WHICH IS NOT NECESSARILY A COLLECTION PAGE
+    */
+    PROCEDURE getCollectionForm(pWebsiteId IN NUMBER, pArticleId IN NUMBER, pCollection IN NUMBER, pCollectionItem IN NUMBER, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_parent_id NUMBER;
+        l_navigation_label website_article.navigation_label%type;
+        l_json JSON_OBJECT_T;
+        n PLS_INTEGER;
+
+        TYPE t_collections IS RECORD(
+            parent_id NUMBER,
+            navigation_label website_article.navigation_label%type
+        );
+        TYPE tt_collections IS TABLE OF t_collections;
+        l_collections tt_collections; 
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        /* 
+        ** pItem is the ID of a selected collection item  
+        ** Return HTML of the item to replace item content in the form 
+        */
+        IF (pCollectionItem IS NOT NULL) THEN
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('item',getCollectionItemHTML(pCollectionItem));
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+            RETURN;
+        END IF;
+        
+        /* 
+        ** pCollectionItem is the ID of a selected collection 
+        ** Return HTML of the collection to replace content in the form 
+        */
+        IF (pCollection IS NOT NULL) THEN
+            SELECT navigation_label INTO l_navigation_label FROM website_article WHERE article_id=pCollection;
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('collection',getCollectionHTML(pCollection, l_navigation_label));
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+            RETURN;
+        END IF;
+
+        
+
+        l_header:='<h4>Manage Collection Pages</h4>';
+
+        /* 
+        ** If website has more than 1 collection page show these like
+        ** selectable navigation labels with the first selected (unless
+        ** user's current page is a collection page in which case that's selected).
+        ** Otherwise skip this control as there's only one collection page
+        */
+        SELECT wa.article_id, wa.navigation_label
+          BULK COLLECT INTO l_collections
+          FROM website_article wa
+         WHERE wa.website_id=pWebsiteid
+           AND wa.collection=1
+         ORDER BY wa.display_order;
+
+        IF (l_collections.COUNT=0) THEN
+            l_article:=
+            '<p>No collection pages in website</p>' ||
+            '<p>Create collection pages using the "Pages" menu option</p>';
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('header',l_header);
+            l_json.put('article',l_article);
+            l_json.put('footer',l_footer);
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+            RETURN;
+        END IF;
+
+        /*
+        ** THE FIRST FIELDSET EXISTS ONLY TO ALLOW USER TO SELECT FROM MULTIPLE COLLECTION PAGES
+        */
+        IF (l_collections.COUNT=1) THEN
+            l_parent_id:=l_collections(1).parent_id;
+            l_navigation_label:=RTRIM(UPPER(l_collections(1).navigation_label),'S');
+        ELSE
+            FOR i IN 1..l_collections.COUNT LOOP
+                IF (l_collections(i).parent_id=pArticleid) THEN
+                    l_parent_id:=l_collections(i).parent_id;
+                    l_navigation_label:=RTRIM(UPPER(l_collections(i).navigation_label),'S');
+                END IF;
+            END LOOP;
+            IF (l_parent_id IS NULL) THEN
+                l_parent_id:=l_collections(1).parent_id;
+                l_navigation_label:=RTRIM(UPPER(l_collections(1).navigation_label),'S');
+            END IF;
+
+            l_article:=
+            '<fieldset class="hide-controls flex-items">' ||
+                '<legend>Select collection page</legend>';
+            FOR i IN 1..l_collections.COUNT LOOP
+                l_article:=l_article ||
+                '<div>' ||
+                    '<input id="page-' || i || '" type="radio" name="collection" data-parent-id="' || l_collections(i).parent_id || '"' || CASE WHEN l_collections(i).parent_id=l_parent_id THEN ' checked' END || '>' ||
+                    '<label for="page-' || i || '">' || l_collections(i).navigation_label || '</label>' ||
+                '</div>';
+            END LOOP;
+            l_article:=l_article ||
+            '</fieldset>';
+        END IF;
+
+        l_article:=l_article ||
+        '<div id="collection" class="flow">' ||
+            getCollectionHTML(l_parent_id, l_navigation_label) ||
+        '</div>' ||
+        
+        '<div id="collection-item" class="flow"></div>';
         
         l_footer:=
         '<div class="flex-items">' ||
-            '<button type="button" class="button upd-item" data-collection-item="' || l_selected_id || '">UPDATE</button>' ||
+            '<button type="button" class="button upd-item">UPDATE</button>' ||
             '<button type="button" class="button publish">PUBLISH</button>' ||
             '<span aria-live="polite"></span>' ||
             '<span class="loader icon"></span>' ||
@@ -293,7 +344,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
 
         IF (l_new_id IS NOT NULL) THEN
             l_json.put('new_id',l_new_id);
-            l_json.put('item',getCollectionItemData(l_new_id));
+            l_json.put('item',getCollectionItemHTML(l_new_id));
         END IF;
         
         apex_util.prn(l_json.to_clob,false);
