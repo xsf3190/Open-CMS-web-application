@@ -1017,6 +1017,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
         END;
 
     BEGIN
+    pck_core.log('pFontid:'||pFontid);
         SELECT variable INTO l_variable FROM font WHERE id=pFontid;
 
         UPDATE website_font 
