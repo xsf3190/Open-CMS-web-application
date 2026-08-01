@@ -1,62 +1,62 @@
-31-JUL-26 00:02:06.662: Starting "EXAMPLE"."EXPORT_SCHEMA_36038":  
-31-JUL-26 00:02:10.543: Processing object type SCHEMA_EXPORT/TABLE/TABLE_DATA
-31-JUL-26 00:02:10.775: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_BODY
-31-JUL-26 00:02:11.319: Processing object type SCHEMA_EXPORT/PRE_SCHEMA/PROCACT_SCHEMA/LOGREP
-31-JUL-26 00:02:12.297: Processing object type SCHEMA_EXPORT/SEQUENCE/SEQUENCE
-31-JUL-26 00:02:16.164: Processing object type SCHEMA_EXPORT/TABLE/TABLE
-31-JUL-26 00:02:30.161: Processing object type SCHEMA_EXPORT/TABLE/COMMENT
-31-JUL-26 00:02:30.464: Processing object type SCHEMA_EXPORT/TABLE/IDENTITY_COLUMN
-31-JUL-26 00:02:31.030: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_SPEC
-31-JUL-26 00:02:31.915: Processing object type SCHEMA_EXPORT/PACKAGE/COMPILE_PACKAGE/PACKAGE_SPEC/ALTER_PACKAGE_SPEC
-31-JUL-26 00:02:34.662: Processing object type SCHEMA_EXPORT/VIEW/VIEW
-31-JUL-26 00:02:35.682: Processing object type SCHEMA_EXPORT/TABLE/INDEX/INDEX
-31-JUL-26 00:02:36.789: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
-31-JUL-26 00:02:38.279: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/REF_CONSTRAINT
-31-JUL-26 00:02:40.151: Processing object type SCHEMA_EXPORT/POST_SCHEMA/PROCACT_SCHEMA/LBAC_EXP
-31-JUL-26 00:02:40.500: . . exported "EXAMPLE"."PAGE_HIT"                          1.2 MB   18454 rows
-31-JUL-26 00:02:40.633: . . exported "EXAMPLE"."ARTICLE"                         730.6 KB     744 rows
-31-JUL-26 00:02:40.725: . . exported "EXAMPLE"."ASSET"                           486.4 KB   21709 rows
-31-JUL-26 00:02:40.771: . . exported "EXAMPLE"."WEBSITE_FONT"                     36.6 KB      70 rows
-31-JUL-26 00:02:40.813: . . exported "EXAMPLE"."TEMP_ARTICLE"                     10.5 KB       1 rows
-31-JUL-26 00:02:40.865: . . exported "EXAMPLE"."ICON"                             13.9 KB      25 rows
-31-JUL-26 00:02:40.927: . . exported "EXAMPLE"."IP_LOOKUP_HASH"                  421.5 KB   13250 rows
-31-JUL-26 00:02:40.972: . . exported "EXAMPLE"."WEBSITE_ARTICLE"                  15.1 KB      76 rows
-31-JUL-26 00:02:41.020: . . exported "EXAMPLE"."FONT"                            125.3 KB    1951 rows
-31-JUL-26 00:02:41.066: . . exported "EXAMPLE"."GOOGLE_FONT"                     120.7 KB    1951 rows
-31-JUL-26 00:02:41.106: . . exported "EXAMPLE"."LOG"                               9.5 KB     119 rows
-31-JUL-26 00:02:41.147: . . exported "EXAMPLE"."LANGUAGE"                          7.1 KB      18 rows
-31-JUL-26 00:02:41.195: . . exported "EXAMPLE"."USAGE"                            52.6 KB    1752 rows
-31-JUL-26 00:02:41.238: . . exported "EXAMPLE"."BROWSER_LOOKUP"                   38.1 KB    1085 rows
-31-JUL-26 00:02:41.278: . . exported "EXAMPLE"."WEBSITE_FILES"                    21.8 KB     371 rows
-31-JUL-26 00:02:41.322: . . exported "EXAMPLE"."WEBSITE"                          11.9 KB      29 rows
-31-JUL-26 00:02:41.363: . . exported "EXAMPLE"."ARTICLE_CHARS"                    17.2 KB     448 rows
-31-JUL-26 00:02:41.401: . . exported "EXAMPLE"."FONT_AXES"                        12.2 KB    1557 rows
-31-JUL-26 00:02:41.439: . . exported "EXAMPLE"."FONT_STATIC_WGHT"                 11.7 KB    2331 rows
-31-JUL-26 00:02:41.480: . . exported "EXAMPLE"."WEBSITE_CPU"                        12 KB     236 rows
-31-JUL-26 00:02:41.520: . . exported "EXAMPLE"."FONT_METADATA"                     8.8 KB      53 rows
-31-JUL-26 00:02:41.561: . . exported "EXAMPLE"."TEMP_WEBSITE_FONT"                 6.6 KB      46 rows
-31-JUL-26 00:02:41.601: . . exported "EXAMPLE"."SECURITY_LOG"                      6.6 KB      77 rows
-31-JUL-26 00:02:41.641: . . exported "EXAMPLE"."REFRESH_TOKEN"                       9 KB      44 rows
-31-JUL-26 00:02:41.681: . . exported "EXAMPLE"."USERS"                             8.2 KB      23 rows
-31-JUL-26 00:02:41.719: . . exported "EXAMPLE"."NETLIFY_DNS_RECORD"                6.8 KB      40 rows
-31-JUL-26 00:02:41.758: . . exported "EXAMPLE"."JWKS_KEY_CACHE"                      7 KB       6 rows
-31-JUL-26 00:02:41.798: . . exported "EXAMPLE"."FINGERPRINT"                       7.6 KB      45 rows
-31-JUL-26 00:02:41.837: . . exported "EXAMPLE"."NETLIFY_SITE"                      7.2 KB      37 rows
-31-JUL-26 00:02:41.880: . . exported "EXAMPLE"."FONT_AXES_VALUE"                   6.4 KB     106 rows
-31-JUL-26 00:02:41.923: . . exported "EXAMPLE"."REFRESH_TOKEN_NEW"                 7.3 KB      47 rows
-31-JUL-26 00:02:41.965: . . exported "EXAMPLE"."WEBSITE_CHARS"                     5.5 KB      16 rows
-31-JUL-26 00:02:42.006: . . exported "EXAMPLE"."ARTICLE_MESSAGE"                   5.7 KB      23 rows
-31-JUL-26 00:02:42.046: . . exported "EXAMPLE"."ASSET_USED"                        5.5 KB     111 rows
-31-JUL-26 00:02:42.085: . . exported "EXAMPLE"."NETLIFY_FILE"                      5.4 KB      14 rows
-31-JUL-26 00:02:42.126: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE"                  5.4 KB      12 rows
-31-JUL-26 00:02:42.175: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE_SERVER"             5 KB      48 rows
-31-JUL-26 00:02:42.216: . . exported "EXAMPLE"."WEBSITE_VISITOR"                   4.9 KB       1 rows
-31-JUL-26 00:02:42.255: . . exported "EXAMPLE"."API_CREDENTIAL"                    5.5 KB      10 rows
-31-JUL-26 00:02:42.294: . . exported "EXAMPLE"."ARTICLE_LINK"                      4.8 KB      45 rows
-31-JUL-26 00:02:42.299: . . exported "EXAMPLE"."DBTOOLS$EXECUTION_HISTORY"           0 KB       0 rows
-31-JUL-26 00:02:42.304: . . exported "EXAMPLE"."ES_MODULES_FONTS"                    0 KB       0 rows
-31-JUL-26 00:02:43.948: Master table "EXAMPLE"."EXPORT_SCHEMA_36038" successfully loaded/unloaded
-31-JUL-26 00:02:44.063: ******************************************************************************
-31-JUL-26 00:02:44.064: Dump file set for EXAMPLE.EXPORT_SCHEMA_36038 is:
-31-JUL-26 00:02:44.064:   /u03/dbfs/1E20BEEAF2C0BC4DE063ED5D000AE048/data/dpdump/EXPORT_SCHEMA.EXAMPLE.dmp
-31-JUL-26 00:02:44.075: Job "EXAMPLE"."EXPORT_SCHEMA_36038" successfully completed at Fri Jul 31 00:02:44 2026 elapsed 0 00:00:42
+01-AUG-26 00:02:05.255: Starting "EXAMPLE"."EXPORT_SCHEMA_36044":  
+01-AUG-26 00:02:09.141: Processing object type SCHEMA_EXPORT/TABLE/TABLE_DATA
+01-AUG-26 00:02:09.375: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_BODY
+01-AUG-26 00:02:09.974: Processing object type SCHEMA_EXPORT/PRE_SCHEMA/PROCACT_SCHEMA/LOGREP
+01-AUG-26 00:02:10.954: Processing object type SCHEMA_EXPORT/SEQUENCE/SEQUENCE
+01-AUG-26 00:02:13.233: Processing object type SCHEMA_EXPORT/TABLE/TABLE
+01-AUG-26 00:02:25.980: Processing object type SCHEMA_EXPORT/TABLE/COMMENT
+01-AUG-26 00:02:26.242: Processing object type SCHEMA_EXPORT/TABLE/IDENTITY_COLUMN
+01-AUG-26 00:02:26.793: Processing object type SCHEMA_EXPORT/PACKAGE/PACKAGE_SPEC
+01-AUG-26 00:02:27.715: Processing object type SCHEMA_EXPORT/PACKAGE/COMPILE_PACKAGE/PACKAGE_SPEC/ALTER_PACKAGE_SPEC
+01-AUG-26 00:02:30.380: Processing object type SCHEMA_EXPORT/VIEW/VIEW
+01-AUG-26 00:02:31.374: Processing object type SCHEMA_EXPORT/TABLE/INDEX/INDEX
+01-AUG-26 00:02:35.591: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
+01-AUG-26 00:02:36.288: Processing object type SCHEMA_EXPORT/TABLE/CONSTRAINT/REF_CONSTRAINT
+01-AUG-26 00:02:38.205: Processing object type SCHEMA_EXPORT/POST_SCHEMA/PROCACT_SCHEMA/LBAC_EXP
+01-AUG-26 00:02:38.483: . . exported "EXAMPLE"."PAGE_HIT"                          1.2 MB   18461 rows
+01-AUG-26 00:02:38.564: . . exported "EXAMPLE"."ASSET"                           486.4 KB   21709 rows
+01-AUG-26 00:02:38.715: . . exported "EXAMPLE"."ARTICLE"                         731.3 KB     742 rows
+01-AUG-26 00:02:38.764: . . exported "EXAMPLE"."WEBSITE_FONT"                     36.6 KB      70 rows
+01-AUG-26 00:02:38.808: . . exported "EXAMPLE"."TEMP_ARTICLE"                     10.5 KB       1 rows
+01-AUG-26 00:02:38.860: . . exported "EXAMPLE"."ICON"                             13.9 KB      25 rows
+01-AUG-26 00:02:38.923: . . exported "EXAMPLE"."IP_LOOKUP_HASH"                  421.7 KB   13257 rows
+01-AUG-26 00:02:38.969: . . exported "EXAMPLE"."WEBSITE_ARTICLE"                  15.1 KB      76 rows
+01-AUG-26 00:02:39.050: . . exported "EXAMPLE"."FONT"                            125.3 KB    1951 rows
+01-AUG-26 00:02:39.107: . . exported "EXAMPLE"."GOOGLE_FONT"                     120.7 KB    1951 rows
+01-AUG-26 00:02:39.148: . . exported "EXAMPLE"."LOG"                               7.4 KB      77 rows
+01-AUG-26 00:02:39.190: . . exported "EXAMPLE"."LANGUAGE"                          7.1 KB      18 rows
+01-AUG-26 00:02:39.237: . . exported "EXAMPLE"."USAGE"                            52.6 KB    1752 rows
+01-AUG-26 00:02:39.279: . . exported "EXAMPLE"."BROWSER_LOOKUP"                   38.1 KB    1085 rows
+01-AUG-26 00:02:39.323: . . exported "EXAMPLE"."WEBSITE_FILES"                    21.7 KB     371 rows
+01-AUG-26 00:02:39.370: . . exported "EXAMPLE"."WEBSITE"                          11.9 KB      29 rows
+01-AUG-26 00:02:39.413: . . exported "EXAMPLE"."ARTICLE_CHARS"                    17.2 KB     448 rows
+01-AUG-26 00:02:39.453: . . exported "EXAMPLE"."FONT_AXES"                        12.2 KB    1557 rows
+01-AUG-26 00:02:39.494: . . exported "EXAMPLE"."FONT_STATIC_WGHT"                 11.7 KB    2331 rows
+01-AUG-26 00:02:39.537: . . exported "EXAMPLE"."WEBSITE_CPU"                        12 KB     236 rows
+01-AUG-26 00:02:39.579: . . exported "EXAMPLE"."FONT_METADATA"                     8.8 KB      53 rows
+01-AUG-26 00:02:39.624: . . exported "EXAMPLE"."TEMP_WEBSITE_FONT"                 6.6 KB      46 rows
+01-AUG-26 00:02:39.664: . . exported "EXAMPLE"."SECURITY_LOG"                      6.6 KB      77 rows
+01-AUG-26 00:02:39.705: . . exported "EXAMPLE"."REFRESH_TOKEN"                       9 KB      44 rows
+01-AUG-26 00:02:39.747: . . exported "EXAMPLE"."USERS"                             8.2 KB      23 rows
+01-AUG-26 00:02:39.788: . . exported "EXAMPLE"."NETLIFY_DNS_RECORD"                6.8 KB      40 rows
+01-AUG-26 00:02:39.829: . . exported "EXAMPLE"."JWKS_KEY_CACHE"                      7 KB       6 rows
+01-AUG-26 00:02:39.869: . . exported "EXAMPLE"."FINGERPRINT"                       7.6 KB      45 rows
+01-AUG-26 00:02:39.910: . . exported "EXAMPLE"."NETLIFY_SITE"                      7.2 KB      37 rows
+01-AUG-26 00:02:39.950: . . exported "EXAMPLE"."FONT_AXES_VALUE"                   6.4 KB     106 rows
+01-AUG-26 00:02:39.990: . . exported "EXAMPLE"."REFRESH_TOKEN_NEW"                 7.3 KB      47 rows
+01-AUG-26 00:02:40.032: . . exported "EXAMPLE"."WEBSITE_CHARS"                     5.5 KB      16 rows
+01-AUG-26 00:02:40.072: . . exported "EXAMPLE"."ARTICLE_MESSAGE"                   5.7 KB      23 rows
+01-AUG-26 00:02:40.113: . . exported "EXAMPLE"."ASSET_USED"                        5.5 KB     111 rows
+01-AUG-26 00:02:40.153: . . exported "EXAMPLE"."NETLIFY_FILE"                      5.4 KB      14 rows
+01-AUG-26 00:02:40.196: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE"                  5.4 KB      12 rows
+01-AUG-26 00:02:40.236: . . exported "EXAMPLE"."NETLIFY_DNS_ZONE_SERVER"             5 KB      48 rows
+01-AUG-26 00:02:40.359: . . exported "EXAMPLE"."WEBSITE_VISITOR"                   4.9 KB       1 rows
+01-AUG-26 00:02:40.398: . . exported "EXAMPLE"."API_CREDENTIAL"                    5.5 KB      10 rows
+01-AUG-26 00:02:40.439: . . exported "EXAMPLE"."ARTICLE_LINK"                      4.8 KB      45 rows
+01-AUG-26 00:02:40.443: . . exported "EXAMPLE"."DBTOOLS$EXECUTION_HISTORY"           0 KB       0 rows
+01-AUG-26 00:02:40.448: . . exported "EXAMPLE"."ES_MODULES_FONTS"                    0 KB       0 rows
+01-AUG-26 00:02:45.446: Master table "EXAMPLE"."EXPORT_SCHEMA_36044" successfully loaded/unloaded
+01-AUG-26 00:02:45.575: ******************************************************************************
+01-AUG-26 00:02:45.576: Dump file set for EXAMPLE.EXPORT_SCHEMA_36044 is:
+01-AUG-26 00:02:45.576:   /u03/dbfs/1E20BEEAF2C0BC4DE063ED5D000AE048/data/dpdump/EXPORT_SCHEMA.EXAMPLE.dmp
+01-AUG-26 00:02:45.585: Job "EXAMPLE"."EXPORT_SCHEMA_36044" successfully completed at Sat Aug 1 00:02:45 2026 elapsed 0 00:00:44
