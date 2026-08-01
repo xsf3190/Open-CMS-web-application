@@ -8,6 +8,13 @@ end "PCK_COLLECTIONS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
 
+    FUNCTION getOptionsCount(pCount IN PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN(
+            '--Choose from ' || pCount || ' item' || CASE WHEN pCount>1 THEN 's' END || ' --'
+        );
+    END;
+
     FUNCTION getCollectionItemHTML(pCollectionItem IN NUMBER) RETURN CLOB
     IS
         l_html CLOB;
@@ -95,7 +102,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
             '<select id="collection-items" data-collection="' || pParentid || '">' ||
                 '<button>' ||
                     '<selectedcontent></selectedcontent>' ||
-                    '<span class="arrow"></span>' ||
+                    -- '<span class="arrow"></span>' ||
                 '</button>';
         
         SELECT a.id, a.title, a.excerpt, NVL(a.updated_date,a.created_date) updated_date
@@ -108,7 +115,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
             FOR i IN 1..l_items.COUNT LOOP
                 IF (i=1) THEN
                     l_html:=l_html ||
-                    '<option value"0">--Choose from ' || l_items.COUNT || ' item' || CASE WHEN l_items.COUNT>1 THEN 's' END || ' --</option>';
+                    '<option value"">' || getOptionsCount(l_items.COUNT) || '</option>';
                 END IF;
                 l_html:=l_html ||
                 '<option value="' || l_items(i).id || '">' || l_items(i).title || '</option>';
@@ -339,8 +346,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
               FROM website_article wa
              WHERE wa.website_id=pWebsiteid
                AND wa.article_id=l_parentid;
+
+            SELECT COUNT(*) 
+              INTO n
+              FROM article
+             WHERE parent_id=l_parentid;
         END IF;
         l_json.put('message',l_message);
+        l_json.put('count',getOptionsCount(n));
 
         IF (l_new_id IS NOT NULL) THEN
             l_json.put('new_id',l_new_id);
