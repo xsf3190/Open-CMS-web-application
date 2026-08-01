@@ -356,75 +356,106 @@ select,
 ::picker(select) {
     appearance: base-select;
 }
-/* style the picker dropdown */
+select {
+  --width:15em;
+  font-family: system-ui;
+  font-size: var(--step--1);
+  width: var(--width);
+}
+select img {
+  border-radius: 8px;
+}
+select::picker-icon {
+  color: currentColor;
+  transition: 0.4s rotate;
+}
+select:open::picker-icon:open::picker(select) {
+  opacity: 1;
+}n {
+  rotate: 180deg;
+}
 ::picker(select) {
-  border-radius: 1rem;
+  top: calc(anchor(bottom) + 2px);
+  opacity: 0;
+  transition: all 0.4s allow-discrete;
+}
+:open::picker(select) {
+  opacity: 1;
+}
+@starting-style {
+  :open::picker(select) {
+    opacity: 0;
+  }
 }
 
-.option-container {
+option {
+  display: flex;
+  justify-content: flex-start;
+  gap: 20px;
+  border: 2px solid #dddddd;
+  background: #eeeeee;
+  padding: 10px;
+  transition: 0.4s;
+}
+option:first-of-type {
+  border-radius: 8px 8px 0 0;
+}
+
+option:last-of-type {
+  border-radius: 0 0 8px 8px;
+}
+
+::picker(select) {
+  border-radius: 8px;
+}
+
+option:not(option:last-of-type) {
+  border-bottom: none;
+}
+
+option:nth-of-type(odd) {
+  background: white;
+}
+
+option:hover,
+option:focus {
+  background: plum;
+}
+
+option:checked {
+  font-weight: bold;
+}
+
+option::checkmark {
+  content: "☑️";
+}
+
+option:has(div),selectedcontent:has(div) {
   display: grid;
-  grid-template: 1fr 1fr / 1fr 1fr 1fr;
-  gap: 1rem;
-}
-
-option::checkmark, select::picker-icon {
-  display: none;
-}
-
-option, selectedcontent {
-  display: grid;
-  gap: 1rem;
-  align-items: center;
-  padding: 0.5rem 1rem;
-}
-
-option:has(div:nth-child(2):last-child), 
-selectedcontent:has(div:nth-child(2):last-child) {
   grid-template-columns: 1fr 5fr;
-}
-
-option img {
-  width: 100%;
-  max-width: 120px;
-  border-radius: 1rem;
-  border: 1px solid lightgray;
-  margin-bottom: 0.25rem;
-}
-
-option:not(:has(img)) {
-  &:nth-child(even):not(:hover) {
-    background: #ececec;
-  }
-  
-  &:hover {
-    background: #cbe7ff;
-  }
-
-  &[hidden] {
-    display: none;
+  gap:1em;
+  align-items:center;
+  &::checkmark {
+    display:none;
   }
 }
 
-selectedcontent {
-  .detail {
-    display: none;
-  }
+select .heading {
+  font-weight: 500;
+}
+select .detail {
+  font-weight:400;
+  font-size:75%;
 }
 
-.arrow {
-  align-self: center;
-  transition: rotate 0.25s;
-  background-image: url("data:image/svg+xml,%3C%3Fxml version='1.0' encoding='UTF-8'%3F%3E%3Csvg id='Layer_1' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 66.49 42.37'%3E%3Cdefs%3E%3Cstyle%3E .cls-1 %7B fill: %23221f20; stroke-width: 0px; %7D %3C/style%3E%3C/defs%3E%3Cpath class='cls-1' d='M3.96,0h58.57c3.37,0,5.2,3.95,3.01,6.52l-29.28,34.46c-1.58,1.86-4.45,1.86-6.03,0L.95,6.52C-1.23,3.95.59,0,3.96,0Z'/%3E%3C/svg%3E");
-    background-size: contain;
-    background-position: center;
-    background-repeat: no-repeat;
-    filter: brightness(4);
-    width: 0.75em;
-    height: 0.75em;
-  
-  select:open & {
-    rotate: x 180deg;
-  }
+select .chip {
+  /* font-size: 75%; */
+  background: crimson;
+  color: white;
+  padding: 2px 4px;
+  border-radius: 4px;
+  /* margin-inline-start: 0.4em; */
+  text-align: center;
 }
 
 /* SWITCH/TOGGLE BUTTON */
@@ -548,26 +579,6 @@ selectedcontent {
   figcaption {
     font-size: 70%;
   }
-}
-
-/* DECORATIVE STYLES FOR SMALL BUTTON-LiKE ELEMENTS - E.G. IN VISITS REPORT LIST */
-.chip {
-  font-size: 75%;
-  background: var(--color-theme-offset);
-  color: light-dark(white, black);
-  padding: 2px 4px;
-  border-radius: 0.25em;
-  margin-inline-start: 0.4em;
-  text-align: center;
-}
-
-/* Something to do with editor? */
-.heading {
-  font-weight: 550;
-}
-
-.detail {
-  font-size:75%;
 }
 
 /* FORM STYLES - NEED TO CLEAN THIS UP */
