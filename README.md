@@ -10,14 +10,14 @@ This CMS project aims to provide a simple interface for individuals to create an
 ## Self-editing web sites
 CMS users edit the content of their web pages in situ on an editor web site - a companion site to their domain web site. They edit and publish their editor site until ready to push the content to their domain. 
 
-In this way, live and editor sites are maintained separately with their content shared and controlled in a central CMS database. 
+In this way, live and editor sites are maintained separately with their content stored in a central CMS database. 
 
 The enabling tehnologies for this to happen include:
 
 1. a database that securely controls web page content
 2. a hosting service to receive published assets
-3. an editor for site owners to easily create content
-4. use of rotating JSON Web Tokens to guarantee security
+3. an inline editor for site owners to easily create and update content
+4. use of rotating JSON Web Tokens for secured access
 
 ## Personality and Design Choice
 Website owners can choose from almost 2000 Google fonts for headings, text and logo. 
@@ -30,23 +30,21 @@ For most site owners, the most important metrics are not performance related. Ra
 Our script is about 4KB in size which contrasts well with Google tag manager that weights in at over 140KB although we don't clam to rival its functionality. It's simply a matter of providing significant information value at the lowest cost possible without unwittingly revealing the visitor's identity. No cookies are used in sites created with the CMS nor are visitors' IP addresses stored thereby avoiding the need for annoying cookie consent forms.
 
 ## Performance
-Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created containing only the characters actually used in the content. A plugin replacing CKEditor's font family feature provides access to all of Google's freely available fonts. With different fonts for headings and text a web site can have a great deal of personality.
+Averaging less than 2 seconds for first time page visits requires a lot of optimisation. Fonts, for example, are created containing only the characters actually used in the content. Use of complementary fonts for headings and text can lend a web site a great deal of personality.
 
-All font files are self-hosted. This is particlulary important for mobile visitors where DNS lookups are kept to a minimum. It's also important in countries like Germany where GDPR imposes legal restrictions on accessing resources that reveal the visitor's IP address.
+All font files are self-hosted. This is particlulary important for mobile visitors where DNS lookups are kept to a minimum. It's also important in countries like Germany where GDPR imposes legal restrictions on accessing resources that capture visitors' IP address and user agent.
 
 ## Accessibility
 The CMS prevents sites from being published when content fails minimum accessibility requirements - e.g. all images must include an alternative description.
 
-Colour contrast is also ensured by the CMS.
-
 ## Security
 The CMS enables website owners to edit the site in situ - therefore secured access is essential.
 
-Published websites are covered by a strict Content Security Policy preventing any unapproved Javascript running on the site.
+Published websites are covered by a strict Content Security Policy preventing intruded Javascript running on the site.
 
-The functionality required to edit a website is heavily reliant on Javascript. Each discrete unit of functionality is performed by a single ESM module hosted on a dedicated CDN. Only when the owner has authenticated will these modules execute.
+The application that edits and publishes websites is enabled by a system of multiple ES6 Javascript modules. Each discrete unit of functionality is performed by a single ES module hosted on a dedicated CDN. 
 
-No passwords or cookies are involved in accessing the CMS, since access involves the issue and renewal of refresh tokens every 5 minutes. In this way owners can effectively stay securely logged in for ever with no need to remember any password. The exposure in the event of physical theft of an owner's device is limited to 5 minutes. Device fingerprints are used to further restrict unauthorised access by ensuring users re-authenticate in the event that any attempt is made to access from a previoulsy unknown device/location/time zone.
+Website owners authenticate to the application via their email account. No passwords or cookies are involved in accessing the CMS, since access involves the issue and renewal of refresh tokens every 5 minutes. In this way owners can effectively stay securely logged in for ever with no need to remember any password. The exposure in the event of physical theft of an owner's device is limited to 5 minutes. Device fingerprints are used to further restrict unauthorised access by ensuring users re-authenticate in the event that any attempt is made to access from a previously unknown device/location/time zone.
 
 
 # Oracle to Github backup
