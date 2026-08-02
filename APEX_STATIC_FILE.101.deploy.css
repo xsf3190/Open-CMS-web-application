@@ -120,15 +120,10 @@ img:not([alt]) {
     border-radius: 0;
 }
 
-main, section {
+main {
   padding-inline: 1rem;
-  /* container-type: inline-size; */
   max-width: var(--max-width);
   margin-inline: auto;
-}
-
-main + section {
-    margin-block-start: 1em;
 }
 
 /* NOT AT ALL SURE ABOUT THIS */
