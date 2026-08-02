@@ -9,7 +9,12 @@ export const clickHandler = async (e) => {
     if (e.target.classList.contains("copy")) {
         try {
             await navigator.clipboard.writeText(e.target.dataset.url);
-            live.textContent = e.target.dataset.file + " copied to clipboard";
+            // live.textContent = e.target.dataset.file + " copied to clipboard";
+            const alert = e.target.nextElementSibling;
+            alert.textContent = e.target.dataset.alertMessage;
+            setTimeout(() => {
+                alert.textContent = "";
+            }, 1500);
         } catch (error) {
             console.error(error);
         }
