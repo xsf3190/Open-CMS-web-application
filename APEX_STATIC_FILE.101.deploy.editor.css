@@ -356,32 +356,38 @@ select,
 ::picker(select) {
     appearance: base-select;
 }
+
 select {
   --width:15em;
   font-family: system-ui;
   font-size: var(--step--1);
   width: var(--width);
 }
+
 select img {
   border-radius: 8px;
 }
+
 select::picker-icon {
   color: currentColor;
   transition: 0.4s rotate;
 }
-select:open::picker-icon:open::picker(select) {
+
+select:open::picker-icon {
   opacity: 1;
-}n {
   rotate: 180deg;
 }
+
 ::picker(select) {
   top: calc(anchor(bottom) + 2px);
   opacity: 0;
   transition: all 0.4s allow-discrete;
 }
+
 :open::picker(select) {
   opacity: 1;
 }
+
 @starting-style {
   :open::picker(select) {
     opacity: 0;
@@ -572,13 +578,31 @@ select .chip {
 	padding: 0.25em 0.75em;
   }
   img {
-    width: 5rem;
+    width: auto;
     height: 5rem;
     object-fit: cover;
+    border-radius: 8px;
   }
   figcaption {
     font-size: 70%;
   }
+}
+
+/* ALERT CONTAINER - [A11Y] SET MESSAGE ON BUTTON SIBLING ELEMENT THAT HAS role="alert" */
+.alert-container {
+    position: relative;
+    [role='alert'] {
+        position: absolute;
+        inset: 0;
+        align-content: center;
+        text-align: center;
+        border-radius: 0.5em;
+        color: white;
+        background-color: green;
+    }
+    [role='alert']:empty {
+        display: none;
+    }
 }
 
 /* FORM STYLES - NEED TO CLEAN THIS UP */
