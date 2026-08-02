@@ -38,15 +38,11 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_LOGO" as
         '<fieldset class="flow">' ||
             '<legend>Select and configure image logo</legend>' ||
             '<div>' ||
-                '<select id="logo-img-id" name="logo_img_id">' ||
+                '<select id="logo-img-id" name="logo_img_id" style="--width:13em">' ||
                     '<button>' ||
                         '<selectedcontent></selectedcontent>' ||
-                        '<span class="arrow"></span>' ||
                     '</button>' ||
-                    '<div class="option-container">' ||
-                        '<option value="" hidden>' ||
-                            '<span>Select Image</span>' ||
-                        '</option>';
+                        '<option value="">Select Image</option>';
 
                 FOR C IN (
                     SELECT wa.article_id, a.id, a.cld_cloud_name, a.public_id
