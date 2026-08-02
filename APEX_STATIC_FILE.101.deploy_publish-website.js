@@ -18,7 +18,7 @@ export const init = (e) => {
 /*
 **  REMOVE ANY "font" properties from localStorage
 */
-const clearStorage = () => {
+const clearFontStorage = () => {
     console.log("starting clearStorage of any font properties")
     const keys = Object.keys(localStorage);
     let i = keys.length;
@@ -53,13 +53,9 @@ export const clickHandler = (e) => {
                 loader.style.opacity=0;        
                 live.replaceChildren();
                 live.textContent = data.message;
-                clearStorage();
+                clearFontStorage();
                 setTimeout(() => {
-                    if (endpoint.includes("go-live")) {
-                        window.location.href = data.live_url;
-                    } else {
-                        window.location.reload();
-                    }
+                    window.location.href = data.url;
                 }, 1500);
             })
     }
