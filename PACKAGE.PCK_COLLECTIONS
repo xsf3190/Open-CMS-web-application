@@ -8,10 +8,10 @@ end "PCK_COLLECTIONS";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
 
-    FUNCTION getOptionsCount(pCount IN PLS_INTEGER) RETURN VARCHAR2 IS
+    FUNCTION getOptionsCount(pCount IN PLS_INTEGER, pNavigationLabel IN VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
         RETURN(
-            '--Choose from ' || pCount || ' item' || CASE WHEN pCount>1 THEN 's' END || ' --'
+            '--Choose from ' || pCount || ' ' || RTRIM(INITCAP(pNavigationLabel),'s') || CASE WHEN pCount>1 THEN 's' END || ' --'
         );
     END;
 
@@ -99,7 +99,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
         '</details>' ||
         '<div>' ||
             '<label class="block" for="collection-items">Select ' || INITCAP(pNavigationLabel) || '</label>' ||
-            '<select id="collection-items" data-collection="' || pParentid || '">' ||
+            '<select id="collection-items" data-collection="' || pParentid || '" style="--width:35em">' ||
                 '<button>' ||
                     '<selectedcontent></selectedcontent>' ||
                     -- '<span class="arrow"></span>' ||
@@ -115,7 +115,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
             FOR i IN 1..l_items.COUNT LOOP
                 IF (i=1) THEN
                     l_html:=l_html ||
-                    '<option value"">' || getOptionsCount(l_items.COUNT) || '</option>';
+                    '<option value"">' || getOptionsCount(l_items.COUNT, pNavigationLabel) || '</option>';
                 END IF;
                 l_html:=l_html ||
                 '<option value="' || l_items(i).id || '">' || l_items(i).title || '</option>';
@@ -276,6 +276,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
         l_bodytext CLOB:=pBodytext;
         l_action VARCHAR2(6);
         l_parentid NUMBER;
+        l_navigation_label website_article.navigation_label%type;
         l_json JSON_OBJECT_T;
         l_message VARCHAR2(50);
         l_new_id NUMBER;
@@ -341,8 +342,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
 
         /* "l_message" either has error condition or action was successful */
         IF (l_message IS NULL) THEN
-            SELECT RTRIM(INITCAP(wa.navigation_label),'s') || ' ' || l_action || CASE WHEN l_action='insert' THEN 'ed' ELSE 'd' END || ' successfully'
-              INTO l_message
+            SELECT wa.navigation_label, RTRIM(INITCAP(wa.navigation_label),'s') || ' ' || l_action || CASE WHEN l_action='insert' THEN 'ed' ELSE 'd' END || ' successfully'
+              INTO l_navigation_label, l_message
               FROM website_article wa
              WHERE wa.website_id=pWebsiteid
                AND wa.article_id=l_parentid;
@@ -351,9 +352,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
               INTO n
               FROM article
              WHERE parent_id=l_parentid;
+
+            /* Force next deploy to rebuild collection index page */
+            UPDATE article
+               SET updated_date=current_timestamp
+             WHERE id=l_parentid;
         END IF;
         l_json.put('message',l_message);
-        l_json.put('count',getOptionsCount(n));
+        l_json.put('count',getOptionsCount(n, l_navigation_label));
 
         IF (l_new_id IS NOT NULL) THEN
             l_json.put('new_id',l_new_id);
