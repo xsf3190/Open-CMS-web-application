@@ -424,10 +424,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 l_variations:=l_variations || 
                 '<div>' ||
                     '<label for="' || C.axis || '">' || C.label || '</label>' ||
-                    '<select id="' || C.axis || '">' ||
+                    '<select id="' || C.axis || '" style="--width:10em">' ||
                         '<button>' ||
                             '<selectedcontent></selectedcontent>' ||
-                            '<span class="arrow"></span>' ||
                         '</button>';
             END IF;
 
@@ -687,10 +686,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
                 -- Categories
                 '<div>' ||
                     '<label for="category" class="block">Font category</label>' ||
-                    '<select id="category">' ||
+                    '<select id="category" style="--width:9em">' ||
                         '<button>' ||
                             '<selectedcontent></selectedcontent>' ||
-                            '<span class="arrow"></span>' ||
                         '</button>';
                     FOR i IN 1..l_categories.COUNT LOOP
                         l_article:=l_article || 
@@ -720,10 +718,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             '<div class="flex-items">' ||
                 '<div>' ||
                     '<label for="family" class="block">Select font</label>' ||
-                    '<select id="family">' ||
+                    '<select id="family" style="--width:15em">' ||
                         '<button>' ||
                             '<selectedcontent></selectedcontent>' ||
-                            '<span class="arrow"></span>' ||
                         '</button>' || 
                     '</select>' ||
                 '</div>' ||
