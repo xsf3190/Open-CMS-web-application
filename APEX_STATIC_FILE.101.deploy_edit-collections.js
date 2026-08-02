@@ -30,6 +30,10 @@ export const inputHandler = (e) => {
 **  CHANGE HANDLER
 */
 export const changeHandler = (e) => {
+    // Remove any aria-live message
+    dialog_footer.querySelector("[aria-live]").textContent = "";
+    
+    // User selects collection page
     if (e.target.matches("[name='collection']")) {
         const parent_id=e.target.dataset.parentId;
         callAPI(endpoint,'GET',"?collection="+parent_id)
