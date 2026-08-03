@@ -120,7 +120,7 @@ img:not([alt]) {
     border-radius: 0;
 }
 
-main {
+main, section {
   padding-inline: 1rem;
   max-width: var(--max-width);
   margin-inline: auto;
@@ -132,20 +132,6 @@ body>header u {
     text-decoration-thickness: 0.5ex;
     text-decoration-skip-ink: none;
     text-underline-offset: 0.8ex;
-}
-
-
-/* FOOTER STYLES */
-
-body>footer {
-  margin-block-start: 1rem;
-  font-size: var(--step--1);
-  padding: 1em;
-}
-
-body>footer>a {
-  color: inherit;
-  text-decoration: none;
 }
 
 /* DROP DOWN STYLES - RESPONSIVE NAVIGATION AND EDITOR MENU */
