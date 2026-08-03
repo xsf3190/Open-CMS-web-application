@@ -559,33 +559,41 @@ select .chip {
 
 .table-wrapper {
     overflow-x: scroll;
-  table {
-    inline-size: 100%;
-    font-size: var(--step--2);
-    text-align: left;
-    border-collapse: collapse;
-  }
-  caption {
-    text-align: inherit;
-    padding-block-end: 0.25em;
-  }
-  thead {
-    border-block-end: 2px solid;
-    background: whitesmoke;
-  }
-  th, td {
-    border: 1px solid lightgrey;
-	padding: 0.25em 0.75em;
-  }
-  img {
-    width: auto;
-    height: 5rem;
-    object-fit: cover;
-    border-radius: 8px;
-  }
-  figcaption {
-    font-size: 70%;
-  }
+    table {
+        inline-size: 100%;
+        font-size: var(--step--2);
+        text-align: left;
+        border-collapse: collapse;
+    }
+    caption {
+        text-align: inherit;
+        padding-block-end: 0.25em;
+    }
+    thead {
+        border-block-end: 2px solid;
+        background: whitesmoke;
+    }
+    th, td {
+        border: 1px solid lightgrey;
+        padding: 0.25em 0.75em;
+    }
+    figure {
+        --img-height:5em;
+        --figcaption-lines:3;
+        display:grid;
+        grid-template-columns: 150px 1fr;
+        img {
+            width: auto;
+            height: var(--img-height);
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        figcaption {
+            display: grid;
+            font-size: 80%;
+            line-height: calc(var(--img-height) / var(--figcaption-lines));
+        }
+    }
 }
 
 /* ALERT CONTAINER - [A11Y] SET MESSAGE ON BUTTON SIBLING ELEMENT THAT HAS role="alert" */
