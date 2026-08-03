@@ -362,7 +362,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
 🏞🌍🚧🎨📄🔠🔤
 */
         l_html:=l_html || addMenuitem('edit-content/:ID/:PAGE', '🖍', 'Content');
-        l_html:=l_html || addMenuitem('publish-website/:ID', '🌐', 'Publish');
+        l_html:=l_html || addMenuitem('publish-website/:ID/:PAGE', '🌐', 'Publish');
         l_html:=l_html || addMenuitem('fonts/:ID', '🔤', 'Fonts');
         l_html:=l_html || addMenuitem('logo/:ID', '🌈', 'Logo');
         l_html:=l_html || addMenuitem('favicon/:ID', '🍀', 'Favicon');
