@@ -556,7 +556,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_FONTS" as
             n:=n+1;
             IF (n=1 AND pFontid IS NULL) THEN
                 l_obj:=new JSON_OBJECT_T;
-                l_obj.put('text','--Choose from ' || C.nb || ' fonts');
+                l_obj.put('text','-- ' || C.nb || ' fonts --');
                 l_obj.put('value',0);
                 l_arr.append(l_obj);
             END IF;
