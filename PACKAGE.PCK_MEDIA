@@ -30,6 +30,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     */
     PROCEDURE getUploadedMedia(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_header VARCHAR2(100);
         l_article CLOB;
         l_src VARCHAR2(500);
         l_data_url VARCHAR2(500);
@@ -39,29 +40,25 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+        l_header:='<h4>Copy URL of uploaded media files</h4>';
+
         n:=0;
         FOR C IN (
-            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, au.asset_id asset_used_id, w.domain_name, wa.navigation_label
-              FROM asset a, asset_used au, article ar, website_article wa, website w
-             WHERE a.article_id=pArticleId
-               AND au.asset_id=a.id
-               AND ar.id=au.article_id
-               AND wa.article_id=NVL(ar.parent_id,au.article_id)
-               AND w.id=wa.website_id
-               UNION ALL               
-            SELECT a.id, a.cld_cloud_name, a.resource_type, a.public_id, a.width, a.height, a.format, a.breakpoints, a.created_date, a.bytes, null, null, null
-              FROM asset a
-             WHERE a.article_id=pArticleId
-               AND NOT EXISTS (SELECT null FROM asset_used au WHERE au.asset_id=a.id)
-             ORDER BY asset_used_id, created_date  DESC )
-        LOOP
+            SELECT at.id, at.cld_cloud_name, at.resource_type, at.public_id, at.width, at.height, at.format, at.breakpoints, apex_util.get_since(at.created_date) AS created_date, at.bytes,
+                    (SELECT COUNT(*) FROM asset_used au WHERE au.asset_id=at.id) AS used
+              FROM website_article wa, article a, asset at
+             WHERE wa.website_id=pWebsiteid
+               AND Wa.article_id=NVL(a.parent_id,a.id)
+               AND at.article_id=a.id
+             ORDER BY at.id DESC
+        ) LOOP
             n:=n+1;
             IF (n=1) THEN
                 l_article:=
                 '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
                     '<table>' ||
-                        '<caption id="table-caption">Images and media files uploaded to this page</caption>' ||
-                        '<tr><th>Uploaded File</th><th>Where Used</th><th>Copy URL</th><th>Delete File</th></tr>';
+                        '<caption id="table-caption">Media files uploaded to this web site</caption>' ||
+                        '<tr><th>Uploaded File Details</th><th>Pages Used</th><th>Copy URL</th><th>Delete File</th></tr>';
             END IF;
             l_article:=l_article ||
             '<tr><td><figure role="group" aria-labelledby="fig' || n || '">';
@@ -77,7 +74,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                         l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/w_' || C1.breakpoint || '/' || C.public_id;
                     END IF;
                 END LOOP;
-                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || '.' || C.format;
+                l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1);
                 l_article:=l_article || 
                 '<img width="' ||  C.width|| '" height="' ||  C.height|| '" draggable="false" style="pointer-events:none" src="' || l_src || '" alt="">';
             ELSIF (C.format='pdf') THEN
@@ -99,16 +96,21 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 '<figcaption id="fig' || n || '">' || 
                     '<span><strong>File name: </strong>' || l_file_name || '</span><br>' ||
                     '<span><strong>Size: </strong>' || apex_string_util.to_display_filesize(C.bytes) || '</span><br>'||
-                    '<span><strong>Uploaded: </strong>' || TO_CHAR(C.created_date,'dd-Mon-yyyy hh24:mi') || '</span>'||
+                    '<span><strong>Uploaded: </strong>' || C.created_date || '</span>'||
                 '</figcaption></figure></td>';
 
             l_article:=l_article ||
-                '<td><small>' || CASE WHEN C.navigation_label IS NULL THEN 'UNUSED' ELSE C.domain_name || '/' || C.navigation_label END || '</small></td>';
+                '<td><small>' || C.used || '</small></td>';
 
             l_article:=l_article ||
-                '<td><button type="button" class="button copy" data-url="' || l_data_url || '" data-file="' || l_file_name || '">COPY</button></td>';
+                '<td>' ||
+                    '<div class="alert-container">' ||
+                        '<button type="button" class="button copy" data-url="' || l_data_url || '" data-alert-message="COPIED">COPY</button>' ||
+                        '<div role="alert"></div>' ||
+                    '</div>' ||
+                '</td>';
             
-            IF (C.asset_used_id IS NULL) THEN
+            IF (C.used=0) THEN
                 l_article:=l_article ||
                 '<td><button type="button" class="button delete" data-id="' || C.id || '" data-file="' || l_file_name || '">DELETE</button></td>';
             ELSE
@@ -127,7 +129,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
-        l_json.put('header', '<h4>' || CASE WHEN n=0 THEN 'Hint: Upload media file first' ELSE 'Copy media URL or delete unused media' END || '</h4>');
+        l_json.put('header', l_header);
         l_json.put('article', l_article);
         l_json.put('footer', '<small aria-live="polite" style="color:green">' || n || ' image' || CASE WHEN n>1 THEN 's' END || '</small>');
         apex_util.prn(l_json.to_clob,false);
