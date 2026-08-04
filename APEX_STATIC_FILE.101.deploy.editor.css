@@ -578,12 +578,13 @@ select .chip {
         padding: 0.25em 0.75em;
     }
     figure {
-        --img-height:5em;
+        --img-height:150px;
         --figcaption-lines:3;
         display:grid;
-        grid-template-columns: 150px 1fr;
-        img {
-            width: auto;
+        grid-template-columns: var(--img-height) 1fr;
+        gap: 1em;
+        img, svg {
+            width: var(--img-height);
             height: var(--img-height);
             object-fit: cover;
             border-radius: 8px;
