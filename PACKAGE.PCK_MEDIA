@@ -35,6 +35,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_src VARCHAR2(500);
         l_data_url VARCHAR2(500);
         l_file_name asset.public_id%type;
+        l_total_bytes NUMBER;
         n PLS_INTEGER;
         l_json JSON_OBJECT_T;
     BEGIN
@@ -43,6 +44,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_header:='<h4>Copy URL of uploaded media files</h4>';
 
         n:=0;
+        l_total_bytes:=0;
         FOR C IN (
             SELECT at.id, at.cld_cloud_name, at.resource_type, at.public_id, at.width, at.height, at.format, at.breakpoints, apex_util.get_since(at.created_date) AS created_date, at.bytes,
                     (SELECT COUNT(*) FROM asset_used au WHERE au.asset_id=at.id) AS used
@@ -52,13 +54,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                AND at.article_id=a.id
              ORDER BY at.id DESC
         ) LOOP
+            l_total_bytes:=l_total_bytes+C.bytes;
             n:=n+1;
             IF (n=1) THEN
                 l_article:=
                 '<div class="table-wrapper" tabindex="0" role="region" aria-labelledby="table-caption">' ||
                     '<table>' ||
-                        '<caption id="table-caption">Media files uploaded to this web site</caption>' ||
-                        '<tr><th>Uploaded File Details</th><th>Pages Used</th><th>Copy URL</th><th>Delete File</th></tr>';
+                        '<caption id="table-caption">Media files uploaded to web site. <i>Please delete unused files</i></caption>' ||
+                        '<tr><th>Uploaded File Details</th><th>Used</th><th>Copy URL</th><th>Delete File</th></tr>';
             END IF;
             l_article:=l_article ||
             '<tr><td><figure role="group" aria-labelledby="fig' || n || '">';
@@ -94,13 +97,16 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
             END IF;
             l_article:=l_article || 
                 '<figcaption id="fig' || n || '">' || 
-                    '<span><strong>File name: </strong>' || l_file_name || '</span><br>' ||
-                    '<span><strong>Size: </strong>' || apex_string_util.to_display_filesize(C.bytes) || '</span><br>'||
-                    '<span><strong>Uploaded: </strong>' || C.created_date || '</span>'||
+                    '<span><strong>Name:</strong>' || l_file_name || '</span>' ||
+                    '<span><strong>Size:</strong>' || apex_string_util.to_display_filesize(C.bytes) || '</span>'||
+                    '<span><strong>Uploaded:</strong>' || C.created_date || '</span>'||
                 '</figcaption></figure></td>';
 
-            l_article:=l_article ||
-                '<td><small>' || C.used || '</small></td>';
+            IF (C.used=0) THEN
+                l_article:=l_article || '<td>N/A</td>';
+            ELSE
+                l_article:=l_article || '<td>' || C.used || ' X</td>';
+            END IF;
 
             l_article:=l_article ||
                 '<td>' ||
@@ -115,7 +121,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 '<td><button type="button" class="button delete" data-id="' || C.id || '" data-file="' || l_file_name || '">DELETE</button></td>';
             ELSE
                 l_article:=l_article ||
-                '<td style="text-align:center">IN USE</td>';
+                '<td style="text-align:center">N/A</td>';
             END IF;
 
             l_article:=l_article ||
@@ -131,7 +137,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_json.put('success',true);
         l_json.put('header', l_header);
         l_json.put('article', l_article);
-        l_json.put('footer', '<small aria-live="polite" style="color:green">' || n || ' image' || CASE WHEN n>1 THEN 's' END || '</small>');
+        l_json.put('footer', '<span aria-live="polite" style="color:green">' || n || ' files (' || apex_string_util.to_display_filesize(l_total_bytes) || ')</span>');
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
