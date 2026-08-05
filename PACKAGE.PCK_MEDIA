@@ -32,6 +32,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         l_session_data pck_sec.t_session_data;
         l_header VARCHAR2(100);
         l_article CLOB;
+        l_row LONG;
         l_src VARCHAR2(500);
         l_data_url VARCHAR2(500);
         l_file_name asset.public_id%type;
@@ -63,8 +64,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                         '<caption id="table-caption">Media files uploaded to web site. <i>Please delete unused files</i></caption>' ||
                         '<tr><th>Uploaded File Details</th><th>Used</th><th>Copy URL</th><th>Delete File</th></tr>';
             END IF;
-            l_article:=l_article ||
+            /* Avoid VALUE_ERROR by lob appending each row */
+            l_row:=
             '<tr><td><figure role="group" aria-labelledby="fig' || n || '">';
+
             /* Get widest image if breakpoints - i.e. AVIF */
             IF (C.format='avif') THEN
                 FOR C1 IN (
@@ -78,24 +81,28 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                     END IF;
                 END LOOP;
                 l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1);
-                l_article:=l_article || 
+                l_row:=l_row || 
                 '<img width="' ||  C.width|| '" height="' ||  C.height|| '" draggable="false" style="pointer-events:none" src="' || l_src || '" alt="">';
             ELSIF (C.format='pdf') THEN
                 l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || '.' || C.format;
                 l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/image/upload/' || C.public_id || '.pdf';
-                l_article:=l_article || 
+                l_row:=l_row || 
                 '<svg width="576" height="512" viewBox="0 0 576 512"><path d="M208 48L96 48c-8.8 0-16 7.2-16 16l0 384c0 8.8 7.2 16 16 16l80 0 0 48-80 0c-35.3 0-64-28.7-64-64L32 64C32 28.7 60.7 0 96 0L229.5 0c17 0 33.3 6.7 45.3 18.7L397.3 141.3c12 12 18.7 28.3 18.7 45.3l0 149.5-48 0 0-128-88 0c-39.8 0-72-32.2-72-72l0-88zM348.1 160L256 67.9 256 136c0 13.3 10.7 24 24 24l68.1 0zM240 380l32 0c33.1 0 60 26.9 60 60s-26.9 60-60 60l-12 0 0 28c0 11-9 20-20 20s-20-9-20-20l0-128c0-11 9-20 20-20zm32 80c11 0 20-9 20-20s-9-20-20-20l-12 0 0 40 12 0zm96-80l32 0c28.7 0 52 23.3 52 52l0 64c0 28.7-23.3 52-52 52l-32 0c-11 0-20-9-20-20l0-128c0-11 9-20 20-20zm32 128c6.6 0 12-5.4 12-12l0-64c0-6.6-5.4-12-12-12l-12 0 0 88 12 0zm76-108c0-11 9-20 20-20l48 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 24 28 0c11 0 20 9 20 20s-9 20-20 20l-28 0 0 44c0 11-9 20-20 20s-20-9-20-20l0-128z"/></svg>';
             ELSIF (C.resource_type='raw') THEN
                 l_file_name:=SUBSTR(C.public_id,1,INSTR(C.public_id,'_',-1)-1) || SUBSTR(C.public_id,INSTR(C.public_id,'.',-1));
                 l_data_url:='https://res.cloudinary.com/' || C.cld_cloud_name || '/raw/upload/' || C.public_id;
-                l_article:=l_article || 
+                l_row:=l_row || 
                 '<svg width="384" height="512" viewBox="0 0 384 512"><path d="M64 48l112 0 0 88c0 39.8 32.2 72 72 72l88 0 0 240c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16L48 64c0-8.8 7.2-16 16-16zM224 67.9l92.1 92.1-68.1 0c-13.3 0-24-10.7-24-24l0-68.1zM64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-261.5c0-17-6.7-33.3-18.7-45.3L242.7 18.7C230.7 6.7 214.5 0 197.5 0L64 0zM80 104c0 13.3 10.7 24 24 24l16 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-16 0c-13.3 0-24 10.7-24 24zm0 80c0 13.3 10.7 24 24 24l32 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-32 0c-13.3 0-24 10.7-24 24zm64 56l-32 0c-17.7 0-32 14.3-32 32l0 48c0 26.5 21.5 48 48 48s48-21.5 48-48l0-48c0-17.7-14.3-32-32-32zm-16 64a16 16 0 1 1 0 32 16 16 0 1 1 0-32z"/></svg>';
             ELSE
                 l_file_name:=C.public_id;
-                l_article:=l_article || 
+                l_row:=l_row || 
                 '<img src="https://res.cloudinary.com/' || C.cld_cloud_name || '/w_200/' || C.public_id || '" alt="">';
             END IF;
-            l_article:=l_article || 
+            /* Shorten long file names */
+            IF (LENGTH(l_file_name)>25) THEN
+                l_file_name:=SUBSTR(l_file_name,1,25)||'...';
+            END IF;
+            l_row:=l_row || 
                 '<figcaption id="fig' || n || '">' || 
                     '<span><strong>Name:</strong>' || l_file_name || '</span>' ||
                     '<span><strong>Size:</strong>' || apex_string_util.to_display_filesize(C.bytes) || '</span>'||
@@ -103,12 +110,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 '</figcaption></figure></td>';
 
             IF (C.used=0) THEN
-                l_article:=l_article || '<td>N/A</td>';
+                l_row:=l_row || '<td>N/A</td>';
             ELSE
-                l_article:=l_article || '<td>' || C.used || ' X</td>';
+                l_row:=l_row || '<td>' || C.used || ' X</td>';
             END IF;
 
-            l_article:=l_article ||
+            l_row:=l_row ||
                 '<td>' ||
                     '<div class="alert-container">' ||
                         '<button type="button" class="button copy" data-url="' || l_data_url || '" data-alert-message="COPIED">COPY</button>' ||
@@ -117,15 +124,18 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
                 '</td>';
             
             IF (C.used=0) THEN
-                l_article:=l_article ||
+                l_row:=l_row ||
                 '<td><button type="button" class="button delete" data-id="' || C.id || '" data-file="' || l_file_name || '">DELETE</button></td>';
             ELSE
-                l_article:=l_article ||
+                l_row:=l_row ||
                 '<td style="text-align:center">N/A</td>';
             END IF;
 
-            l_article:=l_article ||
+            l_row:=l_row ||
             '</tr>';
+
+            /* Append row to clob */
+            dbms_lob.writeappend(l_article,LENGTH(l_row),l_row);
         END LOOP;
         IF (n>0) THEN
             l_article:=l_article || 
@@ -143,6 +153,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_MEDIA" IS
         pStatus:=200;
         
         EXCEPTION WHEN OTHERS THEN
+            -- pck_core.log(dbms_lob.getlength(l_article));
             pck_core.log_error(pStatus);
     END;
 
