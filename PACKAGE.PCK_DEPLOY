@@ -795,7 +795,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
                     '</div>' ||    
                     l_header || l_main || l_collection || l_cta || l_article_links || l_footer || buildContentDialog ||
                 '</body>' ||
-                '<form action="https://codepen.io/pen/define" method="POST" target="_blank"><input type="hidden" name="data" value=""></form>' ||
+                -- '<form action="https://codepen.io/pen/define" method="POST" target="_blank"><input type="hidden" name="data" value=""></form>' ||
                 '</html>';
         END LOOP;
     END;
