@@ -56,7 +56,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
         l_filename VARCHAR2(200);
         n PLS_INTEGER;
     BEGIN
-        pck_core.log('Someone clicked ecology');
         SELECT entryType, name, transferSize, contentType, initiatorType
           BULK COLLECT INTO l_metrics
           FROM JSON_TABLE(l_body_text, '$.metrics[*]' COLUMNS (entryType, name, transferSize, contentType, initiatorType))
