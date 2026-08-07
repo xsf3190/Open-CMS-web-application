@@ -536,10 +536,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
         l_article:=l_article || 
         '</tbody></table></div>';
 
-        pck_core.log('l_update_count:'||l_update_count);
-        pck_core.log('l_a11y_fails:'||l_a11y_fails);
-        pck_core.log('l_netlify_site_id_custom:'||l_netlify_site_id_custom);
-
         CASE
             WHEN (l_update_count>0 AND l_a11y_fails=0) THEN    
                 l_footer:=
