@@ -97,7 +97,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         l_job_name VARCHAR2(30);
         l_url VARCHAR2(4000);
         l_json JSON_OBJECT_T;
-        l_ip_hash website.ip_hash%type;
+        l_fingerprint website.fingerprint%type;
         l_message VARCHAR2(100);
         l_create_next BOOLEAN;
         n PLS_INTEGER;
@@ -109,7 +109,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
         */
         
         l_create_next:=FALSE;
-        l_ip_hash:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(OWA_UTIL.get_cgi_env ('REMOTE_ADDR'),'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
+        l_fingerprint:=dbms_crypto.hash(src=>UTL_I18N.STRING_TO_RAW(
+            OWA_UTIL.get_cgi_env ('REMOTE_ADDR') || OWA_UTIL.get_cgi_env('HTTP_USER_AGENT') || OWA_UTIL.get_cgi_env('timezone')
+            ,'AL32UTF8'), typ=>dbms_crypto.hash_sh1);
 
         FOR C IN (
             SELECT COUNT(*) nb, COUNT(netlify_last_published_custom) nb_custom
@@ -120,9 +122,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                 CONTINUE;
             END IF;
             IF (C.nb=1) THEN
-                l_message:='One website only for users not using a domain';
+                l_message:='One website only for non-contributing users';
             ELSE
-                SELECT COUNT(*) INTO n FROM website WHERE ip_hash=l_ip_hash;
+                SELECT COUNT(*) INTO n FROM website WHERE fingerprint=l_fingerprint;
                 IF (n>0) THEN
                     l_message:='Please be considerate to others';
                 END IF;
@@ -145,7 +147,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CTA" is
                     l_user_id:=pUserid;
                 END IF;
 
-                UPDATE website SET contact_email=pEmail, user_id=l_user_id, ip_hash=l_ip_hash  WHERE id=C.id;
+                UPDATE website SET contact_email=pEmail, user_id=l_user_id, fingerprint=l_fingerprint  WHERE id=C.id;
 
                 pck_jwt.issueJWTokens(pWebsiteid=>C.id,pUserid=>l_user_id, pRefresh=>l_refresh, pToken=>l_token, pAud=>l_aud);
 
