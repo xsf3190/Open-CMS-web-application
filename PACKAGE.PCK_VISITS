@@ -1,7 +1,5 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_VISITS" AS
     --
-    PROCEDURE daily_job;
-    --
     PROCEDURE ecology(pWebsiteId IN website.id%type, pArticleid IN article.id%type, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
     FUNCTION getBrowser RETURN VARCHAR2;
@@ -803,15 +801,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_VISITS" AS
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
 
-    END;
-
-    /*
-    **  DAILY JOB TO PROCESS VISIT DATA. NOTHING YET.
-    */
-    PROCEDURE daily_job IS
-        n PLS_INTEGER;
-    BEGIN
-        null;
     END;
     
 END;
