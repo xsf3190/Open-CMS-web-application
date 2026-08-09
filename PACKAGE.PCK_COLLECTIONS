@@ -198,6 +198,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_COLLECTIONS" as
             l_article:=
             '<p>No collection pages in website</p>' ||
             '<p>Create collection pages using the "Pages" menu option</p>';
+            l_footer:='<span></span>';
             l_json:= new JSON_OBJECT_T;
             l_json.put('header',l_header);
             l_json.put('article',l_article);
