@@ -1,6 +1,8 @@
 :root {
   --ck-color-image-caption-background: #f7f7f7;
   --ck-color-image-caption-text: #333;
+  --ck-image-style-spacing: var(--space-s);
+  --ck-inline-image-style-spacing: calc(var(--ck-image-style-spacing) / 2);
 }
 .image > figcaption {
   background-color: var(--ck-color-image-caption-background);
@@ -31,10 +33,6 @@ img.image_resized {
 }
 .image.image_resized > figcaption {
   display: block;
-}
-:root {
-  --ck-image-style-spacing: 1.5em;
-  --ck-inline-image-style-spacing: calc(var(--ck-image-style-spacing) / 2);
 }
 .image.image-style-block-align-left,
 .image.image-style-block-align-right {
@@ -103,6 +101,7 @@ p + .image.image-style-side {
 .image img {
   display: block;
   height: auto;
+  height: calc-size(auto, round(up, size, 1lh));
   margin: 0 auto;
   max-width: 100%;
   min-width: 100%;
