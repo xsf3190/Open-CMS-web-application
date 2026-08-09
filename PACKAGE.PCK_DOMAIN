@@ -1,5 +1,7 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DOMAIN" as
     --
+    FUNCTION checkURL(pUrl IN VARCHAR2) RETURN BOOLEAN;
+    --
     PROCEDURE getDomainForm(pWebsiteId IN website.id%type, pStatus OUT NUMBER);
     --
     PROCEDURE updateDomain(pWebsiteId IN website.id%type, pBodytext IN CLOB, pStatus OUT NUMBER);
@@ -9,6 +11,32 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_DOMAIN" as
 end "PCK_DOMAIN";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
+
+    /*
+    ** CHECK URL CONNECTS - I.E. SSL CERTIFICATE ISSUED AND DNS PROPOGATED
+    */
+    FUNCTION checkURL(pUrl IN VARCHAR2) RETURN BOOLEAN IS
+        l_clob CLOB;
+        l_not_found EXCEPTION;
+        PRAGMA EXCEPTION_INIT(l_not_found,-29273);
+        l_prohibited EXCEPTION;
+        PRAGMA EXCEPTION_INIT(l_prohibited,-20987);
+    BEGIN
+    pck_core.log('checking '||pUrl);
+        apex_web_service.clear_request_headers;
+        l_clob:=apex_web_service.make_rest_request(p_url=>'https://' ||pUrl, p_http_method=>'HEAD');
+    pck_core.log('g_status_code '||apex_web_service.g_status_code);
+        IF (apex_web_service.g_status_code=200) THEN
+            RETURN(TRUE);
+        ELSE
+            pck_core.log('URL FAIL -'||apex_web_service.g_status_code||': '||pUrl);
+            RETURN(FALSE);
+        END IF;
+        EXCEPTION
+            WHEN l_not_found OR l_prohibited THEN
+                pck_core.log('URL FAIL -'||SQLERRM||':'||pUrl);
+                RETURN(FALSE);
+    END;
 
     /*
     ** CREATE HTML FOR DOMAIN FORM
@@ -149,7 +177,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         l_clob CLOB;
         l_valid BOOLEAN:=TRUE;
     BEGIN
-        IF (pck_hosting.urlExists(pSubdomain || '.netlify.app')) THEN
+        IF (checkURL(pSubdomain||'.netlify.app')) THEN
             pMessage:='Sub-domain already in use. Try again';
             l_valid:=FALSE;
         ELSE
@@ -249,25 +277,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
         TYPE t_domains IS TABLE OF tt_domains;
         l_domains t_domains;
         l_domain_ok BOOLEAN;
-        
-        FUNCTION isChecked(pDomainName IN VARCHAR2) RETURN BOOLEAN IS
-            l_clob CLOB;
-            l_not_found EXCEPTION;
-            PRAGMA EXCEPTION_INIT(l_not_found,-29273);
-        BEGIN
-            apex_web_service.clear_request_headers;
-            l_clob:=apex_web_service.make_rest_request(p_url=>'https://' || pDomainName, p_http_method=>'HEAD');
-            IF (apex_web_service.g_status_code=200) THEN
-                RETURN(TRUE);
-            ELSE
-                pck_core.log(l_job_name||' - FAIL -'||apex_web_service.g_status_code||': '||pDomainName);
-                RETURN(FALSE);
-            END IF;
-            EXCEPTION
-                WHEN l_not_found THEN
-                    pck_core.log(l_job_name||' - FAIL -'||pDomainName);
-                    RETURN(FALSE);
-        END;
 
     BEGIN
         l_job_name:='CHECK_DOMAIN';
@@ -305,8 +314,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DOMAIN" as
            AND domain_checked_date IS NULL;
 
         FOR i IN 1..l_domains.COUNT LOOP
-            IF (isChecked(l_domains(i).domain_name) AND 
-                isChecked('editor.'||l_domains(i).domain_name)) THEN
+            IF (checkURL(l_domains(i).domain_name) AND 
+                checkURL('editor.'||l_domains(i).domain_name)) THEN
                 l_domains(i).domain_checked_date:=current_timestamp;
                 pck_email.sendmail(
                     pEmail=>l_domains(i).contact_email, 
