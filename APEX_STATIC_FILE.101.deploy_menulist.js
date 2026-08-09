@@ -10,7 +10,7 @@ const eventHandler = async (e) => {
     }
 
     if (e.target.classList.contains("publish")) {
-        callAPI("publish-website/:ID")
+        callAPI("publish-website/:ID/:PAGE")
             .then((data) => {
                 initDialog(data);
                 form.dataset.module = "deploy_publish-website";
