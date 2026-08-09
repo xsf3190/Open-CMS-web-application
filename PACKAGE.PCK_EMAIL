@@ -2,7 +2,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_EMAIL" is
     --
     FUNCTION DNSTemplate(pDomainName IN VARCHAR2, pEditorURL IN VARCHAR2, pLiveURL IN VARCHAR2) RETURN VARCHAR2;
     --
-    FUNCTION SSLTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2 ;
+    FUNCTION SSLTemplate(pDomainName IN VARCHAR2) RETURN VARCHAR2 ;
     --
     FUNCTION loginTemplate(pAuthMethod IN VARCHAR2, pWebsite IN VARCHAR2, pAuthData IN VARCHAR2 DEFAULT NULL) RETURN VARCHAR2;
     --
@@ -183,16 +183,19 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
                 p_password=>C.secret,
                 p_body=>l_json.stringify);
 
-            pck_core.log('HTTPS status from ' || C.url || ':' || apex_web_service.g_status_code);
-
             IF (apex_web_service.g_status_code=200) THEN
                 FOR C1 IN (
                     SELECT errors, html 
                       FROM JSON_TABLE(l_mjml_response,'$' COLUMNS (errors, html CLOB))
                 ) LOOP
-                    pck_core.log(C1.errors);
+                    IF (C1.errors IS NOT NULL) THEN
+                        pck_core.log(C1.errors);
+                    END IF; 
                     RETURN (C1.html);
                 END LOOP;
+            ELSE
+                pck_core.log('HTTPS status from ' || C.url || ':' || apex_web_service.g_status_code);
+                RETURN(null);
             END IF;
         END LOOP;
     END;
@@ -333,7 +336,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
     /*
     ** USER WAITING FOR SECURITY CERTIFICATE TO BE ISSUED AFTER LINKING THEIR SITE TO CUSTOM DOMAIN
     */
-    FUNCTION SSLTemplate(pUrl IN VARCHAR2) RETURN VARCHAR2 IS
+    FUNCTION SSLTemplate(pDomainName IN VARCHAR2) RETURN VARCHAR2 IS
         l_mjml_request LONG;
     BEGIN
         l_mjml_request:=
@@ -342,10 +345,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EMAIL" is
                 '<mj-section>' ||
                     '<mj-column>' ||
                         '<mj-divider border-color="#020617"></mj-divider>' ||
-                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 SSL Certificate Status</mj-text>' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">🐶 Domain successfully configured</mj-text>' ||
                         '<mj-divider border-color="#020617"></mj-divider>' ||
                         '<mj-spacer height="50px" />' ||
-                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">' || pUrl || '</mj-text>' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="400">You can now connect to your Live and Editor sites at the following URLs:</mj-text>' ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">https://' || pDomainName || '</mj-text>' ||
+                        '<mj-spacer height="50px" />' ||
+                        '<mj-text font-size="36px" color="#020617" align="center" font-family="system-ui" font-weight="700">https://editor.' || pDomainName || '</mj-text>' ||
                         '<mj-spacer height="50px" />' ||
                         '<mj-text font-size="14px" color="#020617" align="center" font-family="system-ui" font-weight="300">Engineered by Florent Meijer & Mark Brown</mj-text>' ||
                     '</mj-column>' ||
