@@ -14,12 +14,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_HOSTING" is
     --
     PROCEDURE getNetlifyStatus(pIncludeFiles IN BOOLEAN DEFAULT FALSE);
     --
-    FUNCTION urlExists(pUrl IN VARCHAR2) RETURN BOOLEAN;
-    --
-    PROCEDURE createURLExistsJob(pUrl IN VARCHAR2, pUserid IN website.user_id%type);
-
-    PROCEDURE runURLExists(pUrl IN VARCHAR2, pUserid IN website.user_id%type);
-    --
     PROCEDURE waitDeployment(pNetlifySiteId IN VARCHAR2, pNetlifyDeployId IN VARCHAR2, pWaitSeconds IN NUMBER);
 end;
 /
@@ -77,26 +71,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         IF (n=pWaitSeconds) THEN
             RAISE_APPLICATION_ERROR(-20100,'Waited too long for Netlify Deploy');
         END IF;
-    END;
-
-    /* 
-    ** CHECKS URL EXISTS
-    */
-    FUNCTION urlExists(pUrl IN VARCHAR2) RETURN BOOLEAN IS
-        l_clob CLOB;
-        l_not_found EXCEPTION;
-        PRAGMA EXCEPTION_INIT(l_not_found,-29273);
-    BEGIN
-        apex_web_service.clear_request_headers;
-        l_clob:=apex_web_service.make_rest_request(p_url=>'https://' || pUrl, p_http_method=>'HEAD');
-        IF (apex_web_service.g_status_code=200) THEN
-            RETURN (TRUE);
-        ELSE
-            RETURN (FALSE);
-        END IF;
-        EXCEPTION
-            WHEN l_not_found then
-                RETURN (FALSE);
     END;
 
     /* 
@@ -290,56 +264,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_HOSTING" is
         LOOP
             pck_api.callNetlifyAPI(pEndpoint=>'dns_zones/' || C.netlify_dns_zone_id, pMethod=>'DELETE', pData=>l_clob);
         END LOOP;
-    END;
-    
-    /*
-    ** SUBMIT JOB TO RUN EVERY 10 MINUTES CHECKING URL IS ACTIVE.
-    ** RUNS AT NEXT 10 MINUTE BOUNDARY AND THEN EVERY 10 MINUTES UNTIL URL EXISTS
-    */
-    PROCEDURE createURLExistsJob(pUrl IN VARCHAR2, pUserId IN website.user_id%type) IS
-        l_job_name VARCHAR2(30);
-    BEGIN
-        l_job_name:=dbms_scheduler.generate_job_name('URLEXISTS_');
-        dbms_scheduler.create_job(
-            job_name   => l_job_name,
-            job_type   =>'STORED_PROCEDURE',
-            job_action =>'pck_hosting.runURLExists',
-            number_of_arguments=>1,
-            start_date=>systimestamp,
-            repeat_interval   => 'FREQ=minutely;BYMINUTE=0,10,20,30,40,50;BYSECOND=0'
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 1,
-            argument_value => pUrl
-        );
-        dbms_scheduler.set_job_argument_value(
-            job_name => l_job_name,
-            argument_position => 2,
-            argument_value => pUserId
-        );
-        dbms_scheduler.enable(l_job_name);
-    END;
-
-    /*
-    ** CHECK URL IS ACTIVE - I.E. DNS HAS SUFFICIENTLY PROPAGATED AND NETLIFY SSL CERTIFICATE HAS BEEN ISSUED
-    */
-    PROCEDURE runURLExists(pUrl IN VARCHAR2, pUserId IN website.user_id%type) IS
-        l_job_name VARCHAR2(30);
-    BEGIN
-        IF NOT (urlExists(pUrl)) THEN
-            pck_core.log('URL ' || pUrl || ' NOK. Retry in 10 minutes');
-            RETURN;
-        END IF;
-
-        pck_core.log('URL ' || pUrl || ' OK. Send mail and drop job');
-        FOR C IN (SELECT email FROM users WHERE id=pUserId) LOOP
-            pck_email.sendmail(C.email, pUrl || ' is deployed', pck_email.SSLTemplate(pUrl));
-        END LOOP;
-
-        SELECT job_name INTO l_job_name FROM user_scheduler_running_jobs WHERE session_id = sys_context('USERENV', 'SID');
-        dbms_scheduler.drop_job(l_job_name,defer=>true);
-
     END;
 
     /*
