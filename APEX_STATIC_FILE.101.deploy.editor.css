@@ -394,6 +394,10 @@ select:open::picker-icon {
   }
 }
 
+optgroup>legend {
+    opacity:0.5;
+}
+
 option {
   display: flex;
   justify-content: flex-start;
