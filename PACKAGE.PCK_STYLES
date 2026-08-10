@@ -1,8 +1,78 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_STYLES" as
-
+    --
+    PROCEDURE getStylesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStyle IN NUMBER, pStatus OUT NUMBER);
+    --
 end "PCK_STYLES";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
+
+    FUNCTION getStyleHTML(pStyle IN NUMBER) RETURN VARCHAR2 IS
+        l_html LONG;
+    BEGIN
+        CASE pStyle
+            WHEN 1 THEN
+                l_html:='<span>Main content width</span>';
+        END CASE;
+        RETURN (l_html);
+    END;
+
+    /* 
+    **  BUILD FORM CONTROLS TO MANAGE WEBSITE PAGES
+    */
+    PROCEDURE getStylesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStyle IN NUMBER, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_header LONG;
+        l_article CLOB;
+        l_footer LONG;
+        l_json JSON_OBJECT_T;
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        IF (pStyle IS NOT NULL) THEN
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('style',getStyleHTML(pStyle));
+            apex_util.prn(l_json.to_clob,false);
+            pStatus:=200;
+            RETURN;
+        END IF;
+        
+        l_header:='<h4>Manage Styles</h4>';
+
+        l_article:=
+        '<fieldset>' ||
+            '<legend>Styling element</legend>' ||
+            '<div>' ||
+                -- '<label class="block" for="styles"></label>' ||
+                '<select id="styles" style="--width:fit-content">' ||
+                    '<button>' ||
+                        '<selectedcontent></selectedcontent>' ||
+                    '</button>' ||
+                    '<option value="">-- Choose styling element --</option>' ||
+                    '<option value="1">Main content width</option>' ||
+                '</select>' ||
+            '</div>' ||
+        '</fieldset>';
+
+        l_footer:=
+        '<div class="flex-items">' ||
+            '<button type="button" class="button publish">PUBLISH</button>' ||
+            '<span aria-live="polite"></span>' ||
+            '<span class="loader icon"></span>' ||
+        '</div>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('success',true);
+        l_json.put('header',l_header);
+        l_json.put('article',l_article);
+        l_json.put('footer',l_footer);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+
+    END;
 
 end "PCK_STYLES";
 /
