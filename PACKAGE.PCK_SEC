@@ -369,7 +369,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         l_html:=l_html || addMenuitem('edit-pages/:ID/:PAGE', '📖', 'Pages');
         l_html:=l_html || addMenuitem('edit-collections/:ID/:PAGE', '🔠', 'Collections');
         l_html:=l_html || addMenuitem('domain/:ID', '🌐', 'Domain');
-        -- l_html:=l_html || addMenuitem('edit-codepen/:ID/:PAGE', '⚽', 'Codepen');
+        l_html:=l_html || addMenuitem('edit-styles/:ID/:PAGE', '⚙️', 'Styles');
 
         RETURN (l_html);
     END;
