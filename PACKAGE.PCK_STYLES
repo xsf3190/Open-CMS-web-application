@@ -2,17 +2,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_STYLES" as
     --
     PROCEDURE getStylesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStyle IN NUMBER, pStatus OUT NUMBER);
     --
+    PROCEDURE updateStyle(pWebsiteId IN NUMBER, pArticleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER);
+    --
 end "PCK_STYLES";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
 
-    FUNCTION getStyleHTML(pStyle IN NUMBER) RETURN VARCHAR2 IS
+    FUNCTION getStyleHTML(pWebsiteid IN NUMBER, pStyleId IN NUMBER) RETURN VARCHAR2 IS
         l_html LONG;
     BEGIN
-        CASE pStyle
-            WHEN 1 THEN
-                l_html:='<span>Main content width</span>';
-        END CASE;
+        FOR C IN (
+            SELECT s.title, s.property, s.min, s.max, NVL(ws.value, s.value) AS value 
+              FROM styles s, website_styles ws
+             WHERE s.id=pStyleId
+               AND ws.website_id(+)=pWebsiteid
+               AND ws.style_id(+)=s.id
+        ) LOOP
+            IF (C.max IS NOT NULL) THEN -- build input type="range"
+                l_html:=
+                '<label for="' || C.property || '">Adjust value:</label>' ||
+                '<input type="range" id="' || C.property || '" min="' || C.min || '" max="' || C.max || '" value="' || regexp_substr(C.value,'\d+') || '">';
+            ELSIF (C.value LIKE '#%') THEN -- build input type="color"
+                l_html:=
+                '<label for="' || C.property || '">Select colour:</label>' ||
+                '<input type="color" id="' || C.property || '" value="' || C.value || '">';
+            END IF;       
+        END LOOP;
+        
         RETURN (l_html);
     END;
 
@@ -30,7 +46,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
 
         IF (pStyle IS NOT NULL) THEN
             l_json:= new JSON_OBJECT_T;
-            l_json.put('style',getStyleHTML(pStyle));
+            l_json.put('input',getStyleHTML(pWebsiteId,pStyle));
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
             RETURN;
@@ -40,16 +56,36 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
 
         l_article:=
         '<fieldset>' ||
-            '<legend>Styling element</legend>' ||
-            '<div>' ||
+            '<legend>Select element to style and adjust</legend>' ||
+            '<div class="flex-items">' ||
                 -- '<label class="block" for="styles"></label>' ||
                 '<select id="styles" style="--width:fit-content">' ||
                     '<button>' ||
                         '<selectedcontent></selectedcontent>' ||
                     '</button>' ||
-                    '<option value="">-- Choose styling element --</option>' ||
-                    '<option value="1">Main content width</option>' ||
+                    '<option value="">-- Choose styling element --</option>';
+
+        FOR C IN (
+            SELECT id, parent_id, title, property, value, LAG(LEVEL) OVER (ORDER BY id) prev_level
+              FROM styles
+             START WITH parent_id IS NULL
+           CONNECT BY parent_id = PRIOR id
+             ORDER BY id
+        ) LOOP
+            IF (C.parent_id IS NULL) THEN
+                l_article:=l_article ||
+                CASE WHEN C.prev_level=2 THEN '</optgroup>' END ||
+                '<optgroup><legend>' || C.title || '</legend>';
+            ELSE
+                l_article:=l_article ||
+                '<option value="' || C.id || '">' || C.title || '</option>';
+            END IF;
+        END LOOP;
+
+        l_article:=l_article ||
+                    '</optgroup>' ||
                 '</select>' ||
+                '<div class="flex-items" style="--flex-gap:var(--space-2xs)"></div>' ||
             '</div>' ||
         '</fieldset>';
 
@@ -68,6 +104,44 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
+
+    EXCEPTION WHEN OTHERS THEN
+        pck_core.log_error(pStatus);
+
+    END;
+
+    /* 
+    **  UPDATE A STYLE
+    */
+    PROCEDURE updateStyle(pWebsiteId IN NUMBER, pArticleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER) IS
+        l_session_data pck_sec.t_session_data;
+        l_unit VARCHAR2(5);
+        l_json JSON_OBJECT_T;
+        l_message VARCHAR2(50);
+    BEGIN
+        l_session_data:=pck_sec.getSessionData(pWebsiteId);
+
+        MERGE INTO website_styles t
+        USING (
+            SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
+              FROM JSON_TABLE(pBodyText, '$' COLUMNS(style_id, property, value)) j, styles s
+             WHERE s.id=j.style_id
+        ) s
+        ON (t.website_id=pWebsiteid AND t.style_id=s.style_id)
+        WHEN MATCHED THEN      
+            UPDATE SET t.value=s.value, t.updated_date=current_timestamp
+        WHEN NOT MATCHED THEN
+            INSERT (website_id, style_id, value) VALUES (pWebsiteid, s.style_id, s.value);
+
+        l_message:='<span>Successfully updated</span>';
+
+        l_json:= new JSON_OBJECT_T;
+        l_json.put('message',l_message);
+        apex_util.prn(l_json.to_clob,false);
+
+        pStatus:=200;
+
+        pck_sec.updateCpuUsed(pWebsiteId=>pWebsiteId, pUserid=>l_session_data.user_id, pCpuUsedStart=>l_session_data.cpu_used_session);
 
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
