@@ -18,7 +18,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CORE" AS
     --
     PROCEDURE log_error(pStatus OUT NUMBER);
     --
-    FUNCTION password RETURN VARCHAR2;
+    PROCEDURE initStyles;
     --
     CKEDITOR_VERSION CONSTANT VARCHAR2(10):='43.2.0';
     --
@@ -197,32 +197,15 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
         COMMIT;
     END;
 
-    /*
-    ** Generate random 20 character password string. All characters must be Ascii.
-    */
-    FUNCTION password RETURN VARCHAR2
-    IS
-        l_password VARCHAR2(20);
-        digits   CONSTANT VARCHAR2(10) := '0123456789';
-        lower    CONSTANT VARCHAR2(26) := 'abcdefghijklmnopqrstuvwxyz';
-        upper    CONSTANT VARCHAR2(26) := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        special  CONSTANT VARCHAR2(26) := '!"$%^*()-_=+{}[]<>,|/?;:@#';
-        l_password_return VARCHAR2(20);
+    PROCEDURE initStyles IS
     BEGIN
-        FOR i IN 1..5 LOOP
-            l_password:=l_password || SUBSTR(digits,FLOOR(DBMS_RANDOM.VALUE(1, LENGTH(digits) + 1)),1) ;
-            l_password:=l_password || SUBSTR(lower,FLOOR(DBMS_RANDOM.VALUE(1, LENGTH(lower) + 1)),1) ;
-            l_password:=l_password || SUBSTR(upper,FLOOR(DBMS_RANDOM.VALUE(1, LENGTH(upper) + 1)),1) ;
-            l_password:=l_password || SUBSTR(special,FLOOR(DBMS_RANDOM.VALUE(1, LENGTH(special) + 1)),1) ;
-        END LOOP;
-
-        FOR i IN 1..20 LOOP
-            l_password_return:=l_password_return || SUBSTR(l_password,FLOOR(DBMS_RANDOM.VALUE(1, LENGTH(l_password) + 1)),1) ;
-        END LOOP;
-
-        RETURN l_password_return;
-        
+        delete styles;
+        insert into styles(id,title) values (1,'CONTENT WIDTH');
+        insert into styles(id,parent_id,title,property,value,min,max) values (2,1,'Main Content Width','max-width','1200px',800,1600);
+        insert into styles(id,title) values (3,'COLOURS');
+        insert into styles(id,parent_id,title,property,value) values (4,3,'Background Colour','color-bg','#fffefd');
+        insert into styles(id,parent_id,title,property,value) values (5,3,'Text Colour','color-text','#020617');
     END;
-
+    
 END;
 /
