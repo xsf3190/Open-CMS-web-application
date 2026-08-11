@@ -1,5 +1,5 @@
 /*
-**  MANAGE STYLES
+**  UPDATE STYLES FOR ALL PAGES OR CURRENT PAGE
 */
 import { dialog_article, dialog_footer, initDialog, liveRegion } from "deploy_elements";
 import { callAPI } from "deploy_callAPI";
@@ -15,6 +15,10 @@ export const init = (e) => {
         })
 }
 
+const getContext = () => {
+    return document.querySelector("[name='context']:checked").getAttribute("id");
+}
+
 /*
 ** INPUT HANDLER
 */
@@ -28,6 +32,8 @@ export const inputHandler = (e) => {
 **  CHANGE HANDLER
 */
 export const changeHandler = (e) => {
+    if (e.target.matches("[name='context']")) return;
+
     if (e.target.matches("#styles")) {
         style_id = e.target.options[e.target.selectedIndex].getAttribute("value");
         if (style_id) {
@@ -47,7 +53,7 @@ export const changeHandler = (e) => {
     }
 
     if (e.target.tagName==="INPUT") {
-        callAPI(endpoint,'POST',{style_id: style_id, property:e.target.id, value:e.target.value})
+        callAPI(endpoint,'POST',{context: getContext(), style_id: style_id, property:e.target.id, value:e.target.value})
             .then((data) => {
                 liveRegion(data);
             });
