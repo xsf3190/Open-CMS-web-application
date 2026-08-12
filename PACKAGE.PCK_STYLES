@@ -52,11 +52,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
             RETURN;
         END IF;
         
-        l_header:='<h4>Manage Styles</h4>';
+        l_header:=
+        '<h4>Update Styles</h4>' ||
+        '<div class="flex-items show-controls">' ||
+            '<div>' ||
+                '<input id="website-styles" type="radio" name="context" checked>' ||
+                '<label for="website-styles" style="margin-inline-start:var(--space-3xs)">All Pages</label>' ||
+            '</div>' ||
+            '<div>' ||
+                '<input id="page-styles" type="radio" name="context">' ||
+                '<label for="page-styles" style="margin-inline-start:var(--space-3xs)">Current Page</label>' ||
+            '</div>' ||
+        '</div>';
 
         l_article:=
         '<fieldset>' ||
-            '<legend>Select element to style and adjust</legend>' ||
+            '<legend>Select style and adjust</legend>' ||
             '<div class="flex-items">' ||
                 -- '<label class="block" for="styles"></label>' ||
                 '<select id="styles" style="--width:fit-content">' ||
@@ -115,25 +126,56 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
     */
     PROCEDURE updateStyle(pWebsiteId IN NUMBER, pArticleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
+        l_bodytext CLOB;
+        l_context VARCHAR2(15);
+        l_style_id NUMBER;
         l_unit VARCHAR2(5);
         l_json JSON_OBJECT_T;
-        l_message VARCHAR2(50);
+        l_message VARCHAR2(100);
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-        MERGE INTO website_styles t
-        USING (
-            SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
-              FROM JSON_TABLE(pBodyText, '$' COLUMNS(style_id, property, value)) j, styles s
-             WHERE s.id=j.style_id
-        ) s
-        ON (t.website_id=pWebsiteid AND t.style_id=s.style_id)
-        WHEN MATCHED THEN      
-            UPDATE SET t.value=s.value, t.updated_date=current_timestamp
-        WHEN NOT MATCHED THEN
-            INSERT (website_id, style_id, value) VALUES (pWebsiteid, s.style_id, s.value);
+        l_bodytext:=pBodyText;
 
-        l_message:='<span>Successfully updated</span>';
+        SELECT context, style_id
+          INTO l_context, l_style_id
+          FROM JSON_TABLE(l_bodytext, '$' COLUMNS(context, style_id));
+
+        CASE l_context 
+            WHEN 'website-styles' THEN
+                MERGE INTO website_styles t
+                USING (
+                    SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
+                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, property, value)) j, styles s
+                     WHERE s.id=j.style_id
+                ) s
+                ON (t.website_id=pWebsiteid AND t.style_id=s.style_id)
+                WHEN MATCHED THEN      
+                    UPDATE SET t.value=s.value, t.updated_date=current_timestamp
+                WHEN NOT MATCHED THEN
+                    INSERT (website_id, style_id, value) VALUES (pWebsiteid, s.style_id, s.value);
+
+                SELECT '<span>Updated ' || title || ' for all pages</span>' INTO l_message FROM styles WHERE id=l_style_id;
+
+            WHEN 'page-styles' THEN
+                MERGE INTO website_article_styles t
+                USING (
+                    SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
+                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, property, value)) j, styles s
+                     WHERE s.id=j.style_id
+                ) s
+                ON (t.website_id=pWebsiteid AND t.article_id=pArticleid AND t.style_id=s.style_id)
+                WHEN MATCHED THEN      
+                    UPDATE SET t.value=s.value, t.updated_date=current_timestamp
+                WHEN NOT MATCHED THEN
+                    INSERT (website_id, article_id, style_id, value) VALUES (pWebsiteid, pArticleid, s.style_id, s.value);
+
+                SELECT '<span>Updated ' || s.title || ' for ' || wa.navigation_label || ' page</span>' INTO l_message 
+                  FROM styles s, website_article wa
+                 WHERE s.id=l_style_id
+                   AND wa.website_id=pWebsiteid
+                   AND wa.article_id=pArticleid;
+        END CASE;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('message',l_message);
