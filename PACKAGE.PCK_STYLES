@@ -4,6 +4,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_STYLES" as
     --
     PROCEDURE updateStyle(pWebsiteId IN NUMBER, pArticleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
+    PROCEDURE initFluidTypes( pParentid IN NUMBER, pMinWidthPx IN NUMBER, pMinFontSizePx IN NUMBER, pMinScale IN NUMBER, pMaxWidthPx IN NUMBER, pMaxFontSizePx IN NUMBER, pMaxScale IN NUMBER);
+    --
 end "PCK_STYLES";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
@@ -40,6 +42,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
+        l_prev_level NUMBER;
         l_json JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
@@ -77,24 +80,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
                     '<option value="">-- Choose styling element --</option>';
 
         FOR C IN (
-            SELECT id, parent_id, title, property, value, LAG(LEVEL) OVER (ORDER BY id) prev_level
+            SELECT id, parent_id, level, title, property, value
               FROM styles
+             WHERE level<=2
              START WITH parent_id IS NULL
-           CONNECT BY parent_id = PRIOR id
-             ORDER BY id
+           CONNECT BY PRIOR id = parent_id 
         ) LOOP
-            IF (C.parent_id IS NULL) THEN
+            IF (C.level < l_prev_level) THEN
                 l_article:=l_article ||
-                CASE WHEN C.prev_level=2 THEN '</optgroup>' END ||
+                '</optgroup>';
+            END IF;
+            IF (C.level = 1) THEN
+                l_article:=l_article ||
                 '<optgroup><legend>' || C.title || '</legend>';
             ELSE
                 l_article:=l_article ||
                 '<option value="' || C.id || '">' || C.title || '</option>';
             END IF;
+            l_prev_level:=C.level;
         END LOOP;
+        IF (l_prev_level IS NOT NULL) THEN
+            l_article:=l_article ||
+            '</optgroup>';
+        END IF;
 
         l_article:=l_article ||
-                    '</optgroup>' ||
                 '</select>' ||
                 '<div class="flex-items" style="--flex-gap:var(--space-2xs)"></div>' ||
             '</div>' ||
@@ -188,6 +198,85 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
     EXCEPTION WHEN OTHERS THEN
         pck_core.log_error(pStatus);
 
+    END;
+
+    /*
+    ** BUILD FLUID TYPES AND SPACES
+    */
+    PROCEDURE initFluidTypes( pParentid IN NUMBER, pMinWidthPx IN NUMBER, pMinFontSizePx IN NUMBER, pMinScale IN NUMBER, pMaxWidthPx IN NUMBER, pMaxFontSizePx IN NUMBER, pMaxScale IN NUMBER) IS
+        l_min_font NUMBER;
+        l_max_font NUMBER;
+        l_min_width NUMBER;
+        l_max_width NUMBER;
+        l_min_font_size NUMBER;
+        l_max_font_size NUMBER;
+        l_slope NUMBER;
+        l_intersect NUMBER;
+
+        TYPE tt_spaces IS RECORD(dimension VARCHAR2(3), multiplier NUMBER);
+        TYPE t_spaces IS TABLE OF tt_spaces INDEX BY PLS_INTEGER;
+        l_spaces t_spaces:=t_spaces(
+            1=>tt_spaces('3xs',0.25), 
+            2=>tt_spaces('2xs',0.5), 
+            3=>tt_spaces('xs',0.75), 
+            4=>tt_spaces('s',1), 
+            5=>tt_spaces('m',1.5), 
+            6=>tt_spaces('l',2), 
+            7=>tt_spaces('xl',3), 
+            8=>tt_spaces('2xl',4), 
+            9=>tt_spaces('3xl',6)
+        );
+
+        FUNCTION round4dp(pNumber IN NUMBER) RETURN VARCHAR2 IS
+            l_number NUMBER;
+        BEGIN
+            l_number:=ROUND(pNumber,4);
+            IF (MOD(l_number,1)=0) THEN /* integer */
+                RETURN (TO_CHAR(l_number));
+            ELSE
+                RETURN(LTRIM(RTRIM(TO_CHAR(ROUND(pNumber,4),'fm90.0000'),'0')));
+            END IF;
+        END;
+
+        PROCEDURE addFluidType(pProperty IN VARCHAR2) IS 
+            l_value VARCHAR2(100);
+        BEGIN
+            l_value:='clamp(' || round4dp(l_min_font) || 'rem,' || round4dp(l_intersect) || 'rem + ' || round4dp(l_slope * 100) || 'cqi,' || round4dp(l_max_font) || 'rem)';
+
+            INSERT INTO styles(id, parent_id, property, value)
+            VALUES (seq_style.nextval, pParentid, pProperty, l_value);
+        END;
+
+    BEGIN
+        /* Delete any existing style for parent_id */
+        DELETE styles WHERE parent_id=pParentid;
+        
+        /* Convert pixels to rem */
+        l_min_width:=pMinWidthPx/16; 
+        l_max_width:=pMaxWidthPx/16;
+        l_min_font_size:=pMinFontSizePx/16;
+        l_max_font_size:=pMaxFontSizePx/16;
+
+        FOR i IN -2 .. 5 LOOP
+            IF (i<0) THEN
+                l_min_font:=l_min_font_size/(pMinScale**ABS(i));
+                l_max_font:=l_max_font_size/(pMaxScale**ABS(i));
+            ELSE
+                l_min_font:=l_min_font_size*(pMinScale**i);
+                l_max_font:=l_max_font_size*(pMaxScale**i);
+            END IF;
+            l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
+            l_intersect:= -l_min_width * l_slope + l_min_font;
+            addFluidType('--step-' || i);
+        END LOOP;
+
+        FOR i IN 1..l_spaces.COUNT LOOP
+            l_min_font:=l_min_font_size*l_spaces(i).multiplier;
+            l_max_font:=l_max_font_size*l_spaces(i).multiplier;
+            l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
+            l_intersect:= -l_min_width * l_slope + l_min_font;
+            addFluidType('--space-' || l_spaces(i).dimension);
+        END LOOP;
     END;
 
 end "PCK_STYLES";
