@@ -265,6 +265,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
                 l_min_font:=l_min_font_size*(pMinScale**i);
                 l_max_font:=l_max_font_size*(pMaxScale**i);
             END IF;
+            /* Check WCAG SC 1.4.4 - zoom text is minimum 2x original size */
+            IF (l_max_font/l_min_font>2.5) THEN
+                RAISE_APPLICATION_ERROR(-20000,'--step-' || i || ' - WCAG SC 1.4.4 FAIL');
+            END IF;
             l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
             l_intersect:= -l_min_width * l_slope + l_min_font;
             addFluidType('--step-' || i);
