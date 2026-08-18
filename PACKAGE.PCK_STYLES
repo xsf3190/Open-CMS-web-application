@@ -210,9 +210,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         l_max_width NUMBER;
         l_min_font_size NUMBER;
         l_max_font_size NUMBER;
-        l_slope NUMBER;
-        l_intersect NUMBER;
-
+        
         TYPE tt_spaces IS RECORD(dimension VARCHAR2(3), multiplier NUMBER);
         TYPE t_spaces IS TABLE OF tt_spaces INDEX BY PLS_INTEGER;
         l_spaces t_spaces:=t_spaces(
@@ -239,8 +237,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         END;
 
         PROCEDURE addFluidType(pProperty IN VARCHAR2) IS 
+            l_slope NUMBER;
+            l_intersect NUMBER;
             l_value VARCHAR2(100);
         BEGIN
+            l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
+            l_intersect:= -l_min_width * l_slope + l_min_font;
+
             l_value:='clamp(' || round4dp(l_min_font) || 'rem,' || round4dp(l_intersect) || 'rem + ' || round4dp(l_slope * 100) || 'cqi,' || round4dp(l_max_font) || 'rem)';
 
             INSERT INTO styles(id, parent_id, property, value)
@@ -257,6 +260,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         l_min_font_size:=pMinFontSizePx/16;
         l_max_font_size:=pMaxFontSizePx/16;
 
+        /* Fluid types */
         FOR i IN -2 .. 5 LOOP
             IF (i<0) THEN
                 l_min_font:=l_min_font_size/(pMinScale**ABS(i));
@@ -269,17 +273,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
             IF (l_max_font/l_min_font>2.5) THEN
                 RAISE_APPLICATION_ERROR(-20000,'--step-' || i || ' - WCAG SC 1.4.4 FAIL');
             END IF;
-            l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
-            l_intersect:= -l_min_width * l_slope + l_min_font;
+            
             addFluidType('--step-' || i);
         END LOOP;
 
+        /* Fluid spaces */
         FOR i IN 1..l_spaces.COUNT LOOP
             l_min_font:=l_min_font_size*l_spaces(i).multiplier;
             l_max_font:=l_max_font_size*l_spaces(i).multiplier;
-            l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
-            l_intersect:= -l_min_width * l_slope + l_min_font;
             addFluidType('--space-' || l_spaces(i).dimension);
+        END LOOP;
+
+        /* Fluid space pairs */
+        FOR i IN 1..l_spaces.COUNT-1 LOOP
+            l_min_font:=l_min_font_size*l_spaces(i).multiplier;
+            l_max_font:=l_max_font_size*l_spaces(i+1).multiplier;
+            addFluidType('--space-' || l_spaces(i).dimension || '-' || l_spaces(i+1).dimension);
         END LOOP;
     END;
 
