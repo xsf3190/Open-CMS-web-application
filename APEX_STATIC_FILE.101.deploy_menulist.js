@@ -55,6 +55,7 @@ form.addEventListener("click",eventHandler);
 form.addEventListener("change",eventHandler);
 
 async function load_modules() { 
+    /* Change page content if an updated version exists */
     let module_name = "deploy_edited-content";
     const module = await import(module_name)
     .catch((error) => {
@@ -64,6 +65,7 @@ async function load_modules() {
     });
     module.init();
 
+    /* Change any unpublished fonts and font properties */
     module_name = "deploy_fonts";
     const fonts = await import(module_name)
     .catch((error) => {
@@ -80,6 +82,18 @@ async function load_modules() {
             fonts.setProperties(JSON.parse(localStorage.getItem(`${context}-font-properties`)),context);
         }
     })
+
+    /* Change any unpublished style properties */
+    if (localStorage.getItem("fluid-properties")) {
+        module_name = "deploy_styles";
+        const styles = await import(module_name)
+        .catch((error) => {
+            console.error(error);
+            console.error("Failed to load " + module_name);
+            return;
+        });
+        styles.setProperties(JSON.parse(localStorage.getItem("fluid-properties")));
+    }
 }
 
 const role = getJWTClaim("aud");
