@@ -39,10 +39,17 @@ export const changeHandler = (e) => {
         if (style_id) {
             callAPI(endpoint,'GET',"?style="+style_id)
             .then((data) => {
-                const control = e.target.nextElementSibling;
-                control.replaceChildren();
-                control.insertAdjacentHTML('afterbegin',data.input);
-                control.querySelector("input").focus();
+                if (data.input) {
+                    const control = e.target.nextElementSibling;
+                    control.replaceChildren();
+                    control.insertAdjacentHTML('afterbegin',data.input);
+                    control.querySelector("input").focus();
+                } else if (data.properties) {
+                    for (const property of data.properties) {
+                        document.documentElement.style.setProperty(property.name,property.value);
+                    }
+                    localStorage.setItem("fluid-properties",JSON.stringify(data.properties));
+                }
             });
         }
         return;
