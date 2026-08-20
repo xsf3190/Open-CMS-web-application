@@ -83,15 +83,9 @@ async function load_modules() {
         }
     })
 
-    /* Change any unpublished style properties */
+    /* Set any unpublished style properties */
     if (localStorage.getItem("fluid-properties")) {
-        module_name = "deploy_styles";
-        const styles = await import(module_name)
-        .catch((error) => {
-            console.error(error);
-            console.error("Failed to load " + module_name);
-            return;
-        });
+        const styles = await import("deploy_edit-styles")
         styles.setProperties(JSON.parse(localStorage.getItem("fluid-properties")));
     }
 }
