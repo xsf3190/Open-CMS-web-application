@@ -10,8 +10,8 @@ end "PCK_STYLES";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
 
-    FUNCTION getStyleHTML(pWebsiteid IN NUMBER, pStyleId IN NUMBER) RETURN VARCHAR2 IS
-        l_html LONG;
+    FUNCTION getStyleProperties(pWebsiteid IN NUMBER, pStyleId IN NUMBER) RETURN VARCHAR2 IS
+        l_properties LONG;
     BEGIN
         FOR C IN (
             SELECT s.title, s.property, s.min, s.max, NVL(ws.value, s.value) AS value 
@@ -21,17 +21,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
                AND ws.style_id(+)=s.id
         ) LOOP
             IF (C.max IS NOT NULL) THEN -- build input type="range"
-                l_html:=
+                l_properties:=
                 '<label for="' || C.property || '">Adjust value:</label>' ||
                 '<input type="range" id="' || C.property || '" min="' || C.min || '" max="' || C.max || '" value="' || regexp_substr(C.value,'\d+') || '">';
             ELSIF (C.value LIKE '#%') THEN -- build input type="color"
-                l_html:=
+                l_properties:=
                 '<label for="' || C.property || '">Select colour:</label>' ||
                 '<input type="color" id="' || C.property || '" value="' || C.value || '">';
             END IF;       
         END LOOP;
         
-        RETURN (l_html);
+        RETURN (l_properties);
     END;
 
     /* 
@@ -43,13 +43,31 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         l_article CLOB;
         l_footer LONG;
         l_prev_level NUMBER;
+        l_properties LONG;
         l_json JSON_OBJECT_T;
+        l_arr JSON_ARRAY_T;
+        l_obj JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         IF (pStyle IS NOT NULL) THEN
+            l_properties:=getStyleProperties(pWebsiteId,pStyle);
             l_json:= new JSON_OBJECT_T;
-            l_json.put('input',getStyleHTML(pWebsiteId,pStyle));
+            IF (l_properties IS NOT NULL) THEN
+                l_json.put('input',l_properties);
+            ELSE
+                /* return array of property and value objects */
+                l_arr:=new JSON_ARRAY_T;
+                FOR C IN (
+                    SELECT property, value FROM styles WHERE parent_id=pStyle ORDER BY id
+                ) LOOP
+                    l_obj:=new JSON_OBJECT_T;
+                    l_obj.put('name',C.property);
+                    l_obj.put('value',C.value);
+                    l_arr.append(l_obj);
+                END LOOP;
+                l_json.put('properties',l_arr);
+            END IF;
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
             RETURN;
@@ -70,7 +88,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
 
         l_article:=
         '<fieldset>' ||
-            '<legend>Select style and adjust</legend>' ||
+            '<legend>Select style</legend>' ||
             '<div class="flex-items">' ||
                 -- '<label class="block" for="styles"></label>' ||
                 '<select id="styles" style="--width:fit-content">' ||
@@ -242,7 +260,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
             l_value VARCHAR2(100);
         BEGIN
             l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
-            l_intersect:= -l_min_width * l_slope + l_min_font;
+            -- l_intersect:= -l_min_width * l_slope + l_min_font;
+            l_intersect:= l_min_font - (l_min_width * l_slope);
 
             l_value:='clamp(' || round4dp(l_min_font) || 'rem,' || round4dp(l_intersect) || 'rem + ' || round4dp(l_slope * 100) || 'cqi,' || round4dp(l_max_font) || 'rem)';
 
