@@ -15,8 +15,17 @@ export const init = (e) => {
         })
 }
 
-const getContext = () => {
-    return document.querySelector("[name='context']:checked").getAttribute("id");
+/*
+** SET CUSTOM VARIABLES
+*/
+export const setProperties = (properties) => {
+    for (const property of properties) {
+        document.documentElement.style.setProperty(property.name,property.value);
+    }
+}
+
+const getScope = () => {
+    return document.querySelector("[name='scope']:checked").getAttribute("id");
 }
 
 /*
@@ -32,12 +41,14 @@ export const inputHandler = (e) => {
 **  CHANGE HANDLER
 */
 export const changeHandler = (e) => {
-    if (e.target.matches("[name='context']")) return;
+    if (e.target.matches("[name='scope']")) return;
 
     if (e.target.matches("#styles")) {
+        /* Remove any adjacent input control first */
+        e.target.nextElementSibling.replaceChildren();
         style_id = e.target.options[e.target.selectedIndex].getAttribute("value");
         if (style_id) {
-            callAPI(endpoint,'GET',"?style="+style_id)
+            callAPI(endpoint,'GET',"?style="+style_id+"&scope="+getScope())
             .then((data) => {
                 if (data.input) {
                     const control = e.target.nextElementSibling;
@@ -45,10 +56,9 @@ export const changeHandler = (e) => {
                     control.insertAdjacentHTML('afterbegin',data.input);
                     control.querySelector("input").focus();
                 } else if (data.properties) {
-                    for (const property of data.properties) {
-                        document.documentElement.style.setProperty(property.name,property.value);
-                    }
+                    setProperties(data.properties);
                     localStorage.setItem("fluid-properties",JSON.stringify(data.properties));
+                    liveRegion(data);
                 }
             });
         }
@@ -60,7 +70,7 @@ export const changeHandler = (e) => {
     }
 
     if (e.target.tagName==="INPUT") {
-        callAPI(endpoint,'POST',{context: getContext(), style_id: style_id, property:e.target.id, value:e.target.value})
+        callAPI(endpoint,'POST',{scope: getScope(), style_id: style_id, property:e.target.id, value:e.target.value})
             .then((data) => {
                 liveRegion(data);
             });
