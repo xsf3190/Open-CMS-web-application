@@ -54,7 +54,7 @@ export const changeHandler = (e) => {
                     const control = e.target.nextElementSibling;
                     control.replaceChildren();
                     control.insertAdjacentHTML('afterbegin',data.input);
-                    control.querySelector("input").focus();
+                    // control.querySelector("input").focus();
                 } else if (data.properties) {
                     setProperties(data.properties);
                     localStorage.setItem("fluid-properties",JSON.stringify(data.properties));
