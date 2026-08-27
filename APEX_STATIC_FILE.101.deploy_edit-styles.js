@@ -50,30 +50,27 @@ export const changeHandler = (e) => {
         if (style_id) {
             callAPI(endpoint,'GET',"?style="+style_id+"&scope="+getScope())
             .then((data) => {
-                if (data.input) {
+                if (data.controls) {
                     const control = e.target.nextElementSibling;
                     control.replaceChildren();
-                    control.insertAdjacentHTML('afterbegin',data.input);
+                    control.insertAdjacentHTML('afterbegin',data.controls);
                     // control.querySelector("input").focus();
-                } else if (data.properties) {
-                    setProperties(data.properties);
-                    localStorage.setItem("fluid-properties",JSON.stringify(data.properties));
-                    liveRegion(data);
                 }
             });
         }
         return;
     }
-    
-    if (e.target.tagName==="INPUT" && e.target.type==="color") {
-        document.documentElement.style.setProperty(`--${e.target.id}`, e.target.value);
-    }
 
     if (e.target.tagName==="INPUT") {
         callAPI(endpoint,'POST',{scope: getScope(), style_id: style_id, property:e.target.id, value:e.target.value})
-            .then((data) => {
-                liveRegion(data);
-            });
+        .then((data) => {
+            liveRegion(data);
+            if (data.properties) {
+                setProperties(data.properties);
+                // localStorage.setItem("fluid-properties",JSON.stringify(data.properties));
+            }
+        });
+        return;
     }
 }
 
