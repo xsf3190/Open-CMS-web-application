@@ -44,31 +44,51 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
-        l_properties LONG;
+        l_controls LONG;
         l_json JSON_OBJECT_T;
-        l_arr JSON_ARRAY_T;
-        l_obj JSON_OBJECT_T;
+        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
+
+        /*
+        **  pStyles NULL is opening dialog - return all styles
+        **  pStyles NOT NULL is user selected top level style - return control(s) for selected style 
+        */
+
         IF (pStyle IS NOT NULL) THEN
-            l_properties:=getStyleProperties(pWebsiteId,pStyle,pScope);
-            l_json:= new JSON_OBJECT_T;
-            IF (l_properties IS NOT NULL) THEN
-                l_json.put('input',l_properties);
-            ELSE
-                /* return array of property and value objects */
-                l_arr:=new JSON_ARRAY_T;
-                FOR C IN (
-                    SELECT property, value FROM styles WHERE parent_id=pStyle ORDER BY id
-                ) LOOP
-                    l_obj:=new JSON_OBJECT_T;
-                    l_obj.put('name',C.property);
-                    l_obj.put('value',C.value);
-                    l_arr.append(l_obj);
-                END LOOP;
-                l_json.put('properties',l_arr);
+            n:=0;
+            FOR C IN (
+                SELECT s.label, s.id, s.parent_id, s.property, s.min, s.max, ws.value, COUNT(*) OVER () nb
+                  FROM styles s, website_styles ws
+                 WHERE s.parent_id=pStyle
+                   AND ws.website_id(+)=pWebsiteId
+                   AND ws.style_id(+)=s.parent_id
+            ) LOOP
+                IF (C.nb=1) THEN -- range input
+                    l_controls:=
+                    '<label for="' || SUBSTR(C.property,3) || '">Adjust value:</label>' ||
+                    '<input type="range" id="' || SUBSTR(C.property,3) || '" min="' || C.min || '" max="' || C.max || '" value="' || regexp_substr(C.value,'\d+') || '">';
+                    EXIT;
+                END IF;
+                n:=n+1;
+                -- radio controls
+                IF (n=1) THEN
+                    l_controls:=l_controls ||
+                    '<div class="flex-items show-controls">';
+                END IF;
+                l_controls:=l_controls ||
+                '<div>' ||
+                    '<input id="' || C.label || '" type="radio" name="controls" value="' || C.id || '"' || CASE WHEN C.value=C.id THEN ' checked' END || '>' ||
+                    '<label for="' || C.label || '" style="margin-inline-start:var(--space-3xs)">' || C.label || '</label>' ||
+                '</div>';
+            END LOOP;
+            IF (n>0) THEN
+                l_controls:=l_controls ||
+                '</div>';
             END IF;
+            l_json:= new JSON_OBJECT_T;
+            l_json.put('controls',l_controls);
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
             RETURN;
@@ -110,7 +130,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
 
         l_article:=l_article ||
                 '</select>' ||
-                '<div class="flex-items" style="--flex-gap:var(--space-2xs)"></div>' ||
+                '<div class="flex-items" style="--flex-gap:var(--space-s)"></div>' ||
             '</div>' ||
         '</fieldset>';
 
@@ -143,25 +163,26 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
         l_bodytext CLOB;
         l_scope VARCHAR2(15);
         l_style_id NUMBER;
-        l_unit VARCHAR2(5);
+        l_value NUMBER;
         l_json JSON_OBJECT_T;
+        l_arr JSON_ARRAY_T;
+        l_obj JSON_OBJECT_T;
         l_message VARCHAR2(100);
+        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         l_bodytext:=pBodyText;
 
-        SELECT scope, style_id
-          INTO l_scope, l_style_id
-          FROM JSON_TABLE(l_bodytext, '$' COLUMNS(scope, style_id));
+        SELECT scope, style_id, value
+          INTO l_scope, l_style_id, l_value
+          FROM JSON_TABLE(l_bodytext, '$' COLUMNS(scope, style_id, value));
 
         CASE l_scope
             WHEN 'website-styles' THEN
                 MERGE INTO website_styles t
                 USING (
-                    SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
-                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, property, value)) j, styles s
-                     WHERE s.id=j.style_id
+                    SELECT style_id, value FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, value))
                 ) s
                 ON (t.website_id=pWebsiteid AND t.style_id=s.style_id)
                 WHEN MATCHED THEN      
@@ -174,9 +195,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
             WHEN 'page-styles' THEN
                 MERGE INTO website_article_styles t
                 USING (
-                    SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
-                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, property, value)) j, styles s
-                     WHERE s.id=j.style_id
+                    SELECT style_id, value FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, value))
                 ) s
                 ON (t.website_id=pWebsiteid AND t.article_id=pArticleid AND t.style_id=s.style_id)
                 WHEN MATCHED THEN      
@@ -190,9 +209,24 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
                    AND wa.website_id=pWebsiteid
                    AND wa.article_id=pArticleid;
         END CASE;
+        /* RETURN PROPERTIES WHERE DEFINED FOR STYLE */
+        n:=0;      
+        FOR C IN (
+            SELECT property, value FROM styles WHERE parent_id=l_value ORDER BY id
+        ) LOOP
+            n:=n+1;
+            IF (n=1) THEN
+                l_arr:=new JSON_ARRAY_T;
+            END IF;
+            l_obj:=new JSON_OBJECT_T;
+            l_obj.put('name',C.property);
+            l_obj.put('value',C.value);
+            l_arr.append(l_obj);
+        END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('message',l_message);
+        l_json.put('properties',l_arr);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
