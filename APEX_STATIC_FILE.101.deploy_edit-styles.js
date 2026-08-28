@@ -62,12 +62,13 @@ export const changeHandler = (e) => {
     }
 
     if (e.target.tagName==="INPUT") {
-        callAPI(endpoint,'POST',{scope: getScope(), style_id: style_id, property:e.target.id, value:e.target.value})
+        const scope = getScope();
+        callAPI(endpoint,'POST',{scope: scope, style_id: style_id, property:e.target.id, value:e.target.value})
         .then((data) => {
             liveRegion(data);
             if (data.properties) {
                 setProperties(data.properties);
-                // localStorage.setItem("fluid-properties",JSON.stringify(data.properties));
+                localStorage.setItem("properties",JSON.stringify(data.properties));
             }
         });
         return;
