@@ -4,7 +4,7 @@
 import { dialog_article, dialog_footer, initDialog, liveRegion } from "deploy_elements";
 import { callAPI } from "deploy_callAPI";
 
-let endpoint, style_id;
+let endpoint, main_style_id;
 
 export const init = (e) => {
     endpoint = e.dataset.endpoint;
@@ -32,9 +32,7 @@ const getScope = () => {
 ** INPUT HANDLER
 */
 export const inputHandler = (e) => {
-    if (e.target.tagName==="INPUT" && e.target.type==="range") {
-        document.documentElement.style.setProperty(`--${e.target.id}`, `${e.target.value}px`);
-    }
+    console.log("Ignore in[ut handler");
 }
 
 /*
@@ -46,15 +44,14 @@ export const changeHandler = (e) => {
     if (e.target.matches("#styles")) {
         /* Remove any adjacent input control first */
         e.target.nextElementSibling.replaceChildren();
-        style_id = e.target.options[e.target.selectedIndex].getAttribute("value");
-        if (style_id) {
-            callAPI(endpoint,'GET',"?style="+style_id+"&scope="+getScope())
+        main_style_id = e.target.options[e.target.selectedIndex].getAttribute("value");
+        if (main_style_id) {
+            callAPI(endpoint,'GET',"?style="+main_style_id+"&scope="+getScope())
             .then((data) => {
                 if (data.controls) {
                     const control = e.target.nextElementSibling;
                     control.replaceChildren();
                     control.insertAdjacentHTML('afterbegin',data.controls);
-                    // control.querySelector("input").focus();
                 }
             });
         }
@@ -63,12 +60,11 @@ export const changeHandler = (e) => {
 
     if (e.target.tagName==="INPUT") {
         const scope = getScope();
-        callAPI(endpoint,'POST',{scope: scope, style_id: style_id, property:e.target.id, value:e.target.value})
+        callAPI(endpoint,'POST',{scope: scope, main_style_id: main_style_id, property:e.target.id, style_id:e.target.value})
         .then((data) => {
             liveRegion(data);
             if (data.properties) {
                 setProperties(data.properties);
-                localStorage.setItem("properties",JSON.stringify(data.properties));
             }
         });
         return;
