@@ -1,5 +1,5 @@
 /*
-**  FETCH LATEST CONTENT WHEN OWNER VISITS EDITED PAGE - 
+**  FETCH LATEST CONTENT AND STYLES WHEN OWNER VISITS EDITED PAGE
 */
 import { header, main, footer } from "deploy_elements";
 import { callAPI } from "deploy_callAPI";
@@ -18,6 +18,11 @@ export const init = () => {
             if (data.footer) {
                 footer.replaceChildren();
                 footer.insertAdjacentHTML("beforeend",data.footer);
-            }  
+            }
+            if (data.properties) {
+                for (const property of data.properties) {
+                    document.documentElement.style.setProperty(property.name,property.value);
+                }
+            }
         })
 }
