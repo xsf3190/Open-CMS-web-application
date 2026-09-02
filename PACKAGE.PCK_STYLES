@@ -1,81 +1,87 @@
 CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_STYLES" as
     --
-    PROCEDURE getStylesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStyle IN NUMBER, pScope IN VARCHAR2, pStatus OUT NUMBER);
+    PROCEDURE getStylesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStyle IN NUMBER, pStatus OUT NUMBER);
     --
     PROCEDURE updateStyle(pWebsiteId IN NUMBER, pArticleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER);
     --
-    PROCEDURE initStyles;
+    PROCEDURE initFluidTypes( pParentid IN NUMBER, pMinWidthPx IN NUMBER, pMinFontSizePx IN NUMBER, pMinScale IN NUMBER, pMaxWidthPx IN NUMBER, pMaxFontSizePx IN NUMBER, pMaxScale IN NUMBER);
     --
 end "PCK_STYLES";
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
 
+    FUNCTION getStyleProperties(pWebsiteid IN NUMBER, pStyleId IN NUMBER) RETURN VARCHAR2 IS
+        l_properties LONG;
+    BEGIN
+        FOR C IN (
+            SELECT s.title, s.property, s.min, s.max, NVL(ws.value, s.value) AS value 
+              FROM styles s, website_styles ws
+             WHERE s.id=pStyleId
+               AND ws.website_id(+)=pWebsiteid
+               AND ws.style_id(+)=s.id
+        ) LOOP
+            IF (C.max IS NOT NULL) THEN -- build input type="range"
+                l_properties:=
+                '<label for="' || C.property || '">Adjust value:</label>' ||
+                '<input type="range" id="' || C.property || '" min="' || C.min || '" max="' || C.max || '" value="' || regexp_substr(C.value,'\d+') || '">';
+            ELSIF (C.value LIKE '#%') THEN -- build input type="color"
+                l_properties:=
+                '<label for="' || C.property || '">Select colour:</label>' ||
+                '<input type="color" id="' || C.property || '" value="' || C.value || '">';
+            END IF;       
+        END LOOP;
+        
+        RETURN (l_properties);
+    END;
+
     /* 
-    **  BUILD FORM CONTROLS TO MANAGE WEBSITE STYLES
+    **  BUILD FORM CONTROLS TO MANAGE WEBSITE PAGES
     */
-    PROCEDURE getStylesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStyle IN NUMBER, pScope IN VARCHAR2, pStatus OUT NUMBER) IS
+    PROCEDURE getStylesForm(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStyle IN NUMBER, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header LONG;
         l_article CLOB;
         l_footer LONG;
-        l_controls LONG;
+        l_prev_level NUMBER;
+        l_properties LONG;
         l_json JSON_OBJECT_T;
-        n PLS_INTEGER;
+        l_arr JSON_ARRAY_T;
+        l_obj JSON_OBJECT_T;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
-
-        /*
-        **  pStyles NULL is opening dialog - return all styles
-        **  pStyles NOT NULL is user selected top level style - return control(s) for selected style 
-        */
-
         IF (pStyle IS NOT NULL) THEN
-            n:=0;
-            FOR C IN (
-                SELECT s.label, s.id, s.property, ws.style_id
-                  FROM styles s, website_styles ws
-                 WHERE s.parent_id=pStyle
-                   AND ws.website_id(+)=pWebsiteId
-                   AND ws.main_style_id(+)=s.parent_id
-                 ORDER BY s.id
-            ) LOOP
-                n:=n+1;
-                IF (n=1) THEN
-                    l_controls:=l_controls ||
-                    '<div class="flex-items show-controls">';
-                END IF;
-                l_controls:=l_controls ||
-                '<div>' ||
-                    '<input id="' || C.label || '" type="radio" name="controls" value="' || C.id || '"' || CASE WHEN C.style_id=C.id THEN ' checked' END || '>' ||
-                    '<label for="' || C.label || '" style="margin-inline-start:var(--space-3xs)">' || C.label || '</label>' ||
-                '</div>';
-            END LOOP;
-            IF (n>0) THEN
-                l_controls:=l_controls ||
-                '</div>';
-            END IF;
+            l_properties:=getStyleProperties(pWebsiteId,pStyle);
             l_json:= new JSON_OBJECT_T;
-            l_json.put('controls',l_controls);
+            IF (l_properties IS NOT NULL) THEN
+                l_json.put('input',l_properties);
+            ELSE
+                /* return array of property and value objects */
+                l_arr:=new JSON_ARRAY_T;
+                FOR C IN (
+                    SELECT property, value FROM styles WHERE parent_id=pStyle ORDER BY id
+                ) LOOP
+                    l_obj:=new JSON_OBJECT_T;
+                    l_obj.put('name',C.property);
+                    l_obj.put('value',C.value);
+                    l_arr.append(l_obj);
+                END LOOP;
+                l_json.put('properties',l_arr);
+            END IF;
             apex_util.prn(l_json.to_clob,false);
             pStatus:=200;
             RETURN;
         END IF;
-
-        SELECT COUNT(*) 
-          INTO n 
-          FROM dual 
-         WHERE EXISTS (SELECT null FROM website_article_styles WHERE website_id=pWebsiteid AND article_id=pArticleid);
         
         l_header:=
         '<h4>Update Styles</h4>' ||
         '<div class="flex-items show-controls">' ||
             '<div>' ||
-                '<input id="website-styles" type="radio" name="scope"' || CASE WHEN n=0 THEN ' checked' END || '>' ||
+                '<input id="website-styles" type="radio" name="context" checked>' ||
                 '<label for="website-styles" style="margin-inline-start:var(--space-3xs)">All Pages</label>' ||
             '</div>' ||
             '<div>' ||
-                '<input id="page-styles" type="radio" name="scope"' || CASE WHEN n=1 THEN ' checked' END || '>' ||
+                '<input id="page-styles" type="radio" name="context">' ||
                 '<label for="page-styles" style="margin-inline-start:var(--space-3xs)">Current Page</label>' ||
             '</div>' ||
         '</div>';
@@ -92,18 +98,33 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
                     '<option value="">-- Choose styling element --</option>';
 
         FOR C IN (
-            SELECT id, parent_id, label, property, value
+            SELECT id, parent_id, level, title, property, value
               FROM styles
-             WHERE parent_id IS NULL
-             ORDER BY id
+             WHERE level<=2
+             START WITH parent_id IS NULL
+           CONNECT BY PRIOR id = parent_id 
         ) LOOP
-            l_article:=l_article ||
-            '<option value="' || C.id || '">' || C.label || '</option>';
+            IF (C.level < l_prev_level) THEN
+                l_article:=l_article ||
+                '</optgroup>';
+            END IF;
+            IF (C.level = 1) THEN
+                l_article:=l_article ||
+                '<optgroup><legend>' || C.title || '</legend>';
+            ELSE
+                l_article:=l_article ||
+                '<option value="' || C.id || '">' || C.title || '</option>';
+            END IF;
+            l_prev_level:=C.level;
         END LOOP;
+        IF (l_prev_level IS NOT NULL) THEN
+            l_article:=l_article ||
+            '</optgroup>';
+        END IF;
 
         l_article:=l_article ||
                 '</select>' ||
-                '<div class="flex-items" style="--flex-gap:var(--space-s)"></div>' ||
+                '<div class="flex-items" style="--flex-gap:var(--space-2xs)"></div>' ||
             '</div>' ||
         '</fieldset>';
 
@@ -134,76 +155,58 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
     PROCEDURE updateStyle(pWebsiteId IN NUMBER, pArticleid IN NUMBER, pBodyText IN CLOB, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_bodytext CLOB;
-        l_scope VARCHAR2(15);
-        l_main_style_id NUMBER;
+        l_context VARCHAR2(15);
         l_style_id NUMBER;
+        l_unit VARCHAR2(5);
         l_json JSON_OBJECT_T;
-        l_arr JSON_ARRAY_T;
-        l_obj JSON_OBJECT_T;
         l_message VARCHAR2(100);
-        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
         l_bodytext:=pBodyText;
 
-        SELECT scope, main_style_id, style_id
-          INTO l_scope, l_main_style_id, l_style_id
-          FROM JSON_TABLE(l_bodytext, '$' COLUMNS(scope, main_style_id, style_id));
+        SELECT context, style_id
+          INTO l_context, l_style_id
+          FROM JSON_TABLE(l_bodytext, '$' COLUMNS(context, style_id));
 
-        IF (l_scope='website-styles') THEN
-            DELETE website_article_styles WHERE website_id=pWebsiteid AND article_id=pArticleid;
-        END IF;
-
-        CASE l_scope
+        CASE l_context 
             WHEN 'website-styles' THEN
                 MERGE INTO website_styles t
                 USING (
-                    SELECT main_style_id, style_id FROM JSON_TABLE(l_bodytext, '$' COLUMNS(main_style_id, style_id))
+                    SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
+                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, property, value)) j, styles s
+                     WHERE s.id=j.style_id
                 ) s
-                ON (t.website_id=pWebsiteid AND t.main_style_id=s.main_style_id)
+                ON (t.website_id=pWebsiteid AND t.style_id=s.style_id)
                 WHEN MATCHED THEN      
-                    UPDATE SET t.style_id=s.style_id, t.updated_date=current_timestamp
+                    UPDATE SET t.value=s.value, t.updated_date=current_timestamp
                 WHEN NOT MATCHED THEN
-                    INSERT (website_id, main_style_id, style_id) VALUES (pWebsiteid, s.main_style_id, s.style_id);
+                    INSERT (website_id, style_id, value) VALUES (pWebsiteid, s.style_id, s.value);
 
-                SELECT '<span>Updated ' || label || ' for all pages</span>' INTO l_message FROM styles WHERE id=l_main_style_id;
+                SELECT '<span>Updated ' || title || ' for all pages</span>' INTO l_message FROM styles WHERE id=l_style_id;
 
             WHEN 'page-styles' THEN
                 MERGE INTO website_article_styles t
                 USING (
-                    SELECT main_style_id, style_id FROM JSON_TABLE(l_bodytext, '$' COLUMNS(main_style_id, style_id))
+                    SELECT j.style_id, j.value || CASE WHEN j.value NOT LIKE '#%' THEN regexp_substr(s.value,'[[:lower:]]+$') END AS value
+                      FROM JSON_TABLE(l_bodytext, '$' COLUMNS(style_id, property, value)) j, styles s
+                     WHERE s.id=j.style_id
                 ) s
-                ON (t.website_id=pWebsiteid AND t.article_id=pArticleid AND t.main_style_id=s.main_style_id)
+                ON (t.website_id=pWebsiteid AND t.article_id=pArticleid AND t.style_id=s.style_id)
                 WHEN MATCHED THEN      
-                    UPDATE SET t.style_id=s.style_id, t.updated_date=current_timestamp
+                    UPDATE SET t.value=s.value, t.updated_date=current_timestamp
                 WHEN NOT MATCHED THEN
-                    INSERT (website_id, article_id, main_style_id, style_id) VALUES (pWebsiteid, pArticleid, s.main_style_id, s.style_id);
+                    INSERT (website_id, article_id, style_id, value) VALUES (pWebsiteid, pArticleid, s.style_id, s.value);
 
-                SELECT '<span>Updated ' || s.label || ' for ' || wa.navigation_label || ' page</span>' INTO l_message 
+                SELECT '<span>Updated ' || s.title || ' for ' || wa.navigation_label || ' page</span>' INTO l_message 
                   FROM styles s, website_article wa
-                 WHERE s.id=l_main_style_id
+                 WHERE s.id=l_style_id
                    AND wa.website_id=pWebsiteid
                    AND wa.article_id=pArticleid;
         END CASE;
-        /* RETURN PROPERTIES FOR SELECTED STYLE */
-        n:=0;      
-        FOR C IN (
-            SELECT property, value FROM styles WHERE parent_id=l_style_id ORDER BY id
-        ) LOOP
-            n:=n+1;
-            IF (n=1) THEN
-                l_arr:=new JSON_ARRAY_T;
-            END IF;
-            l_obj:=new JSON_OBJECT_T;
-            l_obj.put('name',C.property);
-            l_obj.put('value',C.value);
-            l_arr.append(l_obj);
-        END LOOP;
 
         l_json:= new JSON_OBJECT_T;
         l_json.put('message',l_message);
-        l_json.put('properties',l_arr);
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
@@ -218,13 +221,12 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
     /*
     ** BUILD FLUID TYPES AND SPACES
     */
-    PROCEDURE initFluidTypes(pTextSize IN VARCHAR2, pParentid IN NUMBER, pMinWidthPx IN NUMBER, pMinFontSizePx IN NUMBER, pMinScale IN NUMBER, pMaxWidthPx IN NUMBER, pMaxFontSizePx IN NUMBER, pMaxScale IN NUMBER) IS
+    PROCEDURE initFluidTypes( pParentid IN NUMBER, pMinWidthPx IN NUMBER, pMinFontSizePx IN NUMBER, pMinScale IN NUMBER, pMaxWidthPx IN NUMBER, pMaxFontSizePx IN NUMBER, pMaxScale IN NUMBER) IS
         l_min_font NUMBER;
-        l_min_width NUMBER;
-        l_min_font_size NUMBER;
-
         l_max_font NUMBER;
+        l_min_width NUMBER;
         l_max_width NUMBER;
+        l_min_font_size NUMBER;
         l_max_font_size NUMBER;
         
         TYPE tt_spaces IS RECORD(dimension VARCHAR2(3), multiplier NUMBER);
@@ -258,6 +260,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
             l_value VARCHAR2(100);
         BEGIN
             l_slope:=(l_max_font - l_min_font) / (l_max_width - l_min_width);
+            -- l_intersect:= -l_min_width * l_slope + l_min_font;
             l_intersect:= l_min_font - (l_min_width * l_slope);
 
             l_value:='clamp(' || round4dp(l_min_font) || 'rem,' || round4dp(l_intersect) || 'rem + ' || round4dp(l_slope * 100) || 'cqi,' || round4dp(l_max_font) || 'rem)';
@@ -287,7 +290,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
             END IF;
             /* Check WCAG SC 1.4.4 - zoom text is minimum 2x original size */
             IF (l_max_font/l_min_font>2.5) THEN
-                RAISE_APPLICATION_ERROR(-20000,'Processing ' || pTextSize || ' --step-' || i || ' - WCAG SC 1.4.4 FAIL');
+                RAISE_APPLICATION_ERROR(-20000,'--step-' || i || ' - WCAG SC 1.4.4 FAIL');
             END IF;
             
             addFluidType('--step-' || i);
@@ -306,138 +309,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_STYLES" as
             l_max_font:=l_max_font_size*l_spaces(i+1).multiplier;
             addFluidType('--space-' || l_spaces(i).dimension || '-' || l_spaces(i+1).dimension);
         END LOOP;
-    END;
-
-    /*
-    ** BUILD STYLES TABLE HIERARCHY
-    **
-    ** LEVEL 1 - options shown in style drop down select list
-    ** LEVEL 2 - options for a given level 1 option - the user selected ID is refrenced in table WEBSITE_STYLES or WEBSITE_ARTICLE_STYLES
-    ** LEVEL 3 - CSS properties and values used in building site CSS tokens file
-    */
-    PROCEDURE initStyles IS
-        TYPE tt_styles IS RECORD(
-            label VARCHAR2(30),
-            tooltip VARCHAR2(100)
-        );
-        TYPE t_styles IS TABLE OF tt_styles INDEX BY PLS_INTEGER;
-        
-        l_styles t_styles:=t_styles(
-            1=>tt_styles('Content Width', ''),
-            2=>tt_styles('Colours', ''),
-            3=>tt_styles('Text Size', '')
-        );
-        --
-        TYPE tt_max_widths IS RECORD(
-            label VARCHAR2(30),
-            max_width VARCHAR2(6)
-        );
-        TYPE t_max_widths IS TABLE OF tt_max_widths INDEX BY PLS_INTEGER;
-
-        l_max_widths t_max_widths:=t_max_widths(
-            1=>tt_max_widths('Narrow', '1000px'),
-            2=>tt_max_widths('Regular', '1200px'),
-            3=>tt_max_widths('Wide', '1400px')
-        );
-
-        l_style_id NUMBER;
-        --
-        TYPE tt_fluid_types IS RECORD(
-            label VARCHAR2(30),
-            max_font_size NUMBER,
-            max_scale NUMBER
-        );
-        TYPE t_fluid_types IS TABLE OF tt_fluid_types INDEX BY PLS_INTEGER;
-
-        l_fluid_types t_fluid_types:=t_fluid_types(
-            1=>tt_fluid_types('Small', 24, 1.33),
-            2=>tt_fluid_types('Medium', 26, 1.25),
-            3=>tt_fluid_types('Large', 28, 1.25),
-            4=>tt_fluid_types('X-Large', 30, 1.25)
-        );
-        --
-        TYPE tt_colours IS RECORD(
-            theme VARCHAR2(10),
-            appearance VARCHAR2(5),
-            property VARCHAR2(30),
-            value VARCHAR2(30));
-        TYPE t_colours IS TABLE OF tt_colours INDEX BY PLS_INTEGER;
-
-        l_colours t_colours:=t_colours(
-            1=> tt_colours('slate','light','--color-bg','#fffefd'),
-            2=> tt_colours('slate','light','--color-bg-accent','#f7f5f5'),
-            3=> tt_colours('slate','light','--color-text','#020617'),
-            4=> tt_colours('slate','light','--color-text-accent','#334155'),
-            5=> tt_colours('slate','light','--color-link','#2563eb'),
-            6=> tt_colours('slate','light','--color-link-hover','#ec4899'),
-            7=> tt_colours('slate','light','--color-theme','#ffedd5'),
-            8=> tt_colours('slate','light','--color-theme-muted','#fff5e7'),
-            9=> tt_colours('slate','light','--color-theme-accent','#fed7aa'),
-            10=>tt_colours('slate','light','--color-theme-offset','#ef4444'),
-            11=>tt_colours('slate','dark','--color-bg','#020617'),
-            12=>tt_colours('slate','dark','--color-bg-accent','#0f172a'),
-            13=>tt_colours('slate','dark','--color-text','#f8fafc'),
-            14=>tt_colours('slate','dark','--color-text-accent','#f1f5f9'),
-            15=>tt_colours('slate','dark','--color-link','#7ab6ff'),
-            16=>tt_colours('slate','dark','--color-link-hover','#93c5fd'),
-            17=>tt_colours('slate','dark','--color-theme','#172554'),
-            18=>tt_colours('slate','dark','--color-theme-muted','#0e1737'),
-            19=>tt_colours('slate','dark','--color-theme-accent','#1e3a8a'),
-            20=>tt_colours('slate','dark','--color-theme-offset','#0ea5e9'),
-            21=>tt_colours('red','light','--color-theme','#ffedd5'),
-            22=>tt_colours('red','light','--color-theme-muted','#fff5e7'),
-            23=>tt_colours('red','light','--color-theme-accent','#fed7aa'),
-            24=>tt_colours('red','light','--color-theme-offset','#ef4444')
-        );
-        l_theme VARCHAR2(10);
-        l_theme_id NUMBER;
-
-    BEGIN
-        DELETE styles;
-        
-        FOR i IN 1..l_styles.COUNT LOOP
-            INSERT INTO styles(id, label)
-            VALUES (i, l_styles(i).label);
-
-            CASE l_styles(i).label
-                WHEN 'Content Width' THEN
-                    FOR j IN 1..l_max_widths.COUNT LOOP
-                        l_style_id:=seq_style.nextval;
-                        INSERT INTO styles(parent_id, id, label)
-                        VALUES (i, l_style_id, l_max_widths(j).label);
-                        INSERT INTO styles(parent_id, id, property, value)
-                        VALUES (l_style_id, seq_style.nextval, '--max-width', l_max_widths(j).max_width);
-                    END LOOP;
-
-                WHEN 'Text Size' THEN
-                    FOR j IN 1..l_fluid_types.COUNT LOOP
-                        INSERT INTO styles(parent_id, id, label)
-                        VALUES (i, seq_style.nextval, l_fluid_types(j).label);
-                        initFluidTypes(
-                            pTextSize=>l_fluid_types(j).label,
-                            pParentid=>seq_style.currval,
-                            pMinWidthPx=>360,
-                            pMinFontSizePx=>17,
-                            pMinScale=>1.2,
-                            pMaxWidthPx=>1500,
-                            pMaxFontSizePx=>l_fluid_types(j).max_font_size,
-                            pMaxScale=>l_fluid_types(j).max_scale);
-                    END LOOP;
-
-                WHEN 'Colours' THEN
-                    FOR j IN 1..l_colours.COUNT LOOP
-                        IF (l_colours(j).theme<>l_theme OR l_theme IS NULL) THEN
-                            l_theme:=l_colours(j).theme;
-                            l_theme_id:=seq_style.nextval;
-                            INSERT INTO styles(parent_id, id, label)
-                            VALUES (i, l_theme_id, l_colours(j).theme);
-                        END IF;
-                        INSERT INTO styles(parent_id, id, appearance, property, value)
-                        VALUES (l_theme_id, seq_style.nextval, l_colours(j).appearance, l_colours(j).property, l_colours(j).value);
-                    END LOOP;
-            END CASE;
-        END LOOP;
-
     END;
 
 end "PCK_STYLES";
