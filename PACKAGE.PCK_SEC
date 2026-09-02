@@ -600,14 +600,14 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_SEC" AS
         BEGIN
             l_error:=
             '<h4>Security precaution against theft</h4>' ||
-            '<p>You are being logged out because you have not previously authenticated from this location or device. Possible causes:</p>' ||
+            '<p>You are being logged out because your digital fingerprint has changed. Possible causes:</p>' ||
             '<ol>' ||
-                '<li>You connected to a different network</li>' ||
-                '<li>Your browser was upgraded or you changed browsers</li>' ||
-                '<li>Your device or token was stolen</li>' ||
+                '<li>Your IP address changed (new WiFi connection, router rebooted, lease expired, etc)</li>' ||
+                '<li>Your browser was upgraded or you''re using a different browser</li>' ||
+                '<li>Someone stole your device or secured token</li>' ||
             '</ol>' ||
             '<hr>' ||
-            '<p>Close this window and Log in again</p>';
+            '<p>Log in again to authenticate your fingerprint</p>';
 
             l_json:= new JSON_OBJECT_T;
             l_json.put('sqlerrm', l_error);
