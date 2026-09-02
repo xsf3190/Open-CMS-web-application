@@ -735,14 +735,17 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
 
     
     /* 
-    **  GET LATEST EDITED CONTENT
+    **  GET UNPUBLISHED CONTENT AND STYLES
     */
     PROCEDURE getEditorContent(pWebsiteId IN website.id%type, pArticleId IN article.id%type, pStatus OUT NUMBER) IS
         l_session_data pck_sec.t_session_data;
         l_header_html website_article.header_html%type; 
         l_main_html article.body_html%type;
         l_footer_html website_article.footer_html%type;
+        l_arr JSON_ARRAY_T;
+        l_obj JSON_OBJECT_T;
         l_json JSON_OBJECT_T;
+        n PLS_INTEGER;
     BEGIN
         l_session_data:=pck_sec.getSessionData(pWebsiteId);
 
@@ -776,12 +779,51 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_EDITOR" is
                 END LOOP;
             END IF;
         END LOOP;
-
+        
+        n:=0;
+        FOR C IN (
+            WITH page_styles AS 
+            (
+                SELECT was.main_style_id, was.style_id 
+                  FROM website_article_styles was, website w
+                 WHERE w.id=pWebsiteId
+                   AND was.website_id=w.id
+                   AND was.article_id=pArticleid
+                   AND w.netlify_last_published<was.updated_date
+            ),
+            apply_styles AS
+            (
+                SELECT style_id FROM page_styles
+                UNION ALL
+                SELECT ws.style_id 
+                  FROM website_styles ws, website w
+                 WHERE w.id=pWebsiteId
+                   AND ws.website_id=w.id
+                   AND w.netlify_last_published<ws.updated_date
+                   AND ws.main_style_id NOT IN (SELECT main_style_id FROM page_styles)
+            )
+            SELECT property, value 
+              FROM styles 
+             WHERE parent_id IN (SELECT style_id FROM apply_styles)
+        ) LOOP
+            n:=n+1;
+            IF (n=1) THEN
+                l_arr:=new JSON_ARRAY_T;
+            END IF;
+            l_obj:=new JSON_OBJECT_T;
+            l_obj.put('name',C.property);
+            l_obj.put('value',C.value);
+            l_arr.append(l_obj);
+        END LOOP;
+        
         l_json:= new JSON_OBJECT_T;
         l_json.put('success',true);
         l_json.put('header',l_header_html);
         l_json.put('main',l_main_html);
         l_json.put('footer',l_footer_html);
+        IF (n>0) THEN
+            l_json.put('properties',l_arr);
+        END IF;
         apex_util.prn(l_json.to_clob,false);
 
         pStatus:=200;
