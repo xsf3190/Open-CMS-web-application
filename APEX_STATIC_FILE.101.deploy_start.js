@@ -1,5 +1,5 @@
 /* 
-** LIGHT DARK BUTTON HANDLERS
+** LIGHT DARK COMPONENT
 */
 class ColorScheme extends HTMLElement {
     constructor() {
@@ -10,6 +10,9 @@ class ColorScheme extends HTMLElement {
       this.setupControl("appearance", document.documentElement);
     }
 
+    /*
+    **  SAVE VISITOR'S LIGHT/DARK PREFERENCE IN LOCALSTORAGE AND AS :root ATTRIBUTE
+    */
     handleChange(e, prop, el) {
         const attr = `data-${prop}`;
         const value = e.target.value;
@@ -21,17 +24,21 @@ class ColorScheme extends HTMLElement {
         }
 
         localStorage.setItem(prop, value);
-        el.setAttribute(attr, value);
+        el.setAttribute(attr, value);     
     }
-    
+
+    /*
+    **  SET "data-appearance" attribute on ":root" IF RETURNING VISITOR HAD SET LIGHT/DARK PREFERENCE
+    */
     setupControl(prop, el) {
         const initialValue = localStorage.getItem(prop) || "";
         if (initialValue) {
             const attr = `data-${prop}`;
             el.setAttribute(attr, initialValue);
         }
-        const collection = this.querySelectorAll(`[name='${prop}']`);
 
+        /* SET "checked" ON 3 LIGHT/DARK STATE CONTROLS ACCORDINGLY */
+        const collection = this.querySelectorAll(`[name='${prop}']`);
         for (let item of collection) {
             item.checked = item.value === initialValue;
             item.addEventListener("change", (e) => this.handleChange(e, prop, el));
