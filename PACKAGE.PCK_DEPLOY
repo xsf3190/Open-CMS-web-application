@@ -352,13 +352,13 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_DEPLOY" as
         l_index:=l_schemes.LAST;
         WHILE l_index IS NOT NULL LOOP
             l_html:=l_html ||
+            '<input id="appearance-' || l_index || '" value="' || CASE WHEN l_index<>'system' THEN l_index END || '" type="radio" name="appearance" class="visually-hidden">' ||
             '<label for="appearance-' || l_index || '">' ||
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="24" height="24" fill="currentcolor" aria-hidden="true" class="icon">';
                     l_html:=l_html || l_schemes(l_index) ||
                 '</svg>' ||
                 '<span class="visually-hidden">x</span>' || -- to pass stupid LH accessibility test
-            '</label>' ||
-            '<input id="appearance-' || l_index || '" value="' || CASE WHEN l_index<>'system' THEN l_index END || '" type="radio" name="appearance" class="visually-hidden">';
+            '</label>';
             l_index:=l_schemes.PRIOR(l_index);
         END LOOP;
         l_html:=l_html ||
