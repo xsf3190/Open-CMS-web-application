@@ -6,6 +6,10 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_BACKUP" is
     --
     PROCEDURE downloadWebsiteFonts(pWebsiteid IN website.id%type, pStatus IN OUT NUMBER);
     --
+    PROCEDURE github_backup2;
+    --
+    PROCEDURE github_reset;
+    --
 end;
 /
 CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
@@ -149,15 +153,66 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         pck_core.log('Completed datapump schema exports. Final status:' || l_status);
     END;
 
+    PROCEDURE getRepoHandle(pRepo IN OUT NOCOPY CLOB) IS
+    BEGIN
+        pRepo:=
+            dbms_cloud_repo.init_github_repo(
+                credential_name => 'GITHUB_CRED', 
+                owner => 'xsf3190',
+                repo_name => 'Dogface-CMS');
+    END;
+
     /*
-    ** Generate and transfer to Github repository the following:
-    ** 1. Apex applications
-    ** 2. Apex static files
-    ** 3. DDL of TABLES and PACKAGES
+    ** DELETE ALL FILES IN GITHUB REPOSITORY
+    */
+    PROCEDURE github_reset IS 
+        l_repo CLOB;
+    BEGIN
+        getRepoHandle(l_repo);
+        FOR C IN (
+            SELECT name FROM DBMS_CLOUD_REPO.LIST_FILES(repo => l_repo)
+        ) LOOP
+            dbms_cloud_repo.delete_file(repo=>l_repo, file_path=>C.name);
+        END LOOP;
+    END;
+
+    PROCEDURE github_backup2 IS
+        l_repo CLOB;
+        n PLS_INTEGER;
+    BEGIN
+        getRepoHandle(l_repo);
+
+        FOR C IN (
+            WITH source AS (
+                SELECT file_name, CAST(last_updated_on AS TIMESTAMP WITH TIME ZONE) AS updated_date, SUBSTR(mime_type,INSTR(mime_type,'/')+1) AS mime_type, file_content
+                FROM apex_application_static_files
+                WHERE mime_type IN ('text/css','text/javascript','text/plain')
+                AND INSTR(file_name,'.min.')=0
+            )
+            SELECT s.file_name, s.updated_date, REPLACE(s.mime_type,'plain','text') AS file_path, s.file_content, bf.backup_date
+            FROM source s, backup_files bf
+            WHERE s.file_name=bf.file_name(+)
+        ) LOOP
+            IF (C.backup_date IS NULL OR C.updated_date>C.backup_date) THEN
+                UPDATE backup_files SET backup_date=current_timestamp WHERE file_name=C.file_name;
+                n:=SQL%ROWCOUNT;
+                IF (n=0) THEN
+                    INSERT INTO backup_files(file_name, file_path) VALUES (C.file_name, C.file_path);
+                END IF;
+                dbms_cloud_repo.put_file(repo=>l_repo, file_path=>C.file_path||'/'||C.file_name, contents=>C.file_content);
+            END IF;
+        END LOOP;
+    END;
+
+    /*
+    ** Transfer to Github repository the following:
+    ** 1. css and javascript files
+    ** 2. TABLE and PACKAGE DDL
+    ** 3. ORDS METADATA
+    ** 4. GRANTS AND PRIVILGES
     */
     PROCEDURE github_backup(
-        p_repo IN OUT NOCOPY CLOB,
-        p_apex IN INTEGER)
+        p_repo IN OUT NOCOPY CLOB)
     IS  
         TYPE t_backup IS RECORD(
             object_type         user_objects.object_type%type,
@@ -186,10 +241,9 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
         /*
         ** Build PLSQL collection of all objects to be exported and copied to Github
         */
-        IF (p_apex=0) THEN
-            SELECT object_type, object_name
-              BULK COLLECT INTO l_backup
-             FROM
+        SELECT object_type, object_name
+          BULK COLLECT INTO l_backup
+         FROM
                 (
                     SELECT object_type,object_name
                     FROM user_objects
@@ -209,13 +263,8 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
                     WHERE grantee=sys_context('userenv','current_schema') 
                     AND grantor='ADMIN'
                     AND ROWNUM=1
-                )
-            ORDER BY object_type,object_name;
-        ELSE
-            SELECT object_type, object_name
-              BULK COLLECT INTO l_backup
-             FROM
-                (
+                    UNION ALL
+
                     SELECT 'APEX_STATIC_FILE' object_type,f.application_id || '.' || f.file_name object_name
                     FROM apex_application_static_files f, apex_applications a
                     WHERE f.application_id=a.application_id
@@ -227,7 +276,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
                     FROM dual
                 )
             ORDER BY object_type,object_name;
-        END IF;
 
         pck_core.log('Backing up to github - ' || l_backup.COUNT || ' files');
         FOR i IN 1..l_backup.COUNT
@@ -322,20 +370,22 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_BACKUP" is
             pck_sec.g_session_user_id:=C.id;
         END LOOP;
 
-        SELECT COUNT(*) INTO n
-          FROM apex_applications
-         WHERE owner=sys_context('userenv','current_schema');
-
         l_repo := dbms_cloud_repo.init_github_repo(
             credential_name => 'GITHUB_CRED', 
             owner => 'xsf3190', 
             repo_name => 'Open-CMS-web-application');
 
-        IF (n=0) THEN
-            datapump_backup(l_repo);
-        END IF;
-        
-        github_backup(l_repo,n);
+        FOR C IN (
+            SELECT COUNT(*) CMS
+              FROM apex_applications
+             WHERE owner=sys_context('userenv','current_schema')
+        ) LOOP
+            IF (C.CMS=0) THEN
+                datapump_backup(l_repo);
+            ELSE
+                github_backup(l_repo);
+            END IF;
+        END LOOP;
 
         /* Delete log data older than 24 hours */
         DELETE log WHERE log_date<SYSDATE-1;
