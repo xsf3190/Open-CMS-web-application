@@ -18,8 +18,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE "PCK_CORE" AS
     --
     PROCEDURE log_error(pStatus OUT NUMBER);
     --
-    PROCEDURE initStyles;
-    --
     CKEDITOR_VERSION CONSTANT VARCHAR2(10):='43.2.0';
     --
     CKEDITOR_CSS CONSTANT VARCHAR2(100):='https://cdn.ckeditor.com/ckeditor5/' || CKEDITOR_VERSION || '/ckeditor5.css';
@@ -195,16 +193,6 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CORE" AS
          WHERE website_id=pWebsiteId AND user_id=l_transfer_from_user_id;
 
         COMMIT;
-    END;
-
-    PROCEDURE initStyles IS
-    BEGIN
-        delete styles;
-        insert into styles(id,title) values (1,'CONTENT WIDTH');
-        insert into styles(id,parent_id,title,property,value,min,max) values (2,1,'Main Content Width','max-width','1200px',800,1600);
-        insert into styles(id,title) values (3,'COLOURS');
-        insert into styles(id,parent_id,title,property,value) values (4,3,'Background Colour','color-bg','#fffefd');
-        insert into styles(id,parent_id,title,property,value) values (5,3,'Text Colour','color-text','#020617');
     END;
     
 END;
