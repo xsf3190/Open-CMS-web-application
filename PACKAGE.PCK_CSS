@@ -133,7 +133,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     /*
     **  BUILD COLOUR TOKENS
     */
-    FUNCTION getColours(pWebsiteid IN NUMBER) RETURN VARCHAR2 IS
+    FUNCTION getColours RETURN VARCHAR2 IS
     BEGIN
         RETURN(
             '--color-bg: #fffefd;' ||
@@ -260,7 +260,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     BEGIN
         l_css:=
         ':root {' ||
-            getColours(pWebsiteid) ||
+            getColours ||
             getTypography(pWebsiteid) ||
             '--focus-outline: 2px solid var(--color-link);';
 
@@ -373,7 +373,7 @@ CREATE OR REPLACE EDITIONABLE PACKAGE BODY "PCK_CSS" is
     BEGIN
         l_root_css:=
         ':root {' ||
-            getColours(pWebsiteid) ||
+            getColours ||
             getTypography(pWebsiteid) ||
             '--focus-outline: 2px solid var(--color-link);';
         
